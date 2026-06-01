@@ -1,4 +1,9 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  type LayerStyle,
+  styleValue,
+} from "@geolibre/core";
 import { addProtocol, config } from "maplibre-gl";
 import type maplibregl from "maplibre-gl";
 import { PMTiles, Protocol } from "pmtiles";
@@ -22,6 +27,55 @@ import {
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const PMTILES_PROTOCOL = "pmtiles";
 const PMTILES_PROTOCOL_GLOBAL_KEY = "__geolibrePMTilesProtocol";
+const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
+const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
+
+// Native layer ids whose zoom range GeoLibre has taken over. A pristine external
+// layer keeps its source-declared range, but once the user sets a non-default
+// range we keep applying the style range on every sync, including a later reset
+// back to the full [0, 24] window.
+const managedZoomRangeLayerIds = new Set<string>();
+
+function clampLayerZoom(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(MAX_LAYER_ZOOM, Math.max(MIN_LAYER_ZOOM, value));
+}
+
+function styleLayerZoomRange(style: LayerStyle): {
+  maxzoom: number;
+  minzoom: number;
+} {
+  const minzoom = clampLayerZoom(styleValue(style, "minZoom"), MIN_LAYER_ZOOM);
+  const maxzoom = clampLayerZoom(styleValue(style, "maxZoom"), MAX_LAYER_ZOOM);
+  return {
+    minzoom: Math.min(minzoom, maxzoom),
+    maxzoom: Math.max(minzoom, maxzoom),
+  };
+}
+
+// Intersect a native layer's source-declared zoom range with the user-configured
+// style range, taking the tighter bound on each end. This keeps a tile
+// service's zoom floor/ceiling intact while still letting the user narrow the
+// window from the Style panel. When the two ranges do not overlap the bounds
+// are swapped so MapLibre never receives an inverted (minzoom > maxzoom) range.
+function intersectZoomRange(
+  nativeSpec: { minzoom?: number; maxzoom?: number },
+  style: LayerStyle,
+): { minzoom: number; maxzoom: number } {
+  const styleRange = styleLayerZoomRange(style);
+  const minzoom = Math.max(
+    nativeSpec.minzoom ?? MIN_LAYER_ZOOM,
+    styleRange.minzoom,
+  );
+  const maxzoom = Math.min(
+    nativeSpec.maxzoom ?? MAX_LAYER_ZOOM,
+    styleRange.maxzoom,
+  );
+  return {
+    minzoom: Math.min(minzoom, maxzoom),
+    maxzoom: Math.max(minzoom, maxzoom),
+  };
+}
 
 export function syncLayer(
   map: maplibregl.Map,
@@ -99,8 +153,7 @@ function syncExternalNativeLayer(
           source: fillLayerSpec.source,
           "source-layer": fillLayerSpec["source-layer"],
           filter: fillLayerSpec.filter,
-          minzoom: fillLayerSpec.minzoom,
-          maxzoom: fillLayerSpec.maxzoom,
+          ...intersectZoomRange(fillLayerSpec, layer.style),
           paint: fillExtrusionPaint(layer.style, layer.opacity),
           layout: { visibility: layer.visible ? "visible" : "none" },
         },
@@ -125,6 +178,21 @@ function syncExternalNativeLayer(
     );
 
     setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
+    // External layers carry their own zoom range from the control or tile
+    // service that registered them, so we leave a pristine layer's native range
+    // alone. Once the user moves off the defaults GeoLibre owns the range and
+    // keeps applying it, so a later reset to the full [0, 24] window still takes
+    // effect rather than stranding the layer at the narrowed range.
+    const zoomRange = styleLayerZoomRange(layer.style);
+    const isDefaultRange =
+      zoomRange.minzoom === MIN_LAYER_ZOOM &&
+      zoomRange.maxzoom === MAX_LAYER_ZOOM;
+    if (!isDefaultRange) {
+      managedZoomRangeLayerIds.add(nativeLayerId);
+    }
+    if (managedZoomRangeLayerIds.has(nativeLayerId)) {
+      setLayerZoomRange(map, nativeLayerId, zoomRange);
+    }
 
     moveLayer(map, nativeLayerId, beforeId);
   }
@@ -174,6 +242,7 @@ function ensurePMTilesExternalLayer(
         id: nativeLayerIds[0] ?? `${sourceId}-raster`,
         type: "raster",
         source: sourceId,
+        ...styleLayerZoomRange(layer.style),
         paint: rasterPaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
@@ -217,6 +286,7 @@ function ensurePMTilesExternalLayer(
         type: "fill",
         source: sourceId,
         "source-layer": sourceLayer,
+        ...styleLayerZoomRange(layer.style),
         filter: ["==", ["geometry-type"], "Polygon"],
         paint: fillPaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
@@ -232,6 +302,7 @@ function ensurePMTilesExternalLayer(
         type: "line",
         source: sourceId,
         "source-layer": sourceLayer,
+        ...styleLayerZoomRange(layer.style),
         filter: [
           "any",
           ["==", ["geometry-type"], "LineString"],
@@ -251,6 +322,7 @@ function ensurePMTilesExternalLayer(
         type: "circle",
         source: sourceId,
         "source-layer": sourceLayer,
+        ...styleLayerZoomRange(layer.style),
         filter: ["==", ["geometry-type"], "Point"],
         paint: circlePaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
@@ -406,6 +478,7 @@ function syncWaybackExternalRasterLayer(
       id: nativeLayerId,
       type: "raster",
       source: sourceId,
+      ...styleLayerZoomRange(layer.style),
       paint: rasterPaint(layer.style, layer.opacity),
       layout: { visibility: layer.visible ? "visible" : "none" },
     },
@@ -449,9 +522,7 @@ function getStyleLayerSpec(
   map: maplibregl.Map,
   layerId: string,
 ): maplibregl.LayerSpecification | null {
-  return (
-    map.getStyle().layers?.find((layer) => layer.id === layerId) ?? null
-  );
+  return map.getStyle().layers?.find((layer) => layer.id === layerId) ?? null;
 }
 
 function isFillStyleLayerSpec(
@@ -523,6 +594,7 @@ function syncGeoJsonLayer(
           id: fillExtrusionLayerId(layer.id),
           type: "fill-extrusion",
           source: src,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -544,6 +616,7 @@ function syncGeoJsonLayer(
           id: fillLayerId(layer.id),
           type: "fill",
           source: src,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -573,6 +646,7 @@ function syncGeoJsonLayer(
         id: lineLayerId(layer.id),
         type: "line",
         source: src,
+        ...styleLayerZoomRange(layer.style),
         filter: [
           "match",
           ["geometry-type"],
@@ -597,6 +671,7 @@ function syncGeoJsonLayer(
         id: circleLayerId(layer.id),
         type: "circle",
         source: src,
+        ...styleLayerZoomRange(layer.style),
         filter: [
           "match",
           ["geometry-type"],
@@ -634,6 +709,7 @@ function syncRasterTileLayer(
       id: lid,
       type: "raster",
       source: src,
+      ...styleLayerZoomRange(layer.style),
       paint: rasterPaint(layer.style, layer.opacity),
       layout: { visibility: layer.visible ? "visible" : "none" },
     },
@@ -694,6 +770,7 @@ function syncVectorTileLayer(
           type: "fill-extrusion",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -716,6 +793,7 @@ function syncVectorTileLayer(
           type: "fill",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -736,6 +814,7 @@ function syncVectorTileLayer(
           type: "line",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -756,6 +835,7 @@ function syncVectorTileLayer(
           type: "circle",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -826,6 +906,7 @@ function syncMbtilesVectorLayer(
           type: "fill-extrusion",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -848,6 +929,7 @@ function syncMbtilesVectorLayer(
           type: "fill",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -873,6 +955,7 @@ function syncMbtilesVectorLayer(
           type: "line",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -893,6 +976,7 @@ function syncMbtilesVectorLayer(
           type: "circle",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -1103,6 +1187,11 @@ function ensureLayer(
   map: maplibregl.Map,
   id: string,
   spec: maplibregl.AddLayerObject & {
+    // Required so every caller supplies an explicit zoom range; omitting it
+    // would silently reset an existing layer's range to the full [0, 24]
+    // window on the next sync.
+    maxzoom: number;
+    minzoom: number;
     paint?: Record<string, unknown>;
     layout?: Record<string, unknown>;
   },
@@ -1119,12 +1208,44 @@ function ensureLayer(
         map.setLayoutProperty(id, key, value);
       }
     }
+    setLayerZoomRange(map, id, {
+      minzoom: spec.minzoom,
+      maxzoom: spec.maxzoom,
+    });
     moveLayer(map, id, beforeId);
     return;
   }
   const validBeforeId =
     beforeId && map.getLayer(beforeId) ? beforeId : undefined;
   map.addLayer(spec, validBeforeId);
+}
+
+function setLayerZoomRange(
+  map: maplibregl.Map,
+  id: string,
+  range: { minzoom?: number; maxzoom?: number },
+): void {
+  const minzoom = range.minzoom ?? MIN_LAYER_ZOOM;
+  const maxzoom = range.maxzoom ?? MAX_LAYER_ZOOM;
+  const current = map.getLayer(id) as
+    | { minzoom?: number; maxzoom?: number }
+    | undefined;
+  // setLayerZoomRange invalidates MapLibre's style internally, so skip no-op
+  // calls. syncLayer runs this for every layer on every pass.
+  if (current?.minzoom === minzoom && current?.maxzoom === maxzoom) {
+    return;
+  }
+  try {
+    map.setLayerZoomRange(id, minzoom, maxzoom);
+  } catch (error) {
+    // Custom layers from external controls do not support zoom range updates,
+    // so that failure is expected and ignored. Surface anything else (e.g. an
+    // error on a GeoLibre-owned layer) so a real invariant violation is not
+    // silently swallowed.
+    if (map.getLayer(id)?.type !== "custom") {
+      console.warn("[GeoLibre] setLayerZoomRange failed for layer", id, error);
+    }
+  }
 }
 
 function removeIfExists(map: maplibregl.Map, id: string): void {

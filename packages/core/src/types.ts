@@ -58,6 +58,8 @@ export type LayerType =
   | "duckdb-query";
 
 export interface LayerStyle {
+  minZoom: number;
+  maxZoom: number;
   fillColor: string;
   strokeColor: string;
   strokeWidth: number;
@@ -80,6 +82,8 @@ export interface LayerStyle {
 }
 
 export const DEFAULT_LAYER_STYLE: LayerStyle = {
+  minZoom: 0,
+  maxZoom: 24,
   fillColor: "#3b82f6",
   strokeColor: "#1e40af",
   strokeWidth: 2,
@@ -100,6 +104,18 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   rasterContrast: 0,
   rasterHueRotate: 0,
 };
+
+/**
+ * Read a layer style property, falling back to the shared default when the
+ * layer does not define it. Shared by `@geolibre/map` and the desktop app so
+ * the two consumers cannot drift.
+ */
+export function styleValue<K extends keyof LayerStyle>(
+  style: LayerStyle,
+  key: K,
+): LayerStyle[K] {
+  return style[key] ?? DEFAULT_LAYER_STYLE[key];
+}
 
 export interface GeoLibreLayer {
   id: string;
