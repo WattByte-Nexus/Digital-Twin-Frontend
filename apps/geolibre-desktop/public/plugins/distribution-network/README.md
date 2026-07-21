@@ -7,6 +7,11 @@ the local bearing of the GeoJSON line. The supplied `13.8kv_power_pole.glb` is
 placed once at each of the three locations with deck.gl's `ScenegraphLayer`.
 
 The **Distribution** toolbar menu opens a small **Distribution Assets** panel.
+Click a pole to see its pole ID in the asset panel. Click either conductor to
+see the selected pole-to-pole span's line ID and geodesic length, shown in
+metres or kilometres. Long routes are split at every pole rather than reported
+as one route-wide line.
+
 Use it to select and add another pole GLB + GeoJSON pair or a tree GLB + GeoJSON
 pair. Line vertices place poles and conductors; every unique coordinate places a
 tree. Each importer also includes a model-scale control.

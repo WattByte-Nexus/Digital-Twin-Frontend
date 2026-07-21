@@ -12,6 +12,8 @@ let unregisterPanel = null;
 let unregisterMenu = null;
 let nextDatasetId = 1;
 let datasets = [];
+let selectedFeature = null;
+let selectionBody = null;
 const objectUrls = new Set();
 
 function validCoordinate(coordinate) {
@@ -113,6 +115,57 @@ function lineBearing(coordinates, index) {
   return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
 }
 
+function pathLengthMeters(path) {
+  const earthRadiusMeters = 6_371_008.8;
+  let length = 0;
+  for (let index = 1; index < path.length; index += 1) {
+    const [previousLongitude, previousLatitude] = path[index - 1];
+    const [longitude, latitude] = path[index];
+    const latitudeDelta = ((latitude - previousLatitude) * Math.PI) / 180;
+    const longitudeDelta = ((longitude - previousLongitude) * Math.PI) / 180;
+    const previousLatitudeRadians = (previousLatitude * Math.PI) / 180;
+    const latitudeRadians = (latitude * Math.PI) / 180;
+    const haversine =
+      Math.sin(latitudeDelta / 2) ** 2 +
+      Math.cos(previousLatitudeRadians) *
+        Math.cos(latitudeRadians) *
+        Math.sin(longitudeDelta / 2) ** 2;
+    length += 2 * earthRadiusMeters * Math.asin(Math.min(1, Math.sqrt(haversine)));
+  }
+  return length;
+}
+
+function formatLength(lengthMeters) {
+  return lengthMeters >= 1000
+    ? `${(lengthMeters / 1000).toFixed(2)} km`
+    : `${Math.round(lengthMeters)} m`;
+}
+
+export function pickedFeatureDetails(object) {
+  if (object?.kind === "pole") {
+    return {
+      title: "Distribution pole",
+      rows: [{ label: "Pole ID", value: object.id }],
+    };
+  }
+  if (object?.kind === "conductor") {
+    return {
+      title: "Distribution line",
+      rows: [
+        { label: "Line ID", value: object.id },
+        { label: "Length", value: formatLength(object.lengthMeters) },
+      ],
+    };
+  }
+  if (object?.kind === "tree") {
+    return {
+      title: "Tree",
+      rows: [{ label: "Tree ID", value: object.id }],
+    };
+  }
+  return null;
+}
+
 export function buildNetwork(geojson, height = CONDUCTOR_HEIGHT_METERS, maxCoordinates = 3) {
   const sourceCoordinates = lineCoordinates(geojson);
   const coordinates = (sourceCoordinates.length >= 2 ? sourceCoordinates : placementCoordinates(geojson))
@@ -129,16 +182,26 @@ export function buildNetwork(geojson, height = CONDUCTOR_HEIGHT_METERS, maxCoord
       const bearing = lineBearing(coordinates, index);
       return {
         id: `pole-${index + 1}`,
+        kind: "pole",
         position: [longitude, latitude, 0],
         bearing,
         // This GLB's crossarm lies on its local Z axis after it is stood upright.
         modelYaw: (90 - bearing + 360) % 360,
       };
     }),
-    conductors: CONDUCTOR_OFFSETS_METERS.map((offset, index) => ({
-      id: `conductor-${index + 1}`,
-      path: offsetPath(coordinates, offset, height),
-    })),
+    conductors: CONDUCTOR_OFFSETS_METERS.flatMap((offset, sideIndex) => {
+      const side = sideIndex === 0 ? "left" : "right";
+      const path = offsetPath(coordinates, offset, height);
+      return path.slice(0, -1).map((start, spanIndex) => {
+        const spanPath = [start, path[spanIndex + 1]];
+        return {
+          id: `line-${spanIndex + 1}-${side}`,
+          kind: "conductor",
+          path: spanPath,
+          lengthMeters: pathLengthMeters(spanPath),
+        };
+      });
+    }),
     bounds: coordinates.reduce(
       ([west, south, east, north], [longitude, latitude]) => [
         Math.min(west, longitude),
@@ -170,6 +233,38 @@ function assetUrl(app, relativePath) {
   );
 }
 
+function renderSelectedFeature() {
+  if (!selectionBody) return;
+  selectionBody.replaceChildren();
+  if (!selectedFeature) {
+    const hint = document.createElement("p");
+    hint.textContent = "Click a pole or line on the map to inspect it.";
+    selectionBody.append(hint);
+    return;
+  }
+
+  const heading = document.createElement("h3");
+  heading.textContent = selectedFeature.title;
+  const details = document.createElement("dl");
+  for (const row of selectedFeature.rows) {
+    const term = document.createElement("dt");
+    term.textContent = row.label;
+    const value = document.createElement("dd");
+    value.textContent = row.value;
+    details.append(term, value);
+  }
+  selectionBody.append(heading, details);
+}
+
+function selectFeature(object) {
+  const details = pickedFeatureDetails(object);
+  if (!details) return false;
+  selectedFeature = details;
+  currentApp?.openRightPanel?.(PANEL_ID);
+  renderSelectedFeature();
+  return true;
+}
+
 function modelLayer(dataset) {
   return new deck.meshLayers.ScenegraphLayer({
     id: `${PLUGIN_ID}-${dataset.id}-models`,
@@ -181,6 +276,9 @@ function modelLayer(dataset) {
     getPosition: (point) => point.position,
     getOrientation: (point) => [0, point.modelYaw ?? 0, 90],
     pickable: true,
+    autoHighlight: true,
+    highlightColor: [37, 99, 235, 180],
+    onClick: ({ object }) => selectFeature(object),
   });
 }
 
@@ -201,6 +299,9 @@ function renderLayers() {
           capRounded: true,
           jointRounded: true,
           pickable: true,
+          autoHighlight: true,
+          highlightColor: [37, 99, 235, 180],
+          onClick: ({ object }) => selectFeature(object),
         }),
       );
     }
@@ -249,7 +350,7 @@ async function addPoleDataset(modelFile, geojsonFile, sizeScale) {
   });
   renderLayers();
   fitDataset(network.bounds);
-  return `Added ${network.poles.length} aligned poles and two black conductors.`;
+  return `Added ${network.poles.length} aligned poles and ${network.conductors.length} selectable line spans.`;
 }
 
 async function addTreeDataset(modelFile, geojsonFile, sizeScale) {
@@ -263,6 +364,7 @@ async function addTreeDataset(modelFile, geojsonFile, sizeScale) {
     modelUrl,
     points: coordinates.map(([longitude, latitude], index) => ({
       id: `tree-${index + 1}`,
+      kind: "tree",
       position: [longitude, latitude, 0],
     })),
     sizeScale,
@@ -365,6 +467,12 @@ function renderAssetPanel(container) {
   status.className = "distribution-network-status";
   status.textContent = "The bundled three-pole demo is loaded.";
 
+  const selection = document.createElement("section");
+  selection.className = "distribution-network-selection";
+  selection.setAttribute("aria-live", "polite");
+  selectionBody = selection;
+  renderSelectedFeature();
+
   const poles = createImporterSection(
     {
       title: "Distribution poles",
@@ -397,8 +505,11 @@ function renderAssetPanel(container) {
     status.dataset.state = "success";
   });
 
-  container.append(intro, poles, trees, clear, status);
-  return () => container.replaceChildren();
+  container.append(intro, selection, poles, trees, clear, status);
+  return () => {
+    if (selectionBody === selection) selectionBody = null;
+    container.replaceChildren();
+  };
 }
 
 function registerAssetUi(app) {
@@ -430,7 +541,7 @@ function registerAssetUi(app) {
 const plugin = {
   id: PLUGIN_ID,
   name: "Distribution Network Demo",
-  version: "0.3.0",
+  version: "0.4.0",
 
   async activate(app) {
     if (!app.getDeckGL) {
@@ -447,7 +558,11 @@ const plugin = {
 
     const network = buildNetwork(await response.json());
     deck = await app.getDeckGL();
-    overlay = new deck.mapbox.MapboxOverlay({ interleaved: true, layers: [] });
+    overlay = new deck.mapbox.MapboxOverlay({
+      interleaved: true,
+      layers: [],
+      onClick: ({ object }) => selectFeature(object),
+    });
     currentApp = app;
     previousProjection = app.getMapProjection?.() ?? null;
     app.setMapProjection?.("mercator");
@@ -488,6 +603,8 @@ const plugin = {
     deck = null;
     currentApp = null;
     datasets = [];
+    selectedFeature = null;
+    selectionBody = null;
     for (const url of objectUrls) URL.revokeObjectURL(url);
     objectUrls.clear();
     if (previousProjection) app.setMapProjection?.(previousProjection);

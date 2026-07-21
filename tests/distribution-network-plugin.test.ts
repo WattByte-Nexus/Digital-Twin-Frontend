@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
   buildNetwork,
+  pickedFeatureDetails,
   placementCoordinates,
 } from "../apps/geolibre-desktop/public/plugins/distribution-network/dist/index.js";
 
@@ -18,13 +19,13 @@ describe("distribution-network bundled plugin", () => {
     );
     const network = buildNetwork(geojson);
 
-    assert.equal(network.conductors.length, 2);
+    assert.equal(network.conductors.length, 4);
     assert.equal(network.poles.length, 3);
-    assert.ok(network.conductors.every((conductor) => conductor.path.length === 3));
+    assert.ok(network.conductors.every((conductor) => conductor.path.length === 2));
     assert.equal(
       new Set(network.conductors.map((conductor) => conductor.path[0].slice(0, 2).join(",")))
         .size,
-      2,
+      4,
     );
     assert.deepEqual(
       network.poles.map((pole) => pole.position.slice(0, 2)),
@@ -35,6 +36,32 @@ describe("distribution-network bundled plugin", () => {
       ],
     );
     assert.ok(network.poles.every((pole) => Number.isFinite(pole.bearing)));
+    assert.ok(network.conductors.every((conductor) => conductor.lengthMeters > 0));
+  });
+
+  it("describes clicked poles by ID and clicked lines by length", () => {
+    const network = buildNetwork({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: [[0, 0], [0, 0.001]] },
+        },
+      ],
+    });
+
+    assert.deepEqual(pickedFeatureDetails(network.poles[0]), {
+      title: "Distribution pole",
+      rows: [{ label: "Pole ID", value: "pole-1" }],
+    });
+    assert.deepEqual(pickedFeatureDetails(network.conductors[0]), {
+      title: "Distribution line",
+      rows: [
+        { label: "Line ID", value: "line-1-left" },
+        { label: "Length", value: "111 m" },
+      ],
+    });
   });
 
   it("extracts unique model placements from point GeoJSON", () => {
