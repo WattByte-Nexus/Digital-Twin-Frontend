@@ -901,7 +901,7 @@ function createImporterSection(options, status) {
       geojsonFilePromise = fetchBoulderTreeGeoJson(currentMapBounds()).then((geojsonData) =>
         geoJsonFile(geojsonData, "boulder-public-trees.geojson"),
       );
-    } else if (source === "file" || selectedGeojsonFile) {
+    } else if (source === "file" || (!locationSource && selectedGeojsonFile)) {
       geojsonFilePromise = Promise.resolve(selectedGeojsonFile);
     } else {
       geojsonFilePromise = bundledAssetFile(options.defaultGeojsonPath);
