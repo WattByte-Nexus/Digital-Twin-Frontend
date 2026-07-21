@@ -12,19 +12,19 @@ const pluginRoot = new URL(
 );
 
 describe("distribution-network bundled plugin", () => {
-  it("builds four parallel conductors over two spans and three pole placements", async () => {
+  it("builds one conductor on each side over two spans and three aligned poles", async () => {
     const geojson = JSON.parse(
       await readFile(new URL("assets/testpowerlines.geojson", pluginRoot), "utf8"),
     );
     const network = buildNetwork(geojson);
 
-    assert.equal(network.conductors.length, 4);
+    assert.equal(network.conductors.length, 2);
     assert.equal(network.poles.length, 3);
     assert.ok(network.conductors.every((conductor) => conductor.path.length === 3));
     assert.equal(
       new Set(network.conductors.map((conductor) => conductor.path[0].slice(0, 2).join(",")))
         .size,
-      4,
+      2,
     );
     assert.deepEqual(
       network.poles.map((pole) => pole.position.slice(0, 2)),
@@ -34,6 +34,7 @@ describe("distribution-network bundled plugin", () => {
         [-105.208791, 40.023422],
       ],
     );
+    assert.ok(network.poles.every((pole) => Number.isFinite(pole.bearing)));
   });
 
   it("extracts unique model placements from point GeoJSON", () => {
@@ -67,8 +68,31 @@ describe("distribution-network bundled plugin", () => {
     });
 
     assert.equal(network.poles.length, 2);
-    assert.equal(network.conductors.length, 4);
+    assert.equal(network.conductors.length, 2);
     assert.ok(network.conductors.every((conductor) => conductor.path.length === 2));
+  });
+
+  it("aligns each pole with the local line bearing", () => {
+    const network = buildNetwork({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [[0, 0], [0, 1], [1, 1]],
+          },
+        },
+      ],
+    });
+
+    assert.ok(Math.abs(network.poles[0].bearing - 0) < 0.01);
+    assert.ok(Math.abs(network.poles[1].bearing - 45) < 1);
+    assert.ok(Math.abs(network.poles[2].bearing - 90) < 0.01);
+    assert.ok(Math.abs(network.poles[0].modelYaw - 90) < 0.01);
+    assert.ok(Math.abs(network.poles[1].modelYaw - 45) < 1);
+    assert.ok(Math.abs(network.poles[2].modelYaw - 0) < 0.01);
   });
 
   it("declares a matching active-by-default plugin manifest", async () => {

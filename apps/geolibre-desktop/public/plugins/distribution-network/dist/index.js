@@ -2,7 +2,7 @@ const PLUGIN_ID = "distribution-network";
 const PANEL_ID = "distribution-network-assets";
 const MENU_ID = "distribution-network-menu";
 const CONDUCTOR_HEIGHT_METERS = 8.2;
-const CONDUCTOR_OFFSETS_METERS = [-2, -1, 1, 2];
+const CONDUCTOR_OFFSETS_METERS = [-1.5, 1.5];
 
 let overlay = null;
 let deck = null;
@@ -100,6 +100,19 @@ function offsetPath(coordinates, offsetMeters, height) {
   });
 }
 
+function lineBearing(coordinates, index) {
+  const previous = coordinates[Math.max(0, index - 1)];
+  const next = coordinates[Math.min(coordinates.length - 1, index + 1)];
+  const averageLatitude = (previous[1] + next[1]) / 2;
+  const metersPerLongitude = Math.max(
+    Math.abs(111_320 * Math.cos((averageLatitude * Math.PI) / 180)),
+    1,
+  );
+  const dx = (next[0] - previous[0]) * metersPerLongitude;
+  const dy = (next[1] - previous[1]) * 110_540;
+  return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+}
+
 export function buildNetwork(geojson, height = CONDUCTOR_HEIGHT_METERS, maxCoordinates = 3) {
   const sourceCoordinates = lineCoordinates(geojson);
   const coordinates = (sourceCoordinates.length >= 2 ? sourceCoordinates : placementCoordinates(geojson))
@@ -112,10 +125,16 @@ export function buildNetwork(geojson, height = CONDUCTOR_HEIGHT_METERS, maxCoord
   }
 
   return {
-    poles: coordinates.map(([longitude, latitude], index) => ({
-      id: `pole-${index + 1}`,
-      position: [longitude, latitude, 0],
-    })),
+    poles: coordinates.map(([longitude, latitude], index) => {
+      const bearing = lineBearing(coordinates, index);
+      return {
+        id: `pole-${index + 1}`,
+        position: [longitude, latitude, 0],
+        bearing,
+        // This GLB's crossarm lies on its local Z axis after it is stood upright.
+        modelYaw: (90 - bearing + 360) % 360,
+      };
+    }),
     conductors: CONDUCTOR_OFFSETS_METERS.map((offset, index) => ({
       id: `conductor-${index + 1}`,
       path: offsetPath(coordinates, offset, height),
@@ -160,7 +179,7 @@ function modelLayer(dataset) {
     sizeScale: dataset.sizeScale,
     sizeMinPixels: 1,
     getPosition: (point) => point.position,
-    getOrientation: [0, 0, 90],
+    getOrientation: (point) => [0, point.modelYaw ?? 0, 90],
     pickable: true,
   });
 }
@@ -230,7 +249,7 @@ async function addPoleDataset(modelFile, geojsonFile, sizeScale) {
   });
   renderLayers();
   fitDataset(network.bounds);
-  return `Added ${network.poles.length} poles and four black conductors.`;
+  return `Added ${network.poles.length} aligned poles and two black conductors.`;
 }
 
 async function addTreeDataset(modelFile, geojsonFile, sizeScale) {
@@ -349,7 +368,7 @@ function renderAssetPanel(container) {
   const poles = createImporterSection(
     {
       title: "Distribution poles",
-      description: "Line vertices place poles; four parallel conductors follow the line.",
+      description: "Line vertices place aligned poles; one conductor follows each side.",
       modelLabel: "Pole model",
       geojsonLabel: "Pole line / positions",
       buttonLabel: "Add poles and lines",
@@ -411,7 +430,7 @@ function registerAssetUi(app) {
 const plugin = {
   id: PLUGIN_ID,
   name: "Distribution Network Demo",
-  version: "0.2.0",
+  version: "0.3.0",
 
   async activate(app) {
     if (!app.getDeckGL) {

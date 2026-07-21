@@ -1,10 +1,10 @@
 # Distribution Network Demo plugin
 
 This bundled GeoLibre plugin reads `assets/testpowerlines.geojson`, uses the first
-three coordinates as pole locations, and renders four black conductors along the
-two spans: two wires on each side of the pole centerline. The supplied
-`13.8kv_power_pole.glb` is placed once at each of the three locations with
-deck.gl's `ScenegraphLayer`.
+three coordinates as pole locations, and renders two black conductors along the
+two spans: one wire on each side of the pole centerline. Each pole is rotated to
+the local bearing of the GeoJSON line. The supplied `13.8kv_power_pole.glb` is
+placed once at each of the three locations with deck.gl's `ScenegraphLayer`.
 
 The **Distribution** toolbar menu opens a small **Distribution Assets** panel.
 Use it to select and add another pole GLB + GeoJSON pair or a tree GLB + GeoJSON

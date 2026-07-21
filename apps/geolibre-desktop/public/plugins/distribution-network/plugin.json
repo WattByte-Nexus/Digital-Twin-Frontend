@@ -1,9 +1,9 @@
 {
   "id": "distribution-network",
   "name": "Distribution Network Demo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "entry": "dist/index.js",
   "style": "dist/style.css",
-  "description": "Loads pole and tree GLB/GeoJSON pairs and renders four black distribution conductors, two on each side of the pole centerline.",
+  "description": "Loads pole and tree GLB/GeoJSON pairs, aligns poles to the line, and renders one black conductor on each side.",
   "activeByDefault": true
 }
