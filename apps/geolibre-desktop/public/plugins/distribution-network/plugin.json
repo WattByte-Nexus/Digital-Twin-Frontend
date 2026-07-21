@@ -1,8 +1,9 @@
 {
   "id": "distribution-network",
   "name": "Distribution Network Demo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "entry": "dist/index.js",
-  "description": "Renders two distribution-line spans and places the supplied 13.8 kV pole model at their endpoints.",
+  "style": "dist/style.css",
+  "description": "Loads pole and tree GLB/GeoJSON pairs and renders four black distribution conductors, two on each side of the pole centerline.",
   "activeByDefault": true
 }
