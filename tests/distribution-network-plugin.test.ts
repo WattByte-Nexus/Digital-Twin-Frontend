@@ -17,6 +17,7 @@ import {
   pickedFeatureDetails,
   placementCoordinates,
   replaceImportedTreeDatasets,
+  scenegraphSizingProps,
   treePlacements,
 } from "../apps/geolibre-desktop/public/plugins/distribution-network/dist/index.js";
 
@@ -31,7 +32,7 @@ describe("distribution-network bundled plugin", () => {
     assert.equal(BUNDLED_POLE_GEOJSON_PATH, "assets/testpowerlines.geojson");
     assert.equal(
       BUNDLED_TREE_MODEL_PATH,
-      "assets/low_poly_forest_tree_assets/tree_01.glb",
+      "assets/low_poly_forest_tree_assets/tree_07.glb",
     );
     assert.equal(BUNDLED_TREE_GEOJSON_PATH, "assets/testtrees.geojson");
 
@@ -49,6 +50,14 @@ describe("distribution-network bundled plugin", () => {
 
   it("defaults tree imports to a realistic mature roadside-tree scale", () => {
     assert.equal(TREE_DEFAULT_SCALE, 0.5);
+  });
+
+  it("keeps scenegraph scale in world units at every zoom level", () => {
+    assert.deepEqual(scenegraphSizingProps(TREE_DEFAULT_SCALE), {
+      sizeScale: 0.5,
+      sizeMinPixels: 0,
+      sizeMaxPixels: Number.MAX_SAFE_INTEGER,
+    });
   });
 
   it("provides a forgiving pointer hit area for thin distribution assets", () => {

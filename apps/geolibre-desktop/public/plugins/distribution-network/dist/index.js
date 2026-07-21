@@ -9,7 +9,7 @@ export const TREE_DEFAULT_SCALE = 0.5;
 export const BUNDLED_POLE_MODEL_PATH = "assets/13.8kv_power_pole.glb";
 export const BUNDLED_POLE_GEOJSON_PATH = "assets/testpowerlines.geojson";
 export const BUNDLED_TREE_MODEL_PATH =
-  "assets/low_poly_forest_tree_assets/tree_01.glb";
+  "assets/low_poly_forest_tree_assets/tree_07.glb";
 export const BUNDLED_TREE_GEOJSON_PATH = "assets/testtrees.geojson";
 export const BOULDER_TREE_SERVICE_URL =
   "https://gis.bouldercolorado.gov/ags_svr2/rest/services/parks/TreesOpenData/MapServer/0/query";
@@ -529,14 +529,21 @@ function selectFeature(object, pickedCoordinate) {
   return showAssetPopup(object, popupCoordinate(object, pickedCoordinate));
 }
 
+export function scenegraphSizingProps(sizeScale) {
+  return {
+    sizeScale,
+    sizeMinPixels: 0,
+    sizeMaxPixels: Number.MAX_SAFE_INTEGER,
+  };
+}
+
 function modelLayer(dataset) {
   return new deck.meshLayers.ScenegraphLayer({
     id: `${PLUGIN_ID}-${dataset.id}-models`,
     data: dataset.points,
     scenegraph: dataset.modelUrl,
     _lighting: "pbr",
-    sizeScale: dataset.sizeScale,
-    sizeMinPixels: 1,
+    ...scenegraphSizingProps(dataset.sizeScale),
     getPosition: (point) => point.position,
     getOrientation: (point) => [0, point.modelYaw ?? 0, 90],
     pickable: true,
@@ -1018,7 +1025,7 @@ function registerAssetUi(app) {
 const plugin = {
   id: PLUGIN_ID,
   name: "Distribution Network Demo",
-  version: "0.6.0",
+  version: "0.6.1",
 
   async activate(app) {
     if (!app.getDeckGL) {

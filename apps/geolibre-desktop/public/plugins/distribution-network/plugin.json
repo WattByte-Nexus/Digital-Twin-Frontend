@@ -1,7 +1,7 @@
 {
   "id": "distribution-network",
   "name": "Distribution Network Demo",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "entry": "dist/index.js",
   "style": "dist/style.css",
   "description": "Loads pole and tree models from bundled data, GeoJSON files, or the live Boulder public tree inventory.",

@@ -14,13 +14,14 @@ as one route-wide line.
 The **Plugins → Distribution Network Demo** submenu opens the **Distribution Assets** panel.
 Both importers are ready to run without choosing files: poles default to
 `13.8kv_power_pole.glb` + `testpowerlines.geojson`, while trees default to
-`tree_01.glb` + `testtrees.geojson`. Choosing a local file overrides its bundled
+`tree_07.glb` + `testtrees.geojson`. Choosing a local file overrides its bundled
 default. Line vertices place poles and conductors; every unique coordinate
 places a tree. Selecting another tree model replaces the active imported tree
 layer so models do not stack at identical coordinates. Each importer also
 includes a model-scale control. Tree imports default to half scale, which makes
 the bundled forest models roughly 9–17 metres tall instead of 18–33 metres tall;
-the value can still be adjusted for other models.
+the value can still be adjusted for other models. Scenegraph pixel-size clamps
+are disabled, so tree size remains tied to map-world units as the camera zooms.
 
 The tree importer also offers **Boulder public trees · current view**. This option
 queries the City of Boulder public tree inventory for the visible map extent,
