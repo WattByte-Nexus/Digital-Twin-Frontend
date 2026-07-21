@@ -1,0 +1,8 @@
+{
+  "id": "distribution-network",
+  "name": "Distribution Network Demo",
+  "version": "0.1.0",
+  "entry": "dist/index.js",
+  "description": "Renders two distribution-line spans and places the supplied 13.8 kV pole model at their endpoints.",
+  "activeByDefault": true
+}
