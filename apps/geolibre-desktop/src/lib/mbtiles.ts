@@ -1,4 +1,5 @@
 import { isTauri } from "./tauri-io";
+import { invoke } from "@tauri-apps/api/core";
 import { addProtocol, type RequestParameters } from "maplibre-gl";
 
 const MBTILES_PROTOCOL = "geolibre-mbtiles";
@@ -21,14 +22,11 @@ export function mbtilesTileUrl(path: string): string {
   return `${MBTILES_PROTOCOL}://tile/{z}/{x}/{y}?path=${encodeURIComponent(path)}`;
 }
 
-export async function readMbtilesMetadata(
-  path: string,
-): Promise<MbtilesMetadata> {
+export async function readMbtilesMetadata(path: string): Promise<MbtilesMetadata> {
   if (!isTauri()) {
     throw new Error("MBTiles files require GeoLibre Desktop.");
   }
 
-  const { invoke } = await import("@tauri-apps/api/core");
   return invoke<MbtilesMetadata>("read_mbtiles_metadata", { path });
 }
 
@@ -37,17 +35,10 @@ export function registerMbtilesProtocol(): void {
 
   addProtocol(MBTILES_PROTOCOL, async (request) => {
     const params = parseMbtilesTileRequest(request);
-    const { invoke } = await import("@tauri-apps/api/core");
-    const bytes = await invoke<number[] | Uint8Array>(
-      "read_mbtiles_tile",
-      params,
-    );
+    const bytes = await invoke<number[] | Uint8Array>("read_mbtiles_tile", params);
     const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     return {
-      data: array.buffer.slice(
-        array.byteOffset,
-        array.byteOffset + array.byteLength,
-      ),
+      data: array.buffer.slice(array.byteOffset, array.byteOffset + array.byteLength),
     };
   });
   protocolRegistered = true;

@@ -2,16 +2,26 @@ import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import * as React from "react";
 import { cn } from "../lib/utils";
 
+export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> & {
+  /**
+   * Ref to the scrollable viewport element. Exposed so consumers (e.g. a
+   * virtualized list) can use it as their scroll container. Typed as a
+   * RefObject because that is what scroll-container consumers need (a callback
+   * ref would not give them a stable element to read).
+   */
+  viewportRef?: React.RefObject<HTMLDivElement | null>;
+};
+
 export const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root>
->(({ className, children, ...props }, ref) => (
+  ScrollAreaProps
+>(({ className, children, viewportRef, ...props }, ref) => (
   <ScrollAreaPrimitive.Root
     ref={ref}
     className={cn("relative overflow-hidden", className)}
     {...props}
   >
-    <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
+    <ScrollAreaPrimitive.Viewport ref={viewportRef} className="h-full w-full rounded-[inherit]">
       {children}
     </ScrollAreaPrimitive.Viewport>
     <ScrollBar />
@@ -30,10 +40,8 @@ const ScrollBar = React.forwardRef<
     orientation={orientation}
     className={cn(
       "group z-30 flex touch-none select-none rounded-full bg-muted/70 transition-colors hover:bg-muted",
-      orientation === "vertical" &&
-        "h-full w-3.5 border-l border-border/60 p-0.5",
-      orientation === "horizontal" &&
-        "h-3.5 flex-col border-t border-border/60 p-0.5",
+      orientation === "vertical" && "h-full w-3.5 border-s border-border/60 p-0.5",
+      orientation === "horizontal" && "h-3.5 flex-col border-t border-border/60 p-0.5",
       className,
     )}
     {...props}

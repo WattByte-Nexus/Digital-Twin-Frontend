@@ -1,14 +1,12 @@
-import { parseProject, useAppStore } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { normalizeProjectUrl } from "../lib/urls";
+import { fetchProjectFromUrl, projectUrlFromLocation } from "../lib/project-url";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 
 export type ProjectUrlLoadState =
   | { error: null; message: null; status: "idle" }
   | { error: null; message: string; status: "loading" | "loaded" }
   | { error: string; message: null; status: "error" };
-
-const PROJECT_URL_PARAMS = ["url", "project", "projectUrl", "project_url"];
 
 export function useProjectUrlLoader(): ProjectUrlLoadState {
   const loadProject = useAppStore((state) => state.loadProject);
@@ -30,10 +28,8 @@ export function useProjectUrlLoader(): ProjectUrlLoadState {
       status: "loading",
     });
 
-    void loadProjectFromUrl(projectUrl, abortController.signal)
-      .then((project) =>
-        resolveProjectXyzLayers(project, abortController.signal),
-      )
+    void fetchProjectFromUrl(projectUrl, { signal: abortController.signal })
+      .then((project) => resolveProjectXyzLayers(project, abortController.signal))
       .then((project) => {
         if (abortController.signal.aborted) return;
         // A `?url=` deep link is reloaded on every visit, so treat it as
@@ -52,10 +48,7 @@ export function useProjectUrlLoader(): ProjectUrlLoadState {
       .catch((error: unknown) => {
         if (abortController.signal.aborted) return;
         setState({
-          error:
-            error instanceof Error
-              ? error.message
-              : "Could not load the project URL.",
+          error: error instanceof Error ? error.message : "Could not load the project URL.",
           message: null,
           status: "error",
         });
@@ -71,46 +64,4 @@ export function useProjectUrlLoader(): ProjectUrlLoadState {
   }, [loadProject, projectUrl]);
 
   return state;
-}
-
-async function loadProjectFromUrl(projectUrl: string, signal: AbortSignal) {
-  const response = await fetch(projectUrl, {
-    headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `Could not load project URL: HTTP ${response.status} ${response.statusText}`,
-    );
-  }
-
-  return parseProject(await response.text());
-}
-
-function projectUrlFromLocation(): string | null {
-  if (typeof window === "undefined") return null;
-
-  const search = window.location.search;
-  const params = new URLSearchParams(search);
-  for (const key of PROJECT_URL_PARAMS) {
-    const value = params.get(key);
-    const url = normalizeProjectUrl(value);
-    if (url) return url;
-  }
-
-  const bareQuery = search.startsWith("?")
-    ? safeDecodeURIComponent(search.slice(1)).trim()
-    : "";
-  return /^https?:\/\//i.test(bareQuery)
-    ? normalizeProjectUrl(bareQuery)
-    : null;
-}
-
-function safeDecodeURIComponent(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }

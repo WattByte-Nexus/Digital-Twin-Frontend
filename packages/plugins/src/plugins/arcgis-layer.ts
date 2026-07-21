@@ -1,14 +1,8 @@
 /// <reference path="../arcgis-maplibre.d.ts" />
 
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
-import type {
-  HostedLayer,
-  VectorTileLayer,
-} from "@esri/maplibre-arcgis";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import type { HostedLayer, VectorTileLayer } from "@esri/maplibre-arcgis";
+import type { FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
 
@@ -79,12 +73,22 @@ export async function addArcGISLayer(
   app: GeoLibreAppAPI,
   options: ArcGISLayerOptions,
 ): Promise<string> {
+  const input = getArcGISInput(options);
+
+  // A feature layer is just attributed vector data, so load it as a regular
+  // GeoJSON layer rather than an opaque external-native layer. That unlocks the
+  // host's full vector styling surface for it — labels (with uppercase/offset/
+  // rotation formatting), the attribute table, identify, symbology, and export —
+  // instead of only the fill/stroke paint an external-native layer exposes.
+  if (options.layerType === "feature") {
+    return addArcGISFeatureLayerAsGeoJson(app, options, input);
+  }
+
   const map = app.getMap?.();
   if (!map) {
     throw new Error("The map is not ready.");
   }
 
-  const input = getArcGISInput(options);
   const arcgis = await import("@esri/maplibre-arcgis");
   const hostedLayer = await createArcGISHostedLayer(arcgis, options, input);
   const id = createArcGISLayerId();
@@ -113,10 +117,7 @@ export async function addArcGISLayer(
 function ensureArcGISStoreCleanup(): void {
   arcgisStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     for (const layer of previous.layers) {
-      if (
-        layer.type === "arcgis" &&
-        !state.layers.some((current) => current.id === layer.id)
-      ) {
+      if (layer.type === "arcgis" && !state.layers.some((current) => current.id === layer.id)) {
         arcgisLayerInstances.delete(layer.id);
       }
     }
@@ -133,24 +134,13 @@ async function createArcGISHostedLayer(
     token: options.token?.trim() || undefined,
   };
 
-  if (options.layerType === "feature") {
-    return createFallbackFeatureLayer(input, options);
-  }
-
   return options.sourceType === "url"
-    ? (arcgis.VectorTileLayer as typeof VectorTileLayer).fromUrl(
-        input,
-        layerOptions,
-      )
-    : (arcgis.VectorTileLayer as typeof VectorTileLayer).fromPortalItem(
-        input,
-        layerOptions,
-      );
+    ? (arcgis.VectorTileLayer as typeof VectorTileLayer).fromUrl(input, layerOptions)
+    : (arcgis.VectorTileLayer as typeof VectorTileLayer).fromPortalItem(input, layerOptions);
 }
 
 function getArcGISInput(options: ArcGISLayerOptions): string {
-  const input =
-    options.sourceType === "url" ? options.url?.trim() : options.itemId?.trim();
+  const input = options.sourceType === "url" ? options.url?.trim() : options.itemId?.trim();
   if (!input) {
     throw new Error(
       options.sourceType === "url"
@@ -161,10 +151,7 @@ function getArcGISInput(options: ArcGISLayerOptions): string {
   return input;
 }
 
-function prefixArcGISSourceIds(
-  hostedLayer: ArcGISRuntimeLayer,
-  layerId: string,
-): string[] {
+function prefixArcGISSourceIds(hostedLayer: ArcGISRuntimeLayer, layerId: string): string[] {
   const originalSourceIds = Object.keys(hostedLayer.sources);
   return originalSourceIds.map((sourceId, index) => {
     const nextSourceId = `${layerId}-source-${index}-${sanitizeIdPart(sourceId)}`;
@@ -173,24 +160,16 @@ function prefixArcGISSourceIds(
   });
 }
 
-function prefixArcGISStyleLayerIds(
-  hostedLayer: ArcGISRuntimeLayer,
-  layerId: string,
-): string[] {
+function prefixArcGISStyleLayerIds(hostedLayer: ArcGISRuntimeLayer, layerId: string): string[] {
   const mutableLayers = hostedLayer.layers as maplibregl.LayerSpecification[];
   return mutableLayers.map((styleLayer, index) => {
-    const nextLayerId = `${layerId}-layer-${index}-${sanitizeIdPart(
-      styleLayer.id,
-    )}`;
+    const nextLayerId = `${layerId}-layer-${index}-${sanitizeIdPart(styleLayer.id)}`;
     styleLayer.id = nextLayerId;
     return nextLayerId;
   });
 }
 
-function addArcGISRuntimeLayerToMap(
-  hostedLayer: ArcGISRuntimeLayer,
-  map: maplibregl.Map,
-): void {
+function addArcGISRuntimeLayerToMap(hostedLayer: ArcGISRuntimeLayer, map: maplibregl.Map): void {
   for (const [sourceId, source] of Object.entries(hostedLayer.sources)) {
     if (!map.getSource(sourceId)) {
       map.addSource(sourceId, source);
@@ -204,55 +183,119 @@ function addArcGISRuntimeLayerToMap(
   }
 }
 
-async function createFallbackFeatureLayer(
-  input: string,
+/**
+ * Load an ArcGIS FeatureServer layer as a host-managed GeoJSON layer.
+ *
+ * The features are fetched up front (`/query?f=geojson`) and handed to the
+ * store's GeoJSON layer path, so the layer is a first-class vector layer with
+ * its attributes available — enabling labels and their formatting, the
+ * attribute table, identify, symbology, and export. Vector tile layers keep the
+ * external-native runtime path; only feature layers come through here.
+ *
+ * @param app - The host app API (used to fit the view to the layer extent).
+ * @param options - The ArcGIS layer options (source type, URL/item, token).
+ * @param input - The resolved service URL or portal item id from the options.
+ * @returns The new GeoLibre layer's id.
+ */
+async function addArcGISFeatureLayerAsGeoJson(
+  app: GeoLibreAppAPI,
   options: ArcGISLayerOptions,
-  cause: unknown = undefined,
-): Promise<ArcGISRuntimeLayer> {
+  input: string,
+): Promise<string> {
   const layerUrl =
     options.sourceType === "url"
-      ? await resolveFeatureLayerUrl(input, options, cause)
-      : await resolvePortalFeatureLayerUrl(input, options, cause);
-  const layerInfo = await fetchArcGISJson<ArcGISFeatureLayerInfo>(
-    layerUrl,
-    options,
-    cause,
-  );
+      ? await resolveFeatureLayerUrl(input, options, undefined)
+      : await resolvePortalFeatureLayerUrl(input, options, undefined);
+  const layerInfo = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, undefined);
   if (!layerInfo.geometryType) {
-    throw new Error("The ArcGIS feature layer metadata is missing geometry type.", {
-      cause,
-    });
+    throw new Error("The ArcGIS feature layer metadata is missing geometry type.");
   }
 
-  const sourceId = layerInfo.name || layerNameFromArcGISInput(layerUrl, "arcgis");
-  const styleLayerType = arcgisGeometryLayerType(layerInfo.geometryType);
-  const styleLayerId = `${sourceId}-layer`;
-  const queryUrl = appendArcGISParams(`${trimTrailingSlash(layerUrl)}/query`, {
+  // The token is kept out of the persisted refresh URL so it is never written
+  // to a saved project; it is only appended to the one-off request below.
+  const refreshUrl = appendArcGISParams(`${trimTrailingSlash(layerUrl)}/query`, {
     f: "geojson",
     outFields: "*",
     returnGeometry: "true",
-    token: options.token?.trim(),
     where: "1=1",
   });
-
-  return createStaticArcGISRuntimeLayer({
-    bounds: arcgisExtentToBounds(layerInfo.extent),
-    layers: [
-      {
-        id: styleLayerId,
-        source: sourceId,
-        type: styleLayerType,
-        paint: arcgisFallbackPaint(styleLayerType),
-      } as maplibregl.LayerSpecification,
-    ],
-    sources: {
-      [sourceId]: {
-        type: "geojson",
-        data: queryUrl,
-        attribution: layerInfo.copyrightText || "ArcGIS Feature Service",
-      },
-    },
+  const requestUrl = appendArcGISParams(refreshUrl, {
+    token: options.token?.trim(),
   });
+  const geojson = await fetchArcGISGeoJson(requestUrl);
+
+  const name =
+    options.name?.trim() || layerInfo.name || layerNameFromArcGISInput(layerUrl, "ArcGIS Layer");
+  const store = useAppStore.getState();
+  // Persist the GeoJSON query endpoint (not the service-description base URL) as
+  // the source path so the layer's GeoJSON refresh re-fetches valid features.
+  const id = store.addGeoJsonLayer(name, geojson, refreshUrl, options.beforeLayerId ?? null);
+
+  // Preserve the service's copyright watermark in MapLibre's attribution
+  // control, matching the prior URL-source behavior.
+  const attribution = layerInfo.copyrightText?.trim();
+  if (attribution) {
+    store.updateLayer(id, { source: { type: "geojson", attribution } });
+  }
+
+  const bounds = arcgisExtentToBounds(layerInfo.extent);
+  if (bounds) app.fitBounds?.(bounds);
+  return id;
+}
+
+/**
+ * Fetch and validate a GeoJSON FeatureCollection from an ArcGIS query URL.
+ *
+ * ArcGIS can answer a `f=geojson` request with a JSON error envelope rather than
+ * GeoJSON, so both the transport status and the payload shape are checked. A
+ * result truncated at the service's `maxRecordCount` is loaded as-is but warned
+ * about, so a partial attribute table or export is not mistaken for the full
+ * dataset.
+ *
+ * @param url - The fully-built `/query?f=geojson` request URL.
+ * @returns The parsed FeatureCollection.
+ */
+async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`ArcGIS feature query failed with ${response.status}.`);
+  }
+  // ArcGIS Enterprise (and services behind a WAF) can answer 200 with an HTML
+  // login/redirect page when a token is missing or expired. Read the body as
+  // text first so that surfaces as a clear message instead of a raw
+  // `SyntaxError: Unexpected token '<'` from JSON.parse.
+  const text = await response.text();
+  if (/^\s*</.test(text)) {
+    throw new Error(
+      "The ArcGIS service returned HTML instead of GeoJSON (the layer may require a token or sign-in).",
+    );
+  }
+  let json: FeatureCollection & {
+    error?: { message?: string };
+    exceededTransferLimit?: boolean;
+  };
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
+  }
+  if (json.error) {
+    throw new Error(json.error.message || "ArcGIS feature query failed.");
+  }
+  if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
+    throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
+  }
+  // ArcGIS caps a single query at the service's maxRecordCount and flags the
+  // shortfall with `exceededTransferLimit`. The partial data still loads (it is
+  // the same subset the previous URL-source path rendered), but the truncation
+  // is surfaced so the caller knows the layer is not the complete dataset.
+  if (json.exceededTransferLimit) {
+    console.warn(
+      `[GeoLibre] ArcGIS feature query was truncated at the service record ` +
+        `limit; loaded ${json.features.length} features (partial dataset).`,
+    );
+  }
+  return json;
 }
 
 async function resolveFeatureLayerUrl(
@@ -265,11 +308,7 @@ async function resolveFeatureLayerUrl(
     throw new Error("Enter an ArcGIS FeatureServer layer URL.", { cause });
   }
 
-  const serviceInfo = await fetchArcGISJson<ArcGISFeatureServiceInfo>(
-    input,
-    options,
-    cause,
-  );
+  const serviceInfo = await fetchArcGISJson<ArcGISFeatureServiceInfo>(input, options, cause);
   const layerId = serviceInfo.layers?.find((layer) => !layer.subLayerIds)?.id;
   if (layerId == null) {
     throw new Error("The ArcGIS feature service does not list a feature layer.", {
@@ -298,12 +337,11 @@ async function fetchArcGISPortalItemInfo(
   options: ArcGISLayerOptions,
   cause: unknown,
 ): Promise<ArcGISPortalItemInfo> {
-  const portalUrl =
-    options.portalUrl?.trim() || "https://www.arcgis.com/sharing/rest";
-  const itemUrl = appendArcGISParams(
-    `${trimTrailingSlash(portalUrl)}/content/items/${itemId}`,
-    { f: "json", token: options.token?.trim() },
-  );
+  const portalUrl = options.portalUrl?.trim() || "https://www.arcgis.com/sharing/rest";
+  const itemUrl = appendArcGISParams(`${trimTrailingSlash(portalUrl)}/content/items/${itemId}`, {
+    f: "json",
+    token: options.token?.trim(),
+  });
   const response = await fetch(itemUrl);
   if (!response.ok) {
     throw new Error(`ArcGIS portal item request failed with ${response.status}.`, {
@@ -340,42 +378,6 @@ async function fetchArcGISJson<T>(
   return json;
 }
 
-function createStaticArcGISRuntimeLayer(args: {
-  bounds?: [number, number, number, number];
-  layers: maplibregl.LayerSpecification[];
-  sources: Record<string, maplibregl.SourceSpecification>;
-}): ArcGISRuntimeLayer {
-  return {
-    get bounds() {
-      return args.bounds;
-    },
-    get layers() {
-      return args.layers;
-    },
-    get sources() {
-      return args.sources;
-    },
-    setSourceId(oldId: string, newId: string) {
-      args.sources[newId] = args.sources[oldId];
-      delete args.sources[oldId];
-      for (const layer of args.layers) {
-        if ("source" in layer && layer.source === oldId) {
-          layer.source = newId;
-        }
-      }
-    },
-    addSourcesAndLayersTo(map: maplibregl.Map) {
-      for (const [sourceId, source] of Object.entries(args.sources)) {
-        map.addSource(sourceId, source);
-      }
-      for (const layer of args.layers) {
-        map.addLayer(layer);
-      }
-      return this;
-    },
-  };
-}
-
 async function resolveArcGISLayerBounds(
   input: string,
   options: ArcGISLayerOptions,
@@ -406,11 +408,7 @@ async function resolveArcGISServiceBounds(
   url: string,
   options: ArcGISLayerOptions,
 ): Promise<[number, number, number, number] | undefined> {
-  const serviceInfo = await fetchArcGISJson<ArcGISServiceInfo>(
-    url,
-    options,
-    undefined,
-  );
+  const serviceInfo = await fetchArcGISJson<ArcGISServiceInfo>(url, options, undefined);
   return arcgisExtentToBounds(
     serviceInfo.fullExtent ?? serviceInfo.initialExtent ?? serviceInfo.extent,
   );
@@ -431,9 +429,7 @@ function arcgisPortalItemExtentToBounds(
 ): [number, number, number, number] | undefined {
   if (!Array.isArray(extent) || extent.length !== 2) return undefined;
   const [[west, south], [east, north]] = extent;
-  return isGeoBounds([west, south, east, north])
-    ? [west, south, east, north]
-    : undefined;
+  return isGeoBounds([west, south, east, north]) ? [west, south, east, north] : undefined;
 }
 
 function arcgisExtentToBounds(
@@ -465,10 +461,7 @@ function mercatorXToLongitude(x: number): number {
 
 function mercatorYToLatitude(y: number): number {
   const latitude = (y / 20037508.34) * 180;
-  return (
-    (180 / Math.PI) *
-    (2 * Math.atan(Math.exp((latitude * Math.PI) / 180)) - Math.PI / 2)
-  );
+  return (180 / Math.PI) * (2 * Math.atan(Math.exp((latitude * Math.PI) / 180)) - Math.PI / 2);
 }
 
 function isGeoBounds(value: unknown): value is [number, number, number, number] {
@@ -485,43 +478,7 @@ function isGeoBounds(value: unknown): value is [number, number, number, number] 
   );
 }
 
-function arcgisGeometryLayerType(
-  geometryType: string,
-): "circle" | "fill" | "line" {
-  if (geometryType === "esriGeometryPoint") return "circle";
-  if (geometryType === "esriGeometryMultipoint") return "circle";
-  if (geometryType === "esriGeometryPolyline") return "line";
-  return "fill";
-}
-
-function arcgisFallbackPaint(
-  layerType: "circle" | "fill" | "line",
-): maplibregl.LayerSpecification["paint"] {
-  if (layerType === "circle") {
-    return {
-      "circle-color": DEFAULT_LAYER_STYLE.fillColor,
-      "circle-radius": DEFAULT_LAYER_STYLE.circleRadius,
-      "circle-stroke-color": DEFAULT_LAYER_STYLE.strokeColor,
-      "circle-stroke-width": DEFAULT_LAYER_STYLE.strokeWidth,
-    };
-  }
-  if (layerType === "line") {
-    return {
-      "line-color": DEFAULT_LAYER_STYLE.strokeColor,
-      "line-width": DEFAULT_LAYER_STYLE.strokeWidth,
-    };
-  }
-  return {
-    "fill-color": DEFAULT_LAYER_STYLE.fillColor,
-    "fill-opacity": DEFAULT_LAYER_STYLE.fillOpacity,
-    "fill-outline-color": DEFAULT_LAYER_STYLE.strokeColor,
-  };
-}
-
-function appendArcGISParams(
-  url: string,
-  params: Record<string, string | undefined>,
-): string {
+function appendArcGISParams(url: string, params: Record<string, string | undefined>): string {
   const parsedUrl = new URL(url);
   for (const [key, value] of Object.entries(params)) {
     if (value) parsedUrl.searchParams.set(key, value);
@@ -588,11 +545,8 @@ function layerNameFromArcGISInput(input: string, fallback: string): string {
   try {
     const url = new URL(input);
     const parts = url.pathname.split("/").filter(Boolean);
-    const serverIndex = parts.findIndex((part) =>
-      /^(FeatureServer|VectorTileServer)$/i.test(part),
-    );
-    const namePart =
-      serverIndex > 0 ? parts[serverIndex - 1] : parts[parts.length - 1];
+    const serverIndex = parts.findIndex((part) => /^(FeatureServer|VectorTileServer)$/i.test(part));
+    const namePart = serverIndex > 0 ? parts[serverIndex - 1] : parts[parts.length - 1];
     return decodeURIComponent(namePart ?? "").replaceAll("_", " ") || fallback;
   } catch {
     return input || fallback;
