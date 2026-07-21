@@ -3,7 +3,34 @@ const PANEL_ID = "distribution-network-assets";
 const MENU_ID = "distribution-network-menu";
 const CONDUCTOR_HEIGHT_METERS = 8.2;
 const CONDUCTOR_OFFSETS_METERS = [-1.5, 1.5];
+export const PICKING_RADIUS_PIXELS = 8;
+export const CONDUCTOR_HIT_WIDTH_PIXELS = 18;
 export const TREE_DEFAULT_SCALE = 0.5;
+export const BUNDLED_POLE_MODEL_PATH = "assets/13.8kv_power_pole.glb";
+export const BUNDLED_POLE_GEOJSON_PATH = "assets/testpowerlines.geojson";
+export const BUNDLED_TREE_MODEL_PATH =
+  "assets/low_poly_forest_tree_assets/tree_01.glb";
+export const BUNDLED_TREE_GEOJSON_PATH = "assets/testtrees.geojson";
+export const BOULDER_TREE_SERVICE_URL =
+  "https://gis.bouldercolorado.gov/ags_svr2/rest/services/parks/TreesOpenData/MapServer/0/query";
+export const BOULDER_TREE_PAGE_SIZE = 2000;
+export const BOULDER_TREE_MAX_FEATURES = 10_000;
+
+const BOULDER_TREE_FIELDS = [
+  "OBJECTID",
+  "FACILITYID",
+  "COMMONNAME",
+  "LATINNAME",
+  "GENUS",
+  "LEAFCYCLE",
+  "LEAFTYPE",
+  "DBHINT",
+  "LOCTYPE",
+  "OWNEDBY",
+  "MAINTBY",
+  "CONFIDENCE",
+];
+const BOULDER_TREE_SOURCE_NAME = "City of Boulder public tree inventory";
 
 let overlay = null;
 let deck = null;
@@ -13,8 +40,7 @@ let unregisterPanel = null;
 let unregisterMenu = null;
 let nextDatasetId = 1;
 let datasets = [];
-let selectedFeature = null;
-let selectionBody = null;
+let assetPopup = null;
 const objectUrls = new Set();
 
 function validCoordinate(coordinate) {
@@ -65,17 +91,145 @@ function collectGeometryCoordinates(geometry, coordinates) {
 }
 
 export function placementCoordinates(geojson) {
-  const coordinates = [];
+  return treePlacements(geojson).map((placement) => placement.position);
+}
+
+export function treePlacements(geojson) {
+  const placements = [];
   const features = geojson?.type === "FeatureCollection" ? geojson.features : [];
-  for (const feature of features) collectGeometryCoordinates(feature?.geometry, coordinates);
+  for (const feature of features) {
+    const coordinates = [];
+    collectGeometryCoordinates(feature?.geometry, coordinates);
+    for (const position of coordinates) {
+      placements.push({
+        featureId: feature?.id ?? null,
+        position,
+        properties:
+          feature?.properties && typeof feature.properties === "object"
+            ? { ...feature.properties }
+            : {},
+      });
+    }
+  }
 
   const seen = new Set();
-  return coordinates.filter((coordinate) => {
-    const key = coordinate.join(",");
+  return placements.filter((placement) => {
+    const key = placement.position.join(",");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function normalizedBounds(bounds) {
+  if (!Array.isArray(bounds) || bounds.length !== 4) {
+    throw new Error("A west, south, east, north map extent is required.");
+  }
+  const values = bounds.map(Number);
+  const [west, south, east, north] = values;
+  if (
+    values.some((value) => !Number.isFinite(value)) ||
+    west < -180 ||
+    east > 180 ||
+    south < -90 ||
+    north > 90 ||
+    west >= east ||
+    south >= north
+  ) {
+    throw new Error("The map extent is not a valid WGS84 bounding box.");
+  }
+  return values;
+}
+
+export function buildBoulderTreeQueryUrl(
+  bounds,
+  resultOffset = 0,
+  resultRecordCount = BOULDER_TREE_PAGE_SIZE,
+) {
+  const queryBounds = normalizedBounds(bounds);
+  const parameters = new URLSearchParams({
+    where: "1=1",
+    geometry: queryBounds.join(","),
+    geometryType: "esriGeometryEnvelope",
+    inSR: "4326",
+    spatialRel: "esriSpatialRelIntersects",
+    outFields: BOULDER_TREE_FIELDS.join(","),
+    returnGeometry: "true",
+    outSR: "4326",
+    orderByFields: "OBJECTID ASC",
+    resultOffset: String(Math.max(0, Math.floor(Number(resultOffset) || 0))),
+    resultRecordCount: String(
+      Math.max(1, Math.min(BOULDER_TREE_PAGE_SIZE, Math.floor(Number(resultRecordCount) || 1))),
+    ),
+    f: "geojson",
+  });
+  return `${BOULDER_TREE_SERVICE_URL}?${parameters}`;
+}
+
+export async function fetchBoulderTreeGeoJson(
+  bounds,
+  fetchImpl = globalThis.fetch,
+  options = {},
+) {
+  if (typeof fetchImpl !== "function") {
+    throw new Error("This environment cannot request the Boulder tree inventory.");
+  }
+  const queryBounds = normalizedBounds(bounds);
+  const pageSize = Math.max(
+    1,
+    Math.min(BOULDER_TREE_PAGE_SIZE, Math.floor(Number(options.pageSize) || BOULDER_TREE_PAGE_SIZE)),
+  );
+  const maxFeatures = Math.max(
+    1,
+    Math.floor(Number(options.maxFeatures) || BOULDER_TREE_MAX_FEATURES),
+  );
+  const features = [];
+  let resultOffset = 0;
+  let truncated = false;
+
+  while (features.length < maxFeatures) {
+    const remaining = maxFeatures - features.length;
+    const recordCount = Math.min(pageSize, remaining);
+    const response = await fetchImpl(
+      buildBoulderTreeQueryUrl(queryBounds, resultOffset, recordCount),
+    );
+    if (!response?.ok) {
+      throw new Error(
+        `Could not load the Boulder tree inventory (HTTP ${response?.status ?? "unknown"}).`,
+      );
+    }
+    const page = await response.json();
+    if (page?.error) {
+      throw new Error(page.error.message || "The Boulder tree service rejected the query.");
+    }
+    if (page?.type !== "FeatureCollection" || !Array.isArray(page.features)) {
+      throw new Error("The Boulder tree service returned an unexpected response.");
+    }
+
+    features.push(...page.features.slice(0, remaining));
+    const exceededTransferLimit = Boolean(
+      page.exceededTransferLimit || page.properties?.exceededTransferLimit,
+    );
+    if (page.features.length === 0) break;
+    resultOffset += page.features.length;
+    if (!exceededTransferLimit && page.features.length < recordCount) break;
+    if (features.length >= maxFeatures) {
+      truncated = exceededTransferLimit || page.features.length >= recordCount;
+      break;
+    }
+  }
+
+  return {
+    type: "FeatureCollection",
+    features,
+    metadata: {
+      source: BOULDER_TREE_SOURCE_NAME,
+      serviceUrl: BOULDER_TREE_SERVICE_URL,
+      license: "CC0 1.0",
+      queryBounds,
+      truncated,
+    },
+  };
 }
 
 function offsetPath(coordinates, offsetMeters, height) {
@@ -161,7 +315,22 @@ export function pickedFeatureDetails(object) {
   if (object?.kind === "tree") {
     return {
       title: "Tree",
-      rows: [{ label: "Tree ID", value: object.id }],
+      rows: [
+        { label: "Tree ID", value: object.id },
+        ...(object.commonName ? [{ label: "Species", value: object.commonName }] : []),
+        ...(object.latinName
+          ? [{ label: "Scientific name", value: object.latinName }]
+          : []),
+        ...(Number.isFinite(object.dbhInches)
+          ? [{ label: "DBH", value: `${object.dbhInches} in` }]
+          : []),
+        ...(Number.isFinite(object.heightMeters)
+          ? [{ label: "Height", value: `${object.heightMeters} m` }]
+          : []),
+        ...(object.locationType ? [{ label: "Location", value: object.locationType }] : []),
+        ...(object.sourceName ? [{ label: "Source", value: object.sourceName }] : []),
+        ...(object.modelName ? [{ label: "Model", value: object.modelName }] : []),
+      ],
     };
   }
   return null;
@@ -234,36 +403,130 @@ function assetUrl(app, relativePath) {
   );
 }
 
-function renderSelectedFeature() {
-  if (!selectionBody) return;
-  selectionBody.replaceChildren();
-  if (!selectedFeature) {
-    const hint = document.createElement("p");
-    hint.textContent = "Click a pole or line on the map to inspect it.";
-    selectionBody.append(hint);
-    return;
+function popupCoordinate(object, pickedCoordinate) {
+  const coordinate = validCoordinate(object?.position) ?? validCoordinate(pickedCoordinate);
+  if (coordinate) return coordinate;
+  if (object?.path?.length) {
+    return validCoordinate(object.path[Math.floor(object.path.length / 2)]);
   }
+  return null;
+}
 
-  const heading = document.createElement("h3");
-  heading.textContent = selectedFeature.title;
-  const details = document.createElement("dl");
-  for (const row of selectedFeature.rows) {
+function featureAsGeoJson(object) {
+  const geometry = object?.path
+    ? { type: "LineString", coordinates: object.path.map((coordinate) => coordinate.slice(0, 2)) }
+    : { type: "Point", coordinates: object.position.slice(0, 2) };
+  return {
+    type: "Feature",
+    properties: {
+      ...(object.properties ?? {}),
+      id: object.id,
+      assetType: object.kind,
+      ...(object.sourceName ? { source: object.sourceName } : {}),
+      ...(Number.isFinite(object.bearing) ? { bearing: object.bearing } : {}),
+      ...(Number.isFinite(object.lengthMeters) ? { lengthMeters: object.lengthMeters } : {}),
+    },
+    geometry,
+  };
+}
+
+function createPopupAction(iconText, label, onSelect) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "distribution-network-popup-action";
+  const icon = document.createElement("span");
+  icon.className = "distribution-network-popup-action-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = iconText;
+  const text = document.createElement("span");
+  text.textContent = label;
+  button.append(icon, text);
+  button.addEventListener("click", onSelect);
+  return button;
+}
+
+function showAssetPopup(object, coordinate) {
+  const details = pickedFeatureDetails(object);
+  const map = currentApp?.getMap?.();
+  if (!details || !map || !coordinate) return false;
+  assetPopup?.();
+  assetPopup = null;
+
+  const element = document.createElement("section");
+  element.className = "distribution-network-popup-content";
+
+  const coordinateBar = document.createElement("div");
+  coordinateBar.className = "distribution-network-popup-coordinate";
+  const pin = document.createElement("span");
+  pin.setAttribute("aria-hidden", "true");
+  pin.textContent = "⌖";
+  const coordinateText = document.createElement("code");
+  coordinateText.textContent = `${coordinate[1].toFixed(6)}, ${coordinate[0].toFixed(6)}`;
+  coordinateBar.append(pin, coordinateText);
+
+  const info = document.createElement("div");
+  info.className = "distribution-network-popup-info";
+  const title = document.createElement("h3");
+  title.textContent = details.title;
+  const rows = document.createElement("dl");
+  for (const row of details.rows) {
     const term = document.createElement("dt");
     term.textContent = row.label;
     const value = document.createElement("dd");
     value.textContent = row.value;
-    details.append(term, value);
+    rows.append(term, value);
   }
-  selectionBody.append(heading, details);
+  info.append(title, rows);
+
+  const quickActions = document.createElement("div");
+  quickActions.className = "distribution-network-popup-actions";
+  const actionsLabel = document.createElement("p");
+  actionsLabel.textContent = "Quick actions";
+  quickActions.append(
+    actionsLabel,
+    createPopupAction("▤", "Open asset loader", () => currentApp?.openRightPanel?.(PANEL_ID)),
+    createPopupAction("{}", "Copy as GeoJSON", (event) => {
+      const button = event.currentTarget;
+      const writeText = navigator.clipboard?.writeText?.bind(navigator.clipboard);
+      if (!writeText) {
+        button.lastElementChild.textContent = "Clipboard unavailable";
+        return;
+      }
+      void writeText(JSON.stringify(featureAsGeoJson(object), null, 2))
+        .then(() => {
+          button.lastElementChild.textContent = "Copied GeoJSON";
+        })
+        .catch(() => {
+          button.lastElementChild.textContent = "Could not copy";
+        });
+    }),
+    createPopupAction("◎", "Center map here", () => {
+      map.easeTo({ center: coordinate, duration: 350 });
+    }),
+    createPopupAction("＋", "Zoom to asset", () => {
+      map.easeTo({ center: coordinate, zoom: Math.max(map.getZoom(), 18), duration: 450 });
+    }),
+  );
+
+  element.append(coordinateBar, info, quickActions);
+  assetPopup =
+    currentApp?.openMapPopup?.({
+      coordinates: coordinate,
+      content: element,
+      className: "distribution-network-asset-popup",
+      closeOnClick: false,
+      maxWidth: "300px",
+    }) ?? null;
+  if (!assetPopup) {
+    currentApp?.openRightPanel?.(PANEL_ID);
+  }
+  return true;
 }
 
-function selectFeature(object) {
+function selectFeature(object, pickedCoordinate) {
   const details = pickedFeatureDetails(object);
   if (!details) return false;
-  selectedFeature = details;
-  currentApp?.openRightPanel?.(PANEL_ID);
-  renderSelectedFeature();
-  return true;
+  return showAssetPopup(object, popupCoordinate(object, pickedCoordinate));
 }
 
 function modelLayer(dataset) {
@@ -279,7 +542,7 @@ function modelLayer(dataset) {
     pickable: true,
     autoHighlight: true,
     highlightColor: [37, 99, 235, 180],
-    onClick: ({ object }) => selectFeature(object),
+    onClick: ({ object, coordinate }) => selectFeature(object, coordinate),
   });
 }
 
@@ -289,6 +552,16 @@ function renderLayers() {
   for (const dataset of datasets) {
     if (dataset.conductors?.length) {
       layers.push(
+        new deck.layers.PathLayer({
+          id: `${PLUGIN_ID}-${dataset.id}-conductor-hit-targets`,
+          data: dataset.conductors,
+          getPath: (conductor) => conductor.path,
+          getColor: [0, 0, 0, 0],
+          getWidth: CONDUCTOR_HIT_WIDTH_PIXELS,
+          widthUnits: "pixels",
+          pickable: true,
+          onClick: ({ object, coordinate }) => selectFeature(object, coordinate),
+        }),
         new deck.layers.PathLayer({
           id: `${PLUGIN_ID}-${dataset.id}-conductors`,
           data: dataset.conductors,
@@ -302,7 +575,7 @@ function renderLayers() {
           pickable: true,
           autoHighlight: true,
           highlightColor: [37, 99, 235, 180],
-          onClick: ({ object }) => selectFeature(object),
+          onClick: ({ object, coordinate }) => selectFeature(object, coordinate),
         }),
       );
     }
@@ -337,6 +610,31 @@ async function readGeoJson(file) {
   return parsed;
 }
 
+async function bundledAssetFile(relativePath) {
+  const response = await fetch(assetUrl(currentApp, relativePath));
+  if (!response.ok) {
+    throw new Error(`Could not load bundled asset ${relativePath} (HTTP ${response.status}).`);
+  }
+  const blob = await response.blob();
+  const name = decodeURIComponent(relativePath.split("/").pop() ?? "asset");
+  return new File([blob], name, { type: blob.type });
+}
+
+function currentMapBounds() {
+  const bounds = currentApp?.getMap?.()?.getBounds?.();
+  if (!bounds) throw new Error("The current map extent is unavailable.");
+  return normalizedBounds([
+    bounds.getWest(),
+    bounds.getSouth(),
+    bounds.getEast(),
+    bounds.getNorth(),
+  ]);
+}
+
+function geoJsonFile(data, name) {
+  return new File([JSON.stringify(data)], name, { type: "application/geo+json" });
+}
+
 async function addPoleDataset(modelFile, geojsonFile, sizeScale) {
   const geojson = await readGeoJson(geojsonFile);
   const network = buildNetwork(geojson, CONDUCTOR_HEIGHT_METERS, Infinity);
@@ -356,23 +654,68 @@ async function addPoleDataset(modelFile, geojsonFile, sizeScale) {
 
 async function addTreeDataset(modelFile, geojsonFile, sizeScale) {
   const geojson = await readGeoJson(geojsonFile);
-  const coordinates = placementCoordinates(geojson);
-  if (coordinates.length === 0) throw new Error("The tree GeoJSON has no valid coordinates.");
+  const placements = treePlacements(geojson);
+  if (placements.length === 0) {
+    const sourceName = geojson.metadata?.source;
+    throw new Error(
+      sourceName
+        ? `No trees from ${sourceName} were found in the current map view.`
+        : "The tree GeoJSON has no valid coordinates.",
+    );
+  }
   const modelUrl = rememberObjectUrl(modelFile);
-  datasets.push({
+  const sourceName = geojson.metadata?.source ?? null;
+  const treeDataset = {
     id: `trees-${nextDatasetId++}`,
     kind: "trees",
     modelUrl,
-    points: coordinates.map(([longitude, latitude], index) => ({
-      id: `tree-${index + 1}`,
-      kind: "tree",
-      position: [longitude, latitude, 0],
-    })),
+    points: placements.map(({ featureId, position, properties }, index) => {
+      const [longitude, latitude] = position;
+      const dbhInches = Number(properties.DBHINT ?? properties.dbh_in ?? properties.dbh);
+      const heightMeters = Number(properties.height_m ?? properties.height);
+      return {
+        id:
+          properties.FACILITYID ??
+          properties.tree_id ??
+          properties.id ??
+          featureId ??
+          `tree-${index + 1}`,
+        kind: "tree",
+        modelName: modelFile.name,
+        sourceName: sourceName ?? properties.source ?? null,
+        commonName: properties.COMMONNAME ?? properties.common_name ?? properties.species ?? null,
+        latinName: properties.LATINNAME ?? properties.latin_name ?? null,
+        dbhInches: Number.isFinite(dbhInches) ? dbhInches : null,
+        heightMeters: Number.isFinite(heightMeters) ? heightMeters : null,
+        locationType: properties.LOCTYPE ?? properties.location_type ?? null,
+        properties,
+        position: [longitude, latitude, 0],
+      };
+    }),
     sizeScale,
-  });
+  };
+  const replacedTreeUrls = datasets
+    .filter((dataset) => dataset.kind === "trees" && !dataset.bundled)
+    .map((dataset) => dataset.modelUrl);
+  datasets = replaceImportedTreeDatasets(datasets, treeDataset);
+  for (const url of replacedTreeUrls) {
+    if (objectUrls.delete(url)) URL.revokeObjectURL(url);
+  }
   renderLayers();
-  fitDataset(boundsForCoordinates(coordinates));
-  return `Added ${coordinates.length} trees.`;
+  fitDataset(boundsForCoordinates(placements.map((placement) => placement.position)));
+  const truncatedMessage = geojson.metadata?.truncated
+    ? ` Showing the first ${placements.length.toLocaleString()} trees for performance.`
+    : "";
+  return sourceName
+    ? `Loaded ${placements.length.toLocaleString()} trees from ${sourceName} using ${modelFile.name}.${truncatedMessage}`
+    : `Loaded ${placements.length.toLocaleString()} trees using ${modelFile.name}.`;
+}
+
+export function replaceImportedTreeDatasets(currentDatasets, replacement) {
+  return [
+    ...currentDatasets.filter((dataset) => dataset.kind !== "trees" || dataset.bundled),
+    replacement,
+  ];
 }
 
 function clearImportedDatasets() {
@@ -384,22 +727,76 @@ function clearImportedDatasets() {
   renderLayers();
 }
 
-function createFileField(labelText, accept) {
+function createFileField(labelText, accept, fileType, defaultPath) {
   const label = document.createElement("label");
   label.className = "distribution-network-field";
   const text = document.createElement("span");
+  text.className = "distribution-network-field-label";
   text.textContent = labelText;
+
+  const picker = document.createElement("span");
+  picker.className = "distribution-network-file-picker";
   const input = document.createElement("input");
   input.type = "file";
   input.accept = accept;
-  label.append(text, input);
+  input.setAttribute("aria-label", labelText);
+
+  const icon = document.createElement("span");
+  icon.className = "distribution-network-file-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "↑";
+  const details = document.createElement("span");
+  details.className = "distribution-network-file-details";
+  const filename = document.createElement("span");
+  filename.className = "distribution-network-file-name";
+  const defaultFileName = defaultPath ? defaultPath.split("/").pop() : null;
+  filename.textContent = defaultFileName ?? "No file selected";
+  const hint = document.createElement("span");
+  hint.className = "distribution-network-file-hint";
+  hint.textContent = defaultFileName ? `Bundled default · ${fileType}` : fileType;
+  details.append(filename, hint);
+  const browse = document.createElement("span");
+  browse.className = "distribution-network-file-action";
+  browse.textContent = "Browse";
+
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    filename.textContent = file?.name ?? defaultFileName ?? "No file selected";
+    picker.dataset.selected = file || defaultFileName ? "true" : "false";
+  });
+
+  picker.dataset.selected = defaultFileName ? "true" : "false";
+
+  picker.append(input, icon, details, browse);
+  label.append(text, picker);
   return { label, input };
+}
+
+function createSelectField(labelText, choices, defaultValue) {
+  const label = document.createElement("label");
+  label.className = "distribution-network-field";
+  const text = document.createElement("span");
+  text.className = "distribution-network-field-label";
+  text.textContent = labelText;
+  const select = document.createElement("select");
+  select.className = "distribution-network-select";
+  select.setAttribute("aria-label", labelText);
+  for (const choice of choices) {
+    const option = document.createElement("option");
+    option.value = choice.value;
+    option.textContent = choice.label;
+    select.append(option);
+  }
+  select.value = defaultValue;
+  label.append(text, select);
+  return { label, input: select };
 }
 
 function createScaleField(defaultValue) {
   const label = document.createElement("label");
   label.className = "distribution-network-field distribution-network-scale";
   const text = document.createElement("span");
+  text.className = "distribution-network-field-label";
   text.textContent = "Model scale";
   const input = document.createElement("input");
   input.type = "number";
@@ -413,21 +810,76 @@ function createScaleField(defaultValue) {
 function createImporterSection(options, status) {
   const section = document.createElement("section");
   section.className = "distribution-network-section";
+  const headingGroup = document.createElement("div");
+  headingGroup.className = "distribution-network-section-heading";
+  const kicker = document.createElement("span");
+  kicker.className = "distribution-network-kicker";
+  kicker.textContent = options.kicker;
   const heading = document.createElement("h3");
   heading.textContent = options.title;
+  headingGroup.append(kicker, heading);
   const description = document.createElement("p");
   description.textContent = options.description;
-  const model = createFileField(`${options.modelLabel} (.glb)`, ".glb,model/gltf-binary");
-  const geojson = createFileField(`${options.geojsonLabel} (.geojson)`, ".geojson,.json,application/geo+json,application/json");
+  const model = createFileField(
+    options.modelLabel,
+    ".glb,model/gltf-binary",
+    "GLB model · max size depends on your browser",
+    options.defaultModelPath,
+  );
+  const geojson = createFileField(
+    options.geojsonLabel,
+    ".geojson,.json,application/geo+json,application/json",
+    "GeoJSON or JSON FeatureCollection",
+    options.defaultGeojsonPath,
+  );
+  const locationSource = options.locationSources
+    ? createSelectField(
+        options.locationSourceLabel ?? "Location source",
+        options.locationSources,
+        options.defaultLocationSource ?? options.locationSources[0].value,
+      )
+    : null;
   const scale = createScaleField(options.defaultScale ?? 1);
   const button = document.createElement("button");
   button.type = "button";
   button.className = "distribution-network-primary";
   button.textContent = options.buttonLabel;
+  const selectedLocationSource = () => locationSource?.input.value ?? "default";
+  const updateLocationSource = () => {
+    if (locationSource) {
+      geojson.label.hidden = selectedLocationSource() !== "file";
+    }
+  };
+  const updateReadyState = () => {
+    const hasModel = Boolean(model.input.files?.[0] || options.defaultModelPath);
+    const source = selectedLocationSource();
+    const hasGeojson =
+      source === "boulder" ||
+      (source === "file"
+        ? Boolean(geojson.input.files?.[0])
+        : Boolean(geojson.input.files?.[0] || options.defaultGeojsonPath));
+    button.disabled = !(hasModel && hasGeojson);
+  };
+  model.input.addEventListener("change", updateReadyState);
+  geojson.input.addEventListener("change", () => {
+    if (locationSource && geojson.input.files?.[0]) locationSource.input.value = "file";
+    updateLocationSource();
+    updateReadyState();
+  });
+  locationSource?.input.addEventListener("change", () => {
+    updateLocationSource();
+    updateReadyState();
+  });
+  updateLocationSource();
+  updateReadyState();
   button.addEventListener("click", () => {
-    const modelFile = model.input.files?.[0];
-    const geojsonFile = geojson.input.files?.[0];
-    if (!modelFile || !geojsonFile) {
+    const selectedModelFile = model.input.files?.[0];
+    const selectedGeojsonFile = geojson.input.files?.[0];
+    const source = selectedLocationSource();
+    if ((!selectedModelFile && !options.defaultModelPath) ||
+        (source === "file" && !selectedGeojsonFile) ||
+        (source !== "file" && source !== "boulder" &&
+          !selectedGeojsonFile && !options.defaultGeojsonPath)) {
       status.textContent = "Choose both a GLB model and a GeoJSON file first.";
       status.dataset.state = "error";
       return;
@@ -441,8 +893,21 @@ function createImporterSection(options, status) {
     button.disabled = true;
     status.textContent = "Loading assets…";
     status.dataset.state = "loading";
-    void options
-      .add(modelFile, geojsonFile, sizeScale)
+    const modelFilePromise = selectedModelFile
+      ? Promise.resolve(selectedModelFile)
+      : bundledAssetFile(options.defaultModelPath);
+    let geojsonFilePromise;
+    if (source === "boulder") {
+      geojsonFilePromise = fetchBoulderTreeGeoJson(currentMapBounds()).then((geojsonData) =>
+        geoJsonFile(geojsonData, "boulder-public-trees.geojson"),
+      );
+    } else if (source === "file" || selectedGeojsonFile) {
+      geojsonFilePromise = Promise.resolve(selectedGeojsonFile);
+    } else {
+      geojsonFilePromise = bundledAssetFile(options.defaultGeojsonPath);
+    }
+    void Promise.all([modelFilePromise, geojsonFilePromise])
+      .then(([modelFile, geojsonFile]) => options.add(modelFile, geojsonFile, sizeScale))
       .then((message) => {
         status.textContent = message;
         status.dataset.state = "success";
@@ -452,10 +917,12 @@ function createImporterSection(options, status) {
         status.dataset.state = "error";
       })
       .finally(() => {
-        button.disabled = false;
+        updateReadyState();
       });
   });
-  section.append(heading, description, model.label, geojson.label, scale.label, button);
+  section.append(headingGroup, description);
+  if (locationSource) section.append(locationSource.label);
+  section.append(model.label, geojson.label, scale.label, button);
   return section;
 }
 
@@ -466,21 +933,21 @@ function renderAssetPanel(container) {
   intro.textContent = "Choose a model and placement data, then add it to the live map.";
   const status = document.createElement("p");
   status.className = "distribution-network-status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  status.dataset.state = "success";
   status.textContent = "The bundled three-pole demo is loaded.";
-
-  const selection = document.createElement("section");
-  selection.className = "distribution-network-selection";
-  selection.setAttribute("aria-live", "polite");
-  selectionBody = selection;
-  renderSelectedFeature();
 
   const poles = createImporterSection(
     {
       title: "Distribution poles",
+      kicker: "Network assets",
       description: "Line vertices place aligned poles; one conductor follows each side.",
-      modelLabel: "Pole model",
-      geojsonLabel: "Pole line / positions",
+      modelLabel: "Pole model (GLB)",
+      geojsonLabel: "Pole line or positions (GeoJSON)",
       buttonLabel: "Add poles and lines",
+      defaultModelPath: BUNDLED_POLE_MODEL_PATH,
+      defaultGeojsonPath: BUNDLED_POLE_GEOJSON_PATH,
       add: addPoleDataset,
     },
     status,
@@ -488,11 +955,22 @@ function renderAssetPanel(container) {
   const trees = createImporterSection(
     {
       title: "Trees",
-      description: "Each unique GeoJSON coordinate receives one tree model.",
-      modelLabel: "Tree model",
-      geojsonLabel: "Tree locations",
+      kicker: "Vegetation",
+      description:
+        "Use bundled trees, upload GeoJSON, or query the live City of Boulder inventory in the current map view.",
+      locationSourceLabel: "Tree location source",
+      locationSources: [
+        { value: "bundled", label: "Bundled synthetic trees" },
+        { value: "boulder", label: "Boulder public trees · current view" },
+        { value: "file", label: "Upload a GeoJSON file" },
+      ],
+      defaultLocationSource: "bundled",
+      modelLabel: "Tree model (GLB)",
+      geojsonLabel: "Tree locations (GeoJSON)",
       buttonLabel: "Add trees",
       defaultScale: TREE_DEFAULT_SCALE,
+      defaultModelPath: BUNDLED_TREE_MODEL_PATH,
+      defaultGeojsonPath: BUNDLED_TREE_GEOJSON_PATH,
       add: addTreeDataset,
     },
     status,
@@ -507,18 +985,15 @@ function renderAssetPanel(container) {
     status.dataset.state = "success";
   });
 
-  container.append(intro, selection, poles, trees, clear, status);
-  return () => {
-    if (selectionBody === selection) selectionBody = null;
-    container.replaceChildren();
-  };
+  container.append(intro, poles, trees, clear, status);
+  return () => container.replaceChildren();
 }
 
 function registerAssetUi(app) {
   unregisterPanel = app.registerRightPanel?.({
     id: PANEL_ID,
     title: "Distribution Assets",
-    defaultWidth: 340,
+    defaultWidth: 380,
     render: renderAssetPanel,
   });
   unregisterMenu = app.registerToolbarMenu?.({
@@ -527,12 +1002,12 @@ function registerAssetUi(app) {
     items: [
       {
         id: "open-assets",
-        label: "Open asset loader",
+        label: "Open Distribution Assets…",
         onSelect: () => app.openRightPanel?.(PANEL_ID),
       },
       {
         id: "clear-assets",
-        label: "Clear imported assets",
+        label: "Remove imported assets",
         onSelect: clearImportedDatasets,
       },
     ],
@@ -543,7 +1018,7 @@ function registerAssetUi(app) {
 const plugin = {
   id: PLUGIN_ID,
   name: "Distribution Network Demo",
-  version: "0.4.0",
+  version: "0.6.0",
 
   async activate(app) {
     if (!app.getDeckGL) {
@@ -551,8 +1026,8 @@ const plugin = {
       return false;
     }
 
-    const geojsonUrl = assetUrl(app, "assets/testpowerlines.geojson");
-    const modelUrl = assetUrl(app, "assets/13.8kv_power_pole.glb");
+    const geojsonUrl = assetUrl(app, BUNDLED_POLE_GEOJSON_PATH);
+    const modelUrl = assetUrl(app, BUNDLED_POLE_MODEL_PATH);
     const response = await fetch(geojsonUrl);
     if (!response.ok) {
       throw new Error(`Could not load the bundled power-line GeoJSON (HTTP ${response.status}).`);
@@ -562,8 +1037,8 @@ const plugin = {
     deck = await app.getDeckGL();
     overlay = new deck.mapbox.MapboxOverlay({
       interleaved: true,
+      pickingRadius: PICKING_RADIUS_PIXELS,
       layers: [],
-      onClick: ({ object }) => selectFeature(object),
     });
     currentApp = app;
     previousProjection = app.getMapProjection?.() ?? null;
@@ -595,6 +1070,8 @@ const plugin = {
   },
 
   deactivate(app) {
+    assetPopup?.();
+    assetPopup = null;
     app.closeRightPanel?.(PANEL_ID);
     unregisterPanel?.();
     unregisterMenu?.();
@@ -605,8 +1082,6 @@ const plugin = {
     deck = null;
     currentApp = null;
     datasets = [];
-    selectedFeature = null;
-    selectionBody = null;
     for (const url of objectUrls) URL.revokeObjectURL(url);
     objectUrls.clear();
     if (previousProjection) app.setMapProjection?.(previousProjection);

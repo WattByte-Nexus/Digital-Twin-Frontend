@@ -1,0 +1,9 @@
+Low Poly Forest Tree Pack
+Creator: 99.Miles
+Source: https://sketchfab.com/3d-models/low-poly-forest-tree-pack-5ff5a51e74324845a4e4905f182dfb2b
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+License URL: https://creativecommons.org/licenses/by/4.0/
+
+The individual tree GLB files in this directory were split and recentered from
+the original pack for use in GeoLibre. No material or texture substitutions
+were made.

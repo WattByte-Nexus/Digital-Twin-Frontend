@@ -27,9 +27,13 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { Puzzle } from "lucide-react";
+import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import type { usePluginRegistry } from "../../../hooks/usePlugins";
+import { useToolbarMenus } from "../../../hooks/usePluginUiSurfaces";
+import { isExternalPluginId } from "../../../lib/external-plugins";
 import { type AppApi, PLUGIN_POSITION_ITEMS, type ToolbarChrome } from "./constants";
+import { renderPluginToolbarMenuItems } from "./PluginToolbarMenus";
 
 type PluginRegistry = ReturnType<typeof usePluginRegistry>;
 type RegisteredPlugin = PluginRegistry["plugins"][number];
@@ -61,14 +65,18 @@ export function PluginsMenu({
   hiddenPluginIds,
 }: PluginsMenuProps) {
   const { t } = useTranslation();
+  const { entries: toolbarMenuEntries } = useToolbarMenus();
 
   const renderPluginMenuItem = (p: RegisteredPlugin) => {
     const pluginPosition = getMapControlPosition(p.id);
+    const contributedMenus = toolbarMenuEntries.filter(
+      (entry) => entry.ownerPluginId === p.id && isExternalPluginId(p.id),
+    );
     // Translate the plugin's display name when a locale string exists for its id,
     // falling back to the registered (English) name — brand/proper-noun plugins
     // (Mapillary, NASA Earthdata, …) simply have no key and stay as-is.
     const pluginName = t(`toolbar.plugin.${p.id}`, { defaultValue: p.name });
-    if (!pluginPosition) {
+    if (!pluginPosition && contributedMenus.length === 0) {
       return (
         <DropdownMenuItem key={p.id} onClick={() => toggle(p.id, appApi)}>
           {pluginName}
@@ -87,24 +95,36 @@ export function PluginsMenu({
           <DropdownMenuItem onClick={() => toggle(p.id, appApi)}>
             {isActive(p.id) ? t("toolbar.item.deactivate") : t("toolbar.item.activate")}
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel>{t("toolbar.item.position")}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={pluginPosition}
-            onValueChange={(position: string) =>
-              setMapControlPosition(p.id, appApi, position as GeoLibreMapControlPosition)
-            }
-          >
-            {PLUGIN_POSITION_ITEMS.map((position) => (
-              <DropdownMenuRadioItem
-                key={position.value}
-                value={position.value}
-                onSelect={(event: Event) => event.preventDefault()}
-              >
-                {t(position.labelKey)}
-              </DropdownMenuRadioItem>
+          {isActive(p.id) &&
+            contributedMenus.map((entry) => (
+              <Fragment key={entry.menu.id}>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>{entry.menu.label}</DropdownMenuLabel>
+                {renderPluginToolbarMenuItems(entry.menu.items, entry.menu.id)}
+              </Fragment>
             ))}
-          </DropdownMenuRadioGroup>
+          {pluginPosition && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>{t("toolbar.item.position")}</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={pluginPosition}
+                onValueChange={(position: string) =>
+                  setMapControlPosition(p.id, appApi, position as GeoLibreMapControlPosition)
+                }
+              >
+                {PLUGIN_POSITION_ITEMS.map((position) => (
+                  <DropdownMenuRadioItem
+                    key={position.value}
+                    value={position.value}
+                    onSelect={(event: Event) => event.preventDefault()}
+                  >
+                    {t(position.labelKey)}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </>
+          )}
         </DropdownMenuSubContent>
       </DropdownMenuSub>
     );

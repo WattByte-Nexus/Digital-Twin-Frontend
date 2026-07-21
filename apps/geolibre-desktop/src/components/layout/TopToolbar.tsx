@@ -1232,9 +1232,9 @@ export function TopToolbar({
         />
       )}
       {/* Top-level toolbar menus registered by built-in plugins via
-          app.registerToolbarMenu(); external plugin menus render after Help
-          (below). Renders nothing when none exist. */}
-      <PluginToolbarMenus chrome={chrome} placement="builtin" />
+          app.registerToolbarMenu(). External plugin actions are nested under
+          their owning entry in the Plugins menu. */}
+      <PluginToolbarMenus chrome={chrome} />
       <SettingsDialog
         buttonClassName={toolbarButtonClass}
         buttonSize={toolbarButtonSize}
@@ -1331,9 +1331,6 @@ export function TopToolbar({
           onAbout={() => setAboutOpen(true)}
         />
       )}
-      {/* External plugin toolbar menus render after Help so third-party menus
-          sit at the end of the banner, past the built-in menus. */}
-      <PluginToolbarMenus chrome={chrome} placement="external" />
       <AddDataDialog
         kind={addDataKind}
         mapControllerRef={mapControllerRef}

@@ -31,6 +31,16 @@ export interface GeoLibreExternalNativeLayerRegistration {
   sourcePath?: string;
 }
 
+/** Options for a plugin popup rendered by GeoLibre's MapLibre instance. */
+export interface GeoLibreMapPopupOptions {
+  coordinates: [number, number];
+  content: HTMLElement;
+  /** Additional class; GeoLibre's identify-popup class is always applied. */
+  className?: string;
+  maxWidth?: string;
+  closeOnClick?: boolean;
+}
+
 /**
  * Options shared by the raster/tile registration helpers
  * ({@link GeoLibreAppAPI.addTileLayer}, {@link GeoLibreAppAPI.addWmtsLayer},
@@ -241,6 +251,11 @@ export interface GeoLibreAppAPI {
   resolvePluginAssetUrl?: (pluginId: string, relativePath: string) => string | null;
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => MapLibreMap | null;
+  /**
+   * Open a popup through GeoLibre's shared MapLibre popup implementation.
+   * Returns a cleanup function, or null while the map is unavailable.
+   */
+  openMapPopup?: (options: GeoLibreMapPopupOptions) => (() => void) | null;
   pickLocalDirectoryFiles?: () => Promise<File[] | null>;
   /**
    * Prompt the user (desktop only) to pick one or more vector files via the

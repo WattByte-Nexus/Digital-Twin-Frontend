@@ -98,7 +98,7 @@ export async function loadExternalPlugins(
           bundles: [],
           errors: [],
         }),
-    loadPluginUrlBundles(pluginManifestUrls, issues),
+    loadPluginUrlBundles(pluginManifestUrls, issues, bundledUrls),
     loadWebInstalledPluginBundles(),
   ]);
   for (const error of filesystemResult.errors) {
@@ -194,6 +194,7 @@ async function loadFilesystemPluginBundles(
 async function loadPluginUrlBundles(
   manifestUrls: string[],
   issues: ExternalPluginLoadIssue[],
+  bundledUrls: ReadonlySet<string> = new Set(),
 ): Promise<ExternalPluginBundle[]> {
   const bundles: ExternalPluginBundle[] = [];
   const results = await Promise.allSettled(
@@ -202,34 +203,36 @@ async function loadPluginUrlBundles(
   for (const [index, result] of results.entries()) {
     if (result.status === "fulfilled") {
       const bundle = result.value;
-      // Refuse to auto-execute a URL bundle whose code changed since it was
-      // last trusted (a silent-update / compromised-host vector). First sight
-      // pins it; a changed hash is held back until the user reloads it
-      // explicitly (which re-pins). Isolate a verification failure (e.g.
-      // crypto.subtle unavailable) to this one URL — letting it throw here would
-      // reject the whole loadExternalPlugins Promise.all and drop every plugin.
-      try {
-        const integrity = await verifyPluginBundleIntegrity(manifestUrls[index], bundle);
-        if (integrity.status === "changed") {
+      const manifestUrl = manifestUrls[index];
+      // Bundled drop-ins are part of the app build and trusted by the deployer;
+      // they must follow normal build/HMR updates without requiring a runtime
+      // re-trust action that the Manage Plugins UI cannot offer for them.
+      // Runtime URL plugins still get first-use pinning and changed-code
+      // protection against silent updates or a compromised host.
+      if (!bundledUrls.has(manifestUrl)) {
+        try {
+          const integrity = await verifyPluginBundleIntegrity(manifestUrl, bundle);
+          if (integrity.status === "changed") {
+            issues.push({
+              archiveName: bundle.archiveName,
+              sourceUrl: bundle.sourceUrl,
+              message:
+                `Plugin at '${bundle.sourceUrl}' changed since you last trusted it and was not loaded. ` +
+                "Open Settings → Plugins and reload it to review and accept the update.",
+            });
+            continue;
+          }
+        } catch (error) {
           issues.push({
             archiveName: bundle.archiveName,
             sourceUrl: bundle.sourceUrl,
             message:
-              `Plugin at '${bundle.sourceUrl}' changed since you last trusted it and was not loaded. ` +
-              "Open Settings → Plugins and reload it to review and accept the update.",
+              error instanceof Error
+                ? `Could not verify plugin integrity: ${error.message}`
+                : "Could not verify plugin bundle integrity.",
           });
           continue;
         }
-      } catch (error) {
-        issues.push({
-          archiveName: bundle.archiveName,
-          sourceUrl: bundle.sourceUrl,
-          message:
-            error instanceof Error
-              ? `Could not verify plugin integrity: ${error.message}`
-              : "Could not verify plugin bundle integrity.",
-        });
-        continue;
       }
       bundles.push(bundle);
     } else {

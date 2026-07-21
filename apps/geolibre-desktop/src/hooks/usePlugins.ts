@@ -61,12 +61,14 @@ import type {
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
   GeoLibreMapControlPosition,
+  GeoLibreMapPopupOptions,
   GeoLibreTileLayerOptions,
   GeoLibreWmsLayerOptions,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
+import maplibregl from "maplibre-gl";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
@@ -736,6 +738,20 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
+    openMapPopup: (options: GeoLibreMapPopupOptions) => {
+      const map = mapControllerRef?.current?.getMap();
+      if (!map) return null;
+      const popup = new maplibregl.Popup({
+        className: ["geolibre-identify-popup", options.className].filter(Boolean).join(" "),
+        closeButton: true,
+        closeOnClick: options.closeOnClick ?? true,
+        maxWidth: options.maxWidth ?? "560px",
+      })
+        .setLngLat(options.coordinates)
+        .setDOMContent(options.content)
+        .addTo(map);
+      return () => popup.remove();
+    },
     pickLocalDirectoryFiles,
     // Present only on desktop (filesystem access); the Vector panel keys off its
     // presence to auto-discover shapefile sidecars instead of forcing the user

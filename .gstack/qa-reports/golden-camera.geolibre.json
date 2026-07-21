@@ -1,0 +1,19 @@
+{
+  "version": "0.1.0",
+  "name": "QA Golden Google 3D",
+  "mapView": {
+    "center": [-105.2211, 39.7555],
+    "zoom": 17,
+    "bearing": 20,
+    "pitch": 65,
+    "altitudeMeters": 1800
+  },
+  "basemapStyleUrl": "https://tiles.openfreemap.org/styles/liberty",
+  "basemapVisible": true,
+  "basemapOpacity": 1,
+  "layers": [],
+  "styles": {},
+  "metadata": {
+    "description": "QA camera fixture. No API key."
+  }
+}

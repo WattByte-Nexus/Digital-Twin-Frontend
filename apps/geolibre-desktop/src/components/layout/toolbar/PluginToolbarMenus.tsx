@@ -18,13 +18,6 @@ import type { ToolbarChrome } from "./constants";
 
 interface PluginToolbarMenusProps {
   chrome: ToolbarChrome;
-  /**
-   * Which menus to render by their owning plugin's origin: `"builtin"` renders
-   * menus from built-in plugins (and any untagged menu) beside the built-in
-   * menus; `"external"` renders menus from externally loaded plugins, placed
-   * after the Help menu. The toolbar renders one instance of each.
-   */
-  placement: "builtin" | "external";
 }
 
 function MenuIcon({ icon, className }: { icon?: string; className: string }) {
@@ -39,7 +32,11 @@ function MenuIcon({ icon, className }: { icon?: string; className: string }) {
 const MAX_MENU_DEPTH = 8;
 
 /** Render a plugin menu item tree (actions, submenus, separators) recursively. */
-function renderItems(items: GeoLibreToolbarMenuItem[], menuId: string, depth = 0): React.ReactNode {
+export function renderPluginToolbarMenuItems(
+  items: GeoLibreToolbarMenuItem[],
+  menuId: string,
+  depth = 0,
+): React.ReactNode {
   if (depth > MAX_MENU_DEPTH) {
     console.warn(
       `Toolbar menu "${menuId}" exceeds the maximum submenu depth (${MAX_MENU_DEPTH}); deeper items are not rendered.`,
@@ -60,7 +57,7 @@ function renderItems(items: GeoLibreToolbarMenuItem[], menuId: string, depth = 0
             {item.label}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            {renderItems(item.items, `${menuId}.${item.id}`, depth + 1)}
+            {renderPluginToolbarMenuItems(item.items, `${menuId}.${item.id}`, depth + 1)}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       );
@@ -104,25 +101,21 @@ function PluginToolbarMenu({ menu, chrome }: { menu: GeoLibreToolbarMenu; chrome
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-52">
-        {renderItems(menu.items, menu.id)}
+        {renderPluginToolbarMenuItems(menu.items, menu.id)}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
 /**
- * Renders the top-level toolbar menus registered by plugins via
- * `app.registerToolbarMenu()`, one dropdown button per menu. Built-in plugin
- * menus render beside the built-in menus; external plugin menus render after
- * the Help menu (selected by `placement`). Renders nothing when no menu in the
- * requested group has any items.
+ * Renders top-level toolbar menus registered by built-in plugins via
+ * `app.registerToolbarMenu()`. External plugin contributions are rendered
+ * inside their owning entry in the Plugins menu instead.
  */
-export function PluginToolbarMenus({ chrome, placement }: PluginToolbarMenusProps) {
+export function PluginToolbarMenus({ chrome }: PluginToolbarMenusProps) {
   const { entries } = useToolbarMenus();
-  // Skip menus with no items so a plugin never shows a button that opens to a
-  // blank dropdown, and keep only the menus that belong in this placement. A
-  // menu is "external" when its owning plugin was loaded from an external
-  // source; menus with no owner (or an unknown one) fall in with the built-ins.
+  // Skip blank and external menus. Menus with no owner (or an unknown one)
+  // fall in with the built-ins.
   const visible = entries.filter((entry) => {
     if (entry.menu.items.length === 0) return false;
     // ownerPluginId by itself doesn't encode "external", so re-check the live
@@ -130,7 +123,7 @@ export function PluginToolbarMenus({ chrome, placement }: PluginToolbarMenusProp
     // plugin (which removes its menu, re-rendering this list) before dropping
     // its source map entry, so a menu is never seen with a now-stale owner.
     const external = Boolean(entry.ownerPluginId && isExternalPluginId(entry.ownerPluginId));
-    return placement === "external" ? external : !external;
+    return !external;
   });
   if (visible.length === 0) return null;
   return (

@@ -2,10 +2,22 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
+  BUNDLED_POLE_GEOJSON_PATH,
+  BUNDLED_POLE_MODEL_PATH,
+  BUNDLED_TREE_GEOJSON_PATH,
+  BUNDLED_TREE_MODEL_PATH,
+  BOULDER_TREE_PAGE_SIZE,
+  BOULDER_TREE_SERVICE_URL,
   buildNetwork,
+  buildBoulderTreeQueryUrl,
+  CONDUCTOR_HIT_WIDTH_PIXELS,
+  fetchBoulderTreeGeoJson,
+  PICKING_RADIUS_PIXELS,
   TREE_DEFAULT_SCALE,
   pickedFeatureDetails,
   placementCoordinates,
+  replaceImportedTreeDatasets,
+  treePlacements,
 } from "../apps/geolibre-desktop/public/plugins/distribution-network/dist/index.js";
 
 const pluginRoot = new URL(
@@ -14,8 +26,34 @@ const pluginRoot = new URL(
 );
 
 describe("distribution-network bundled plugin", () => {
+  it("ships usable pole and tree defaults for both importers", async () => {
+    assert.equal(BUNDLED_POLE_MODEL_PATH, "assets/13.8kv_power_pole.glb");
+    assert.equal(BUNDLED_POLE_GEOJSON_PATH, "assets/testpowerlines.geojson");
+    assert.equal(
+      BUNDLED_TREE_MODEL_PATH,
+      "assets/low_poly_forest_tree_assets/tree_01.glb",
+    );
+    assert.equal(BUNDLED_TREE_GEOJSON_PATH, "assets/testtrees.geojson");
+
+    const [poleModel, treeModel, poleGeojson, treeGeojson] = await Promise.all([
+      readFile(new URL(BUNDLED_POLE_MODEL_PATH, pluginRoot)),
+      readFile(new URL(BUNDLED_TREE_MODEL_PATH, pluginRoot)),
+      readFile(new URL(BUNDLED_POLE_GEOJSON_PATH, pluginRoot), "utf8"),
+      readFile(new URL(BUNDLED_TREE_GEOJSON_PATH, pluginRoot), "utf8"),
+    ]);
+    assert.ok(poleModel.byteLength > 0);
+    assert.ok(treeModel.byteLength > 0);
+    assert.equal(JSON.parse(poleGeojson).type, "FeatureCollection");
+    assert.equal(JSON.parse(treeGeojson).type, "FeatureCollection");
+  });
+
   it("defaults tree imports to a realistic mature roadside-tree scale", () => {
     assert.equal(TREE_DEFAULT_SCALE, 0.5);
+  });
+
+  it("provides a forgiving pointer hit area for thin distribution assets", () => {
+    assert.ok(PICKING_RADIUS_PIXELS >= 6);
+    assert.ok(CONDUCTOR_HIT_WIDTH_PIXELS >= 16);
   });
 
   it("builds one conductor on each side over two spans and three aligned poles", async () => {
@@ -83,6 +121,154 @@ describe("distribution-network bundled plugin", () => {
         ],
       }),
       [[1, 2], [3, 4]],
+    );
+  });
+
+  it("builds a paginated Boulder tree query for a WGS84 viewport", () => {
+    const url = new URL(buildBoulderTreeQueryUrl([-105.21, 40.01, -105.18, 40.03], 2000));
+
+    assert.equal(`${url.origin}${url.pathname}`, BOULDER_TREE_SERVICE_URL);
+    assert.equal(url.searchParams.get("geometry"), "-105.21,40.01,-105.18,40.03");
+    assert.equal(url.searchParams.get("geometryType"), "esriGeometryEnvelope");
+    assert.equal(url.searchParams.get("inSR"), "4326");
+    assert.equal(url.searchParams.get("outSR"), "4326");
+    assert.equal(url.searchParams.get("resultOffset"), "2000");
+    assert.equal(url.searchParams.get("resultRecordCount"), String(BOULDER_TREE_PAGE_SIZE));
+    assert.equal(url.searchParams.get("f"), "geojson");
+    assert.match(url.searchParams.get("outFields") ?? "", /FACILITYID/);
+  });
+
+  it("paginates and combines Boulder tree GeoJSON results", async () => {
+    const pages = [
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [-105.2, 40.02] },
+            properties: { OBJECTID: 1, FACILITYID: "TREE1" },
+          },
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [-105.19, 40.021] },
+            properties: { OBJECTID: 2, FACILITYID: "TREE2" },
+          },
+        ],
+        properties: { exceededTransferLimit: true },
+      },
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [-105.18, 40.022] },
+            properties: { OBJECTID: 3, FACILITYID: "TREE3" },
+          },
+        ],
+      },
+    ];
+    const requestedUrls: string[] = [];
+    const fetchImpl = async (url: string | URL | Request) => {
+      requestedUrls.push(String(url));
+      return {
+        ok: true,
+        json: async () => pages.shift(),
+      } as Response;
+    };
+
+    const result = await fetchBoulderTreeGeoJson(
+      [-105.21, 40.01, -105.17, 40.03],
+      fetchImpl,
+      { pageSize: 2, maxFeatures: 10 },
+    );
+
+    assert.equal(result.features.length, 3);
+    assert.equal(result.metadata.source, "City of Boulder public tree inventory");
+    assert.equal(result.metadata.truncated, false);
+    assert.equal(new URL(requestedUrls[0]).searchParams.get("resultOffset"), "0");
+    assert.equal(new URL(requestedUrls[1]).searchParams.get("resultOffset"), "2");
+  });
+
+  it("keeps inventory attributes with each tree placement", () => {
+    const placements = treePlacements({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: 42,
+          geometry: { type: "Point", coordinates: [-105.2, 40.02] },
+          properties: {
+            FACILITYID: "TREE42",
+            COMMONNAME: "Oak, Bur",
+            LATINNAME: "Quercus macrocarpa",
+            DBHINT: 12,
+          },
+        },
+      ],
+    });
+
+    assert.deepEqual(placements, [
+      {
+        featureId: 42,
+        position: [-105.2, 40.02],
+        properties: {
+          FACILITYID: "TREE42",
+          COMMONNAME: "Oak, Bur",
+          LATINNAME: "Quercus macrocarpa",
+          DBHINT: 12,
+        },
+      },
+    ]);
+  });
+
+  it("replaces the previous imported tree model instead of stacking models", () => {
+    const bundledPoles = { id: "bundled-poles", kind: "poles", bundled: true };
+    const oldTrees = { id: "trees-1", kind: "trees", modelUrl: "blob:pine" };
+    const replacement = { id: "trees-2", kind: "trees", modelUrl: "blob:oak" };
+
+    assert.deepEqual(
+      replaceImportedTreeDatasets([bundledPoles, oldTrees], replacement),
+      [bundledPoles, replacement],
+    );
+  });
+
+  it("shows which model a selected tree is using", () => {
+    assert.deepEqual(
+      pickedFeatureDetails({ id: "tree-1", kind: "tree", modelName: "tree_07.glb" }),
+      {
+        title: "Tree",
+        rows: [
+          { label: "Tree ID", value: "tree-1" },
+          { label: "Model", value: "tree_07.glb" },
+        ],
+      },
+    );
+  });
+
+  it("shows Boulder inventory details for a selected tree", () => {
+    assert.deepEqual(
+      pickedFeatureDetails({
+        id: "TREE42",
+        kind: "tree",
+        modelName: "tree_01.glb",
+        commonName: "Oak, Bur",
+        latinName: "Quercus macrocarpa",
+        dbhInches: 12,
+        locationType: "Street",
+        sourceName: "City of Boulder public tree inventory",
+      }),
+      {
+        title: "Tree",
+        rows: [
+          { label: "Tree ID", value: "TREE42" },
+          { label: "Species", value: "Oak, Bur" },
+          { label: "Scientific name", value: "Quercus macrocarpa" },
+          { label: "DBH", value: "12 in" },
+          { label: "Location", value: "Street" },
+          { label: "Source", value: "City of Boulder public tree inventory" },
+          { label: "Model", value: "tree_01.glb" },
+        ],
+      },
     );
   });
 
