@@ -3,6 +3,7 @@ const PANEL_ID = "distribution-network-assets";
 const MENU_ID = "distribution-network-menu";
 const CONDUCTOR_HEIGHT_METERS = 8.2;
 const CONDUCTOR_OFFSETS_METERS = [-1.5, 1.5];
+export const TREE_DEFAULT_SCALE = 0.5;
 
 let overlay = null;
 let deck = null;
@@ -418,7 +419,7 @@ function createImporterSection(options, status) {
   description.textContent = options.description;
   const model = createFileField(`${options.modelLabel} (.glb)`, ".glb,model/gltf-binary");
   const geojson = createFileField(`${options.geojsonLabel} (.geojson)`, ".geojson,.json,application/geo+json,application/json");
-  const scale = createScaleField(1);
+  const scale = createScaleField(options.defaultScale ?? 1);
   const button = document.createElement("button");
   button.type = "button";
   button.className = "distribution-network-primary";
@@ -491,6 +492,7 @@ function renderAssetPanel(container) {
       modelLabel: "Tree model",
       geojsonLabel: "Tree locations",
       buttonLabel: "Add trees",
+      defaultScale: TREE_DEFAULT_SCALE,
       add: addTreeDataset,
     },
     status,

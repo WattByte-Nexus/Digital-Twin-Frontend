@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
   buildNetwork,
+  TREE_DEFAULT_SCALE,
   pickedFeatureDetails,
   placementCoordinates,
 } from "../apps/geolibre-desktop/public/plugins/distribution-network/dist/index.js";
@@ -13,6 +14,10 @@ const pluginRoot = new URL(
 );
 
 describe("distribution-network bundled plugin", () => {
+  it("defaults tree imports to a realistic mature roadside-tree scale", () => {
+    assert.equal(TREE_DEFAULT_SCALE, 0.5);
+  });
+
   it("builds one conductor on each side over two spans and three aligned poles", async () => {
     const geojson = JSON.parse(
       await readFile(new URL("assets/testpowerlines.geojson", pluginRoot), "utf8"),

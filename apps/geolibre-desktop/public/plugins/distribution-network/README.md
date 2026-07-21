@@ -15,6 +15,8 @@ as one route-wide line.
 Use it to select and add another pole GLB + GeoJSON pair or a tree GLB + GeoJSON
 pair. Line vertices place poles and conductors; every unique coordinate places a
 tree. Each importer also includes a model-scale control.
+Tree imports default to half scale, which makes the bundled forest models roughly
+9–17 metres tall instead of 18–33 metres tall; the value can still be adjusted for other models.
 
 The plugin is a drop-in external plugin and does not modify GeoLibre core. Its
 `activeByDefault` manifest flag makes it load when this build starts. Toggle it
