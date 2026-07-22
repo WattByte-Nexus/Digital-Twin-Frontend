@@ -96,3 +96,23 @@ The browser build proxies the sidecar at `/sidecar` (same-origin, no CORS); conf
 - `propertySpecFor` (`packages/core/src/expressions.ts`) fabricates the **unexported** `StylePropertySpecification` shape that `@maplibre/maplibre-gl-style-spec`'s `createExpression` uses for expected-result-type enforcement (the Expression Builder's filter → boolean / color checks). The cast hides any contract change from the compiler, so whenever `@maplibre/maplibre-gl-style-spec` is bumped (including Dependabot PRs) run the frontend suite — the "enforces an expected result type" test in `tests/expressions.test.ts` fails if the shape stops being honored.
 - UI strings are translatable via **react-i18next**; catalogs live in `apps/geolibre-desktop/src/i18n/locales/*.json` (`en.json` is the source of truth, typed by `i18next.d.ts`). Use `t()` for new user-facing strings; a `?locale`/`?lang` query param sets the embed language. The UI mirrors for right-to-left locales (Arabic), so style new components with Tailwind's logical utilities (`ms-`/`me-`/`ps-`/`pe-`/`text-start`/`border-s`/`start-`…), not the physical `ml-`/`left-` forms. See `docs/i18n.md`.
 - Reference docs: `docs/architecture.md`, `docs/project-format.md`, `docs/plugin-api.md`, `docs/python.md`, `docs/i18n.md`, `docs/contributing.md`.
+
+<!-- agentq:start -->
+## agentq task queues
+
+This repository uses [agentq](https://github.com/Luke-Pitstick/agentq) for durable coding-agent task queues.
+
+When asked to record or delegate follow-up work, use the installed CLI rather than keeping an informal TODO:
+
+```bash
+agentq task add --queue <queue> --title "Short task title" --instructions "Complete, standalone instructions" --provider codex
+```
+
+For machine-generated tasks, prefer JSON on stdin:
+
+```bash
+printf '%s' '{"queue":"<queue>","title":"Short task title","instructions":"Complete instructions","provider":"claude","idempotencyKey":"stable-key"}' | agentq task add --stdin-json
+```
+
+Inside an agentq-managed run, `AGENTQ_QUEUE`, `AGENTQ_TASK_ID`, and `AGENTQ_RUN_ID` are set. Tasks created there are automatically linked to their parent task. Do not enqueue duplicates or recursively enqueue the current task.
+<!-- agentq:end -->

@@ -8,16 +8,40 @@ export const CONDUCTOR_HIT_WIDTH_PIXELS = 18;
 export const CONDUCTOR_HIT_TARGET_PARAMETERS = Object.freeze({
   depthWriteEnabled: false,
 });
-export const TREE_DEFAULT_SCALE = 0.5;
+export const TREE_DEFAULT_SCALE = 1;
 export const BUNDLED_POLE_MODEL_PATH = "assets/13.8kv_power_pole.glb";
 export const BUNDLED_POLE_GEOJSON_PATH = "assets/testpowerlines.geojson";
-export const BUNDLED_TREE_MODEL_PATH =
-  "assets/low_poly_forest_tree_assets/tree_07.glb";
+export const BUNDLED_TREE_MODEL_PATHS = "abcdefghij".split("").map(
+  (family) => `assets/realistic_tree_billboards/realistic_tree_${family}.glb`,
+);
+export const BUNDLED_TREE_MODEL_PATH = BUNDLED_TREE_MODEL_PATHS[0];
 export const BUNDLED_TREE_GEOJSON_PATH = "assets/testtrees.geojson";
 export const BOULDER_TREE_SERVICE_URL =
   "https://gis.bouldercolorado.gov/ags_svr2/rest/services/parks/TreesOpenData/MapServer/0/query";
 export const BOULDER_TREE_PAGE_SIZE = 2000;
-export const BOULDER_TREE_MAX_FEATURES = 10_000;
+export const BOULDER_TREE_MAX_FEATURES = Number.POSITIVE_INFINITY;
+export const TREE_COLLISION_ESTIMATOR_VERSION = "usfs-itree-crown-width-v1";
+export const TREE_COLLISION_SAFETY_FACTOR = 1.2;
+export const TREE_POSITION_BUFFER_METERS = 0.5;
+
+const FEET_TO_METERS = 0.3048;
+const CROWN_WIDTH_MODELS = {
+  // USDA i-Tree Appendix 13 genus models. Inputs are DBH inches; outputs are feet.
+  acer: { min: 1, max: 39, type: "quadratic", b0: 6.3661, b1: 2.102, b2: -0.0267 },
+  betula: { min: 1, max: 30, type: "linear", b0: 6.2408, b1: 1.5854 },
+  fraxinus: { min: 1, max: 32, type: "quadratic", b0: 4.5348, b1: 2.3021, b2: -0.0356 },
+  gleditsia: { min: 1.3, max: 46.2, type: "log", b0: 1.3613, b1: 11.2361 },
+  juniperus: { min: 1, max: 23.4, type: "quadratic", b0: 2.3613, b1: 1.764, b2: -0.0299 },
+  malus: { min: 1, max: 29, type: "power", b0: 1.9915, b1: 0.4699 },
+  picea: { min: 1, max: 27.1, type: "quadratic", b0: 2.8875, b1: 1.4568, b2: -0.0125 },
+  pinus: { min: 1, max: 62.7, type: "power", b0: 1.3312, b1: 0.6651 },
+  populus: { min: 1, max: 41.8, type: "linear", b0: 2.4739, b1: 1.5565 },
+  prunus: { min: 1, max: 30, type: "quadratic", b0: 5.9632, b1: 1.9593, b2: -0.0327 },
+  quercus: { min: 1, max: 67, type: "quadratic", b0: 5.6153, b1: 1.9184, b2: -0.0148 },
+  salix: { min: 1, max: 41.3, type: "power", b0: 1.6602, b1: 0.5908 },
+  tilia: { min: 1, max: 40, type: "quadratic", b0: 4.8669, b1: 1.7481, b2: -0.0148 },
+  ulmus: { min: 1, max: 38, type: "quadratic", b0: 5.66, b1: 1.9969, b2: -0.0177 },
+};
 
 const BOULDER_TREE_FIELDS = [
   "OBJECTID",
@@ -43,6 +67,9 @@ let unregisterPanel = null;
 let unregisterMenu = null;
 let nextDatasetId = 1;
 let datasets = [];
+let bundledTreeDatasets = [];
+let bundledTreeCount = 0;
+let latestTreeGeojson = null;
 let assetPopup = null;
 const objectUrls = new Set();
 
@@ -124,6 +151,244 @@ export function treePlacements(geojson) {
   });
 }
 
+function stableTreeHash(value) {
+  const text = String(value ?? "tree");
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function treeModelIndex(properties = {}, fallbackIndex = 0, modelCount = 10) {
+  if (modelCount <= 1) return 0;
+  const species = [
+    properties.COMMONNAME,
+    properties.LATINNAME,
+    properties.GENUS,
+    properties.common_name,
+    properties.latin_name,
+    properties.species,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const identity =
+    properties.FACILITYID ?? properties.tree_id ?? properties.id ?? `${species}-${fallbackIndex}`;
+  const choose = (indices) => indices[stableTreeHash(identity) % indices.length] % modelCount;
+
+  if (/dead|snag|stump|winter/.test(species)) return choose([8, 9]);
+  if (/birch|betula|aspen|populus tremuloides/.test(species)) return choose([6, 7]);
+  if (/pine|pinus|spruce|picea|fir|abies|cedar|juniper|conifer/.test(species)) {
+    return choose([0, 1, 2]);
+  }
+  return choose([3, 4, 5, 6, 7]);
+}
+
+export function treeRenderDimensions(properties = {}) {
+  const reportedHeight = Number(properties.height_m ?? properties.height);
+  const dbhInches = Number(properties.DBHINT ?? properties.dbh_in ?? properties.dbh);
+  const heightMeters = Number.isFinite(reportedHeight) && reportedHeight > 0
+    ? Math.min(35, Math.max(3, reportedHeight))
+    : Number.isFinite(dbhInches) && dbhInches > 0
+      ? Math.min(28, Math.max(5, 6 + dbhInches * 0.35))
+      : 12;
+  const reportedCanopy = Number(
+    properties.canopy_diameter_m ?? properties.canopy_m ?? properties.crown_diameter_m,
+  );
+  const canopyMeters = Number.isFinite(reportedCanopy) && reportedCanopy > 0
+    ? Math.min(24, Math.max(2, reportedCanopy))
+    : Math.min(18, Math.max(3, heightMeters * 0.55));
+  return { heightMeters, canopyMeters };
+}
+
+function treeGenus(properties = {}) {
+  return String(
+    properties.GENUS ??
+      properties.genus ??
+      String(properties.LATINNAME ?? properties.latin_name ?? "").trim().split(/\s+/)[0] ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function evaluateCrownWidthModel(model, dbhInches) {
+  if (model.type === "power") return Math.exp(model.b0 + Math.log(dbhInches) * model.b1);
+  if (model.type === "log") return model.b0 + Math.log(dbhInches) * model.b1;
+  if (model.type === "quadratic") {
+    return model.b0 + dbhInches * model.b1 + dbhInches ** 2 * model.b2;
+  }
+  return model.b0 + dbhInches * model.b1;
+}
+
+function roundedMeters(value) {
+  return Math.round(value * 1000) / 1000;
+}
+
+/**
+ * Estimate the engine's 2D, axis-aligned tree envelope around an inventory point.
+ * This is deliberately an estimated canopy footprint, not measured 3D geometry.
+ */
+export function estimateTreeCollisionEnvelope(properties = {}, options = {}) {
+  const safetyFactor = Number.isFinite(Number(options.safetyFactor))
+    ? Math.max(1, Number(options.safetyFactor))
+    : TREE_COLLISION_SAFETY_FACTOR;
+  const positionBufferMeters = Number.isFinite(Number(options.positionBufferMeters))
+    ? Math.max(0, Number(options.positionBufferMeters))
+    : TREE_POSITION_BUFFER_METERS;
+  const explicitCanopy = Number(
+    properties.canopy_diameter_m ?? properties.canopy_m ?? properties.crown_diameter_m,
+  );
+  const dbhInches = Number(properties.DBHINT ?? properties.dbh_in ?? properties.dbh);
+  const genus = treeGenus(properties);
+  const model = CROWN_WIDTH_MODELS[genus];
+  let canopyDiameterMeters;
+  let method;
+  let confidence;
+  let modelDbhInches = null;
+
+  if (Number.isFinite(explicitCanopy) && explicitCanopy > 0) {
+    canopyDiameterMeters = explicitCanopy;
+    method = "reported_canopy_diameter";
+    confidence = "reported";
+  } else if (Number.isFinite(dbhInches) && dbhInches > 0 && model) {
+    modelDbhInches = Math.min(model.max, Math.max(model.min, dbhInches));
+    canopyDiameterMeters = evaluateCrownWidthModel(model, modelDbhInches) * FEET_TO_METERS;
+    method = `usfs_itree_genus_${genus}`;
+    confidence = modelDbhInches === dbhInches ? "modeled" : "modeled_extrapolation_clamped";
+  } else {
+    canopyDiameterMeters = treeRenderDimensions(properties).canopyMeters;
+    method = Number.isFinite(dbhInches) && dbhInches > 0
+      ? "generic_dbh_fallback"
+      : "generic_mature_tree_fallback";
+    confidence = "low";
+  }
+
+  canopyDiameterMeters = Math.min(30, Math.max(2, canopyDiameterMeters));
+  const collisionHalfExtentMeters = canopyDiameterMeters * 0.5 * safetyFactor + positionBufferMeters;
+  const halfExtent = roundedMeters(collisionHalfExtentMeters);
+  return {
+    collisionBox: {
+      min_x_m: -halfExtent,
+      max_x_m: halfExtent,
+      min_y_m: -halfExtent,
+      max_y_m: halfExtent,
+    },
+    canopyDiameterMeters: roundedMeters(canopyDiameterMeters),
+    collisionHalfExtentMeters: halfExtent,
+    estimatedHeightMeters: roundedMeters(treeRenderDimensions(properties).heightMeters),
+    method,
+    confidence,
+    genus: genus || null,
+    dbhInches: Number.isFinite(dbhInches) && dbhInches > 0 ? dbhInches : null,
+    modelDbhInches,
+    safetyFactor,
+    positionBufferMeters,
+    estimatorVersion: TREE_COLLISION_ESTIMATOR_VERSION,
+  };
+}
+
+function treeClassification(properties = {}) {
+  const value =
+    properties.LATINNAME ??
+    properties.latin_name ??
+    properties.COMMONNAME ??
+    properties.common_name ??
+    properties.GENUS ??
+    properties.genus ??
+    "unknown_tree";
+  return String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") ||
+    "unknown_tree";
+}
+
+/** Convert point GeoJSON into the Digital Twin Engine's TreeAssetSnapshot JSON contract. */
+export function buildEngineTreeAssetSnapshot(geojson, options = {}) {
+  const regionId = String(options.regionId ?? "boulder-co").trim();
+  const assetVersion = String(options.assetVersion ?? "boulder-public-trees-v1").trim();
+  const crs = String(options.crs ?? "EPSG:26913").trim();
+  if (!regionId || !assetVersion || !crs) {
+    throw new Error("Engine tree exports require a region ID, asset version, and projected CRS.");
+  }
+
+  const usedIds = new Map();
+  const assets = treePlacements(geojson).map(({ featureId, position, properties }, index) => {
+    const baseId = String(
+      properties.FACILITYID ?? properties.tree_id ?? properties.OBJECTID ?? featureId ?? `tree-${index + 1}`,
+    ).trim() || `tree-${index + 1}`;
+    const occurrence = (usedIds.get(baseId) ?? 0) + 1;
+    usedIds.set(baseId, occurrence);
+    const treeId = occurrence === 1 ? baseId : `${baseId}-${occurrence}`;
+    const estimate = estimateTreeCollisionEnvelope(properties, options);
+    const [lon, lat] = position;
+    return {
+      tree_id: treeId,
+      region_id: regionId,
+      location: { lat, lon },
+      collision_box: estimate.collisionBox,
+      classification: treeClassification(properties),
+      source_ref: `boulder-tree-inventory://${encodeURIComponent(baseId)}`,
+      metadata: {
+        geometry_source: "estimated",
+        geometry_semantics: "buffered_axis_aligned_canopy_envelope",
+        estimator_version: estimate.estimatorVersion,
+        estimation_method: estimate.method,
+        estimation_confidence: estimate.confidence,
+        dbh_in: estimate.dbhInches,
+        model_dbh_in: estimate.modelDbhInches,
+        estimated_height_m: estimate.estimatedHeightMeters,
+        estimated_canopy_diameter_m: estimate.canopyDiameterMeters,
+        collision_half_extent_m: estimate.collisionHalfExtentMeters,
+        safety_factor: estimate.safetyFactor,
+        position_buffer_m: estimate.positionBufferMeters,
+        inventory_confidence: properties.CONFIDENCE ?? properties.confidence ?? null,
+        source_properties: { ...properties },
+      },
+    };
+  });
+
+  return { region_id: regionId, asset_version: assetVersion, crs, assets };
+}
+
+export function treePointsByModel(geojson, modelNames) {
+  const placements = treePlacements(geojson);
+  const names = modelNames.length ? modelNames : ["tree.glb"];
+  const pointsByModel = names.map(() => []);
+  const sourceName = geojson?.metadata?.source ?? null;
+
+  placements.forEach(({ featureId, position, properties }, index) => {
+    const [longitude, latitude] = position;
+    const dbhInches = Number(properties.DBHINT ?? properties.dbh_in ?? properties.dbh);
+    const reportedHeight = Number(properties.height_m ?? properties.height);
+    const { heightMeters, canopyMeters } = treeRenderDimensions(properties);
+    const modelIndex = treeModelIndex(properties, index, names.length);
+    pointsByModel[modelIndex].push({
+      id:
+        properties.FACILITYID ??
+        properties.tree_id ??
+        properties.id ??
+        featureId ??
+        `tree-${index + 1}`,
+      kind: "tree",
+      modelName: names[modelIndex],
+      sourceName: sourceName ?? properties.source ?? null,
+      commonName: properties.COMMONNAME ?? properties.common_name ?? properties.species ?? null,
+      latinName: properties.LATINNAME ?? properties.latin_name ?? null,
+      dbhInches: Number.isFinite(dbhInches) && dbhInches > 0 ? dbhInches : null,
+      heightMeters: Number.isFinite(reportedHeight) && reportedHeight > 0 ? reportedHeight : null,
+      renderedHeightMeters: heightMeters,
+      canopyMeters,
+      modelScale: [canopyMeters, heightMeters, canopyMeters],
+      locationType: properties.LOCTYPE ?? properties.location_type ?? null,
+      properties,
+      position: [longitude, latitude, 0],
+    });
+  });
+
+  return pointsByModel;
+}
+
 function normalizedBounds(bounds) {
   if (!Array.isArray(bounds) || bounds.length !== 4) {
     throw new Error("A west, south, east, north map extent is required.");
@@ -182,10 +447,10 @@ export async function fetchBoulderTreeGeoJson(
     1,
     Math.min(BOULDER_TREE_PAGE_SIZE, Math.floor(Number(options.pageSize) || BOULDER_TREE_PAGE_SIZE)),
   );
-  const maxFeatures = Math.max(
-    1,
-    Math.floor(Number(options.maxFeatures) || BOULDER_TREE_MAX_FEATURES),
-  );
+  const requestedMaxFeatures = Number(options.maxFeatures);
+  const maxFeatures = Number.isFinite(requestedMaxFeatures) && requestedMaxFeatures > 0
+    ? Math.max(1, Math.floor(requestedMaxFeatures))
+    : BOULDER_TREE_MAX_FEATURES;
   const features = [];
   let resultOffset = 0;
   let truncated = false;
@@ -216,7 +481,7 @@ export async function fetchBoulderTreeGeoJson(
     if (page.features.length === 0) break;
     resultOffset += page.features.length;
     if (!exceededTransferLimit && page.features.length < recordCount) break;
-    if (features.length >= maxFeatures) {
+    if (Number.isFinite(maxFeatures) && features.length >= maxFeatures) {
       truncated = exceededTransferLimit || page.features.length >= recordCount;
       break;
     }
@@ -549,6 +814,7 @@ function modelLayer(dataset) {
     ...scenegraphSizingProps(dataset.sizeScale),
     getPosition: (point) => point.position,
     getOrientation: (point) => [0, point.modelYaw ?? 0, 90],
+    getScale: (point) => point.modelScale ?? [1, 1, 1],
     pickable: true,
     autoHighlight: true,
     highlightColor: [37, 99, 235, 180],
@@ -663,7 +929,29 @@ async function addPoleDataset(modelFile, geojsonFile, sizeScale) {
   return `Added ${network.poles.length} aligned poles and ${network.conductors.length} selectable line spans.`;
 }
 
-async function addTreeDataset(modelFile, geojsonFile, sizeScale) {
+function treeDatasetsForModels(geojson, models, sizeScale, options = {}) {
+  const pointsByModel = treePointsByModel(
+    geojson,
+    models.map((model) => model.name),
+  );
+  const groupId = options.groupId ?? `trees-${nextDatasetId++}`;
+  return models.flatMap((model, modelIndex) => {
+    const points = pointsByModel[modelIndex];
+    return points.length
+      ? [{
+          id: `${groupId}-${modelIndex + 1}`,
+          treeGroupId: groupId,
+          kind: "trees",
+          bundled: Boolean(options.bundled),
+          modelUrl: model.url,
+          points,
+          sizeScale,
+        }]
+      : [];
+  });
+}
+
+async function addTreeDataset(modelFileOrFiles, geojsonFile, sizeScale) {
   const geojson = await readGeoJson(geojsonFile);
   const placements = treePlacements(geojson);
   if (placements.length === 0) {
@@ -674,42 +962,19 @@ async function addTreeDataset(modelFile, geojsonFile, sizeScale) {
         : "The tree GeoJSON has no valid coordinates.",
     );
   }
-  const modelUrl = rememberObjectUrl(modelFile);
+  const modelFiles = Array.isArray(modelFileOrFiles) ? modelFileOrFiles : [modelFileOrFiles];
+  const models = modelFiles.map((modelFile) => ({
+    name: modelFile.name,
+    url: rememberObjectUrl(modelFile),
+  }));
   const sourceName = geojson.metadata?.source ?? null;
-  const treeDataset = {
-    id: `trees-${nextDatasetId++}`,
-    kind: "trees",
-    modelUrl,
-    points: placements.map(({ featureId, position, properties }, index) => {
-      const [longitude, latitude] = position;
-      const dbhInches = Number(properties.DBHINT ?? properties.dbh_in ?? properties.dbh);
-      const heightMeters = Number(properties.height_m ?? properties.height);
-      return {
-        id:
-          properties.FACILITYID ??
-          properties.tree_id ??
-          properties.id ??
-          featureId ??
-          `tree-${index + 1}`,
-        kind: "tree",
-        modelName: modelFile.name,
-        sourceName: sourceName ?? properties.source ?? null,
-        commonName: properties.COMMONNAME ?? properties.common_name ?? properties.species ?? null,
-        latinName: properties.LATINNAME ?? properties.latin_name ?? null,
-        dbhInches: Number.isFinite(dbhInches) ? dbhInches : null,
-        heightMeters: Number.isFinite(heightMeters) ? heightMeters : null,
-        locationType: properties.LOCTYPE ?? properties.location_type ?? null,
-        properties,
-        position: [longitude, latitude, 0],
-      };
-    }),
-    sizeScale,
-  };
+  latestTreeGeojson = geojson;
+  const treeDatasets = treeDatasetsForModels(geojson, models, sizeScale);
   const replacedTreeUrls = datasets
     .filter((dataset) => dataset.kind === "trees" && !dataset.bundled)
     .map((dataset) => dataset.modelUrl);
-  datasets = replaceImportedTreeDatasets(datasets, treeDataset);
-  for (const url of replacedTreeUrls) {
+  datasets = replaceImportedTreeDatasets(datasets, treeDatasets);
+  for (const url of new Set(replacedTreeUrls)) {
     if (objectUrls.delete(url)) URL.revokeObjectURL(url);
   }
   renderLayers();
@@ -718,27 +983,31 @@ async function addTreeDataset(modelFile, geojsonFile, sizeScale) {
     ? ` Showing the first ${placements.length.toLocaleString()} trees for performance.`
     : "";
   return sourceName
-    ? `Loaded ${placements.length.toLocaleString()} trees from ${sourceName} using ${modelFile.name}.${truncatedMessage}`
-    : `Loaded ${placements.length.toLocaleString()} trees using ${modelFile.name}.`;
+    ? `Loaded ${placements.length.toLocaleString()} trees from ${sourceName} using ${models.length} realistic model${models.length === 1 ? "" : "s"}.${truncatedMessage}`
+    : `Loaded ${placements.length.toLocaleString()} trees using ${models.length} realistic model${models.length === 1 ? "" : "s"}.`;
 }
 
 export function replaceImportedTreeDatasets(currentDatasets, replacement) {
+  const replacements = Array.isArray(replacement) ? replacement : [replacement];
   return [
-    ...currentDatasets.filter((dataset) => dataset.kind !== "trees" || dataset.bundled),
-    replacement,
+    ...currentDatasets.filter((dataset) => dataset.kind !== "trees"),
+    ...replacements,
   ];
 }
 
 function clearImportedDatasets() {
   const importedUrls = datasets.filter((dataset) => !dataset.bundled).map((dataset) => dataset.modelUrl);
-  datasets = datasets.filter((dataset) => dataset.bundled);
-  for (const url of importedUrls) {
+  datasets = [
+    ...datasets.filter((dataset) => dataset.bundled && dataset.kind !== "trees"),
+    ...bundledTreeDatasets,
+  ];
+  for (const url of new Set(importedUrls)) {
     if (objectUrls.delete(url)) URL.revokeObjectURL(url);
   }
   renderLayers();
 }
 
-function createFileField(labelText, accept, fileType, defaultPath) {
+function createFileField(labelText, accept, fileType, defaultPath, defaultLabel) {
   const label = document.createElement("label");
   label.className = "distribution-network-field";
   const text = document.createElement("span");
@@ -760,7 +1029,7 @@ function createFileField(labelText, accept, fileType, defaultPath) {
   details.className = "distribution-network-file-details";
   const filename = document.createElement("span");
   filename.className = "distribution-network-file-name";
-  const defaultFileName = defaultPath ? defaultPath.split("/").pop() : null;
+  const defaultFileName = defaultLabel ?? (defaultPath ? defaultPath.split("/").pop() : null);
   filename.textContent = defaultFileName ?? "No file selected";
   const hint = document.createElement("span");
   hint.className = "distribution-network-file-hint";
@@ -836,6 +1105,7 @@ function createImporterSection(options, status) {
     ".glb,model/gltf-binary",
     "GLB model · max size depends on your browser",
     options.defaultModelPath,
+    options.defaultModelLabel,
   );
   const geojson = createFileField(
     options.geojsonLabel,
@@ -862,7 +1132,9 @@ function createImporterSection(options, status) {
     }
   };
   const updateReadyState = () => {
-    const hasModel = Boolean(model.input.files?.[0] || options.defaultModelPath);
+    const hasModel = Boolean(
+      model.input.files?.[0] || options.defaultModelPath || options.defaultModelPaths?.length,
+    );
     const source = selectedLocationSource();
     const hasGeojson =
       source === "boulder" ||
@@ -887,7 +1159,9 @@ function createImporterSection(options, status) {
     const selectedModelFile = model.input.files?.[0];
     const selectedGeojsonFile = geojson.input.files?.[0];
     const source = selectedLocationSource();
-    if ((!selectedModelFile && !options.defaultModelPath) ||
+    const defaultModelPaths =
+      options.defaultModelPaths ?? (options.defaultModelPath ? [options.defaultModelPath] : []);
+    if ((!selectedModelFile && defaultModelPaths.length === 0) ||
         (source === "file" && !selectedGeojsonFile) ||
         (source !== "file" && source !== "boulder" &&
           !selectedGeojsonFile && !options.defaultGeojsonPath)) {
@@ -906,7 +1180,9 @@ function createImporterSection(options, status) {
     status.dataset.state = "loading";
     const modelFilePromise = selectedModelFile
       ? Promise.resolve(selectedModelFile)
-      : bundledAssetFile(options.defaultModelPath);
+      : defaultModelPaths.length === 1
+        ? bundledAssetFile(defaultModelPaths[0])
+        : Promise.all(defaultModelPaths.map(bundledAssetFile));
     let geojsonFilePromise;
     if (source === "boulder") {
       geojsonFilePromise = fetchBoulderTreeGeoJson(currentMapBounds()).then((geojsonData) =>
@@ -947,7 +1223,7 @@ function renderAssetPanel(container) {
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
   status.dataset.state = "success";
-  status.textContent = "The bundled three-pole demo is loaded.";
+  status.textContent = `${bundledTreeCount.toLocaleString()} bundled trees and the three-pole demo are loaded.`;
 
   const poles = createImporterSection(
     {
@@ -968,7 +1244,7 @@ function renderAssetPanel(container) {
       title: "Trees",
       kicker: "Vegetation",
       description:
-        "Use bundled trees, upload GeoJSON, or query the live City of Boulder inventory in the current map view.",
+        "The full bundled inventory is already visible with species-aware realistic models. Replace its locations with uploaded GeoJSON or the live Boulder inventory.",
       locationSourceLabel: "Tree location source",
       locationSources: [
         { value: "bundled", label: "Bundled synthetic trees" },
@@ -981,6 +1257,8 @@ function renderAssetPanel(container) {
       buttonLabel: "Add trees",
       defaultScale: TREE_DEFAULT_SCALE,
       defaultModelPath: BUNDLED_TREE_MODEL_PATH,
+      defaultModelPaths: BUNDLED_TREE_MODEL_PATHS,
+      defaultModelLabel: `${BUNDLED_TREE_MODEL_PATHS.length}-model realistic collection`,
       defaultGeojsonPath: BUNDLED_TREE_GEOJSON_PATH,
       add: addTreeDataset,
     },
@@ -996,7 +1274,53 @@ function renderAssetPanel(container) {
     status.dataset.state = "success";
   });
 
-  container.append(intro, poles, trees, clear, status);
+  const exportHeading = document.createElement("h3");
+  exportHeading.textContent = "Digital Twin Engine";
+  const exportDescription = document.createElement("p");
+  exportDescription.textContent =
+    "Export the active tree locations as engine Tree Assets with conservative estimated canopy collision envelopes.";
+  const region = document.createElement("input");
+  region.type = "text";
+  region.value = "boulder-co";
+  region.setAttribute("aria-label", "Engine region ID");
+  region.placeholder = "Engine region ID";
+  const exportButton = document.createElement("button");
+  exportButton.type = "button";
+  exportButton.className = "distribution-network-secondary";
+  exportButton.textContent = "Export engine tree assets";
+  exportButton.addEventListener("click", () => {
+    try {
+      if (!latestTreeGeojson) throw new Error("Load a tree inventory before exporting it.");
+      const snapshot = buildEngineTreeAssetSnapshot(latestTreeGeojson, {
+        regionId: region.value,
+        assetVersion: `boulder-public-trees-${new Date().toISOString().slice(0, 10)}`,
+      });
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${snapshot.asset_version}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      status.textContent = `Exported ${snapshot.assets.length.toLocaleString()} engine Tree Assets.`;
+      status.dataset.state = "success";
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : "Could not export tree assets.";
+      status.dataset.state = "error";
+    }
+  });
+
+  container.append(
+    intro,
+    poles,
+    trees,
+    exportHeading,
+    exportDescription,
+    region,
+    exportButton,
+    clear,
+    status,
+  );
   return () => container.replaceChildren();
 }
 
@@ -1029,7 +1353,7 @@ function registerAssetUi(app) {
 const plugin = {
   id: PLUGIN_ID,
   name: "Distribution Network Demo",
-  version: "0.6.1",
+  version: "0.8.0",
 
   async activate(app) {
     if (!app.getDeckGL) {
@@ -1037,14 +1361,32 @@ const plugin = {
       return false;
     }
 
-    const geojsonUrl = assetUrl(app, BUNDLED_POLE_GEOJSON_PATH);
-    const modelUrl = assetUrl(app, BUNDLED_POLE_MODEL_PATH);
-    const response = await fetch(geojsonUrl);
-    if (!response.ok) {
-      throw new Error(`Could not load the bundled power-line GeoJSON (HTTP ${response.status}).`);
+    const [poleResponse, treeResponse] = await Promise.all([
+      fetch(assetUrl(app, BUNDLED_POLE_GEOJSON_PATH)),
+      fetch(assetUrl(app, BUNDLED_TREE_GEOJSON_PATH)),
+    ]);
+    if (!poleResponse.ok) {
+      throw new Error(`Could not load the bundled power-line GeoJSON (HTTP ${poleResponse.status}).`);
+    }
+    if (!treeResponse.ok) {
+      throw new Error(`Could not load the bundled tree GeoJSON (HTTP ${treeResponse.status}).`);
     }
 
-    const network = buildNetwork(await response.json());
+    const network = buildNetwork(await poleResponse.json());
+    const treeGeojson = await treeResponse.json();
+    latestTreeGeojson = treeGeojson;
+    const treePlacementsForView = treePlacements(treeGeojson);
+    const treeModels = BUNDLED_TREE_MODEL_PATHS.map((path) => ({
+      name: path.split("/").pop(),
+      url: assetUrl(app, path),
+    }));
+    bundledTreeDatasets = treeDatasetsForModels(
+      treeGeojson,
+      treeModels,
+      TREE_DEFAULT_SCALE,
+      { bundled: true, groupId: "bundled-trees" },
+    );
+    bundledTreeCount = treePlacementsForView.length;
     deck = await app.getDeckGL();
     overlay = new deck.mapbox.MapboxOverlay({
       interleaved: true,
@@ -1068,15 +1410,16 @@ const plugin = {
         id: "bundled-poles",
         kind: "poles",
         bundled: true,
-        modelUrl,
+        modelUrl: assetUrl(app, BUNDLED_POLE_MODEL_PATH),
         points: network.poles,
         conductors: network.conductors,
         sizeScale: 1,
       },
+      ...bundledTreeDatasets,
     ];
     renderLayers();
     registerAssetUi(app);
-    fitDataset(network.bounds);
+    fitDataset(boundsForCoordinates(treePlacementsForView.map((placement) => placement.position)));
     return true;
   },
 
@@ -1093,6 +1436,9 @@ const plugin = {
     deck = null;
     currentApp = null;
     datasets = [];
+    bundledTreeDatasets = [];
+    bundledTreeCount = 0;
+    latestTreeGeojson = null;
     for (const url of objectUrls) URL.revokeObjectURL(url);
     objectUrls.clear();
     if (previousProjection) app.setMapProjection?.(previousProjection);

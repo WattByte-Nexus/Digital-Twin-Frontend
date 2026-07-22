@@ -6,20 +6,27 @@ import {
   BUNDLED_POLE_MODEL_PATH,
   BUNDLED_TREE_GEOJSON_PATH,
   BUNDLED_TREE_MODEL_PATH,
+  BUNDLED_TREE_MODEL_PATHS,
   BOULDER_TREE_PAGE_SIZE,
+  BOULDER_TREE_MAX_FEATURES,
   BOULDER_TREE_SERVICE_URL,
+  buildEngineTreeAssetSnapshot,
   buildNetwork,
   buildBoulderTreeQueryUrl,
   CONDUCTOR_HIT_WIDTH_PIXELS,
   CONDUCTOR_HIT_TARGET_PARAMETERS,
   fetchBoulderTreeGeoJson,
+  estimateTreeCollisionEnvelope,
   PICKING_RADIUS_PIXELS,
   TREE_DEFAULT_SCALE,
   pickedFeatureDetails,
   placementCoordinates,
   replaceImportedTreeDatasets,
   scenegraphSizingProps,
+  treeModelIndex,
   treePlacements,
+  treePointsByModel,
+  treeRenderDimensions,
 } from "../apps/geolibre-desktop/public/plugins/distribution-network/dist/index.js";
 
 const pluginRoot = new URL(
@@ -27,38 +34,84 @@ const pluginRoot = new URL(
   import.meta.url,
 );
 
+function readGlbJson(model: Buffer) {
+  assert.equal(model.toString("utf8", 0, 4), "glTF");
+  assert.equal(model.readUInt32LE(4), 2);
+  assert.equal(model.readUInt32LE(8), model.byteLength);
+  const jsonLength = model.readUInt32LE(12);
+  assert.equal(model.readUInt32LE(16), 0x4e4f534a);
+  return JSON.parse(model.toString("utf8", 20, 20 + jsonLength).trim());
+}
+
 describe("distribution-network bundled plugin", () => {
   it("ships usable pole and tree defaults for both importers", async () => {
     assert.equal(BUNDLED_POLE_MODEL_PATH, "assets/13.8kv_power_pole.glb");
     assert.equal(BUNDLED_POLE_GEOJSON_PATH, "assets/testpowerlines.geojson");
-    assert.equal(
-      BUNDLED_TREE_MODEL_PATH,
-      "assets/low_poly_forest_tree_assets/tree_07.glb",
+    assert.equal(BUNDLED_TREE_MODEL_PATH, BUNDLED_TREE_MODEL_PATHS[0]);
+    assert.equal(BUNDLED_TREE_MODEL_PATHS.length, 10);
+    assert.ok(
+      BUNDLED_TREE_MODEL_PATHS.every((path) =>
+        path.startsWith("assets/realistic_tree_billboards/realistic_tree_"),
+      ),
     );
     assert.equal(BUNDLED_TREE_GEOJSON_PATH, "assets/testtrees.geojson");
 
-    const [poleModel, treeModel, poleGeojson, treeGeojson] = await Promise.all([
+    const [poleModel, treeModels, poleGeojson, treeGeojson] = await Promise.all([
       readFile(new URL(BUNDLED_POLE_MODEL_PATH, pluginRoot)),
-      readFile(new URL(BUNDLED_TREE_MODEL_PATH, pluginRoot)),
+      Promise.all(BUNDLED_TREE_MODEL_PATHS.map((path) => readFile(new URL(path, pluginRoot)))),
       readFile(new URL(BUNDLED_POLE_GEOJSON_PATH, pluginRoot), "utf8"),
       readFile(new URL(BUNDLED_TREE_GEOJSON_PATH, pluginRoot), "utf8"),
     ]);
     assert.ok(poleModel.byteLength > 0);
-    assert.ok(treeModel.byteLength > 0);
+    assert.ok(treeModels.every((model) => model.byteLength > 0));
+    for (const treeModel of treeModels) {
+      const gltf = readGlbJson(treeModel);
+      assert.equal(gltf.meshes[0].primitives.length, 3);
+      assert.equal(gltf.images.length, 3);
+      assert.ok(gltf.materials.every((material: { alphaMode: string }) => material.alphaMode === "MASK"));
+    }
     assert.equal(JSON.parse(poleGeojson).type, "FeatureCollection");
     assert.equal(JSON.parse(treeGeojson).type, "FeatureCollection");
   });
 
   it("defaults tree imports to a realistic mature roadside-tree scale", () => {
-    assert.equal(TREE_DEFAULT_SCALE, 0.5);
+    assert.equal(TREE_DEFAULT_SCALE, 1);
   });
 
   it("keeps scenegraph scale in world units at every zoom level", () => {
     assert.deepEqual(scenegraphSizingProps(TREE_DEFAULT_SCALE), {
-      sizeScale: 0.5,
+      sizeScale: 1,
       sizeMinPixels: 0,
       sizeMaxPixels: Number.MAX_SAFE_INTEGER,
     });
+  });
+
+  it("uses species-aware realistic models and world-unit tree dimensions", () => {
+    assert.ok(treeModelIndex({ species: "ponderosa_pine", tree_id: "A" }) <= 2);
+    assert.ok([6, 7].includes(treeModelIndex({ COMMONNAME: "Paper birch", FACILITYID: "B" })));
+    assert.ok([8, 9].includes(treeModelIndex({ species: "dead snag", tree_id: "C" })));
+    assert.deepEqual(treeRenderDimensions({ height_m: 14, canopy_diameter_m: 8 }), {
+      heightMeters: 14,
+      canopyMeters: 8,
+    });
+    assert.deepEqual(treeRenderDimensions({ DBHINT: 20 }), {
+      heightMeters: 13,
+      canopyMeters: 7.15,
+    });
+  });
+
+  it("loads every bundled tree location across the realistic model collection", async () => {
+    const geojson = JSON.parse(
+      await readFile(new URL(BUNDLED_TREE_GEOJSON_PATH, pluginRoot), "utf8"),
+    );
+    const groups = treePointsByModel(
+      geojson,
+      BUNDLED_TREE_MODEL_PATHS.map((path) => path.split("/").pop() ?? path),
+    );
+
+    assert.equal(groups.flat().length, geojson.features.length);
+    assert.ok(groups.filter((group) => group.length > 0).length >= 6);
+    assert.ok(groups.flat().every((tree) => tree.modelScale.every((value) => value > 0)));
   });
 
   it("provides a forgiving pointer hit area for thin distribution assets", () => {
@@ -205,6 +258,37 @@ describe("distribution-network bundled plugin", () => {
     assert.equal(new URL(requestedUrls[1]).searchParams.get("resultOffset"), "2");
   });
 
+  it("loads past the former 10,000-tree ceiling by default", async () => {
+    assert.equal(BOULDER_TREE_MAX_FEATURES, Number.POSITIVE_INFINITY);
+    const pages = Array.from({ length: 6 }, (_, pageIndex) => ({
+      type: "FeatureCollection",
+      features: Array.from({ length: 2000 }, (_, featureIndex) => ({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [-105.2 + featureIndex * 1e-8, 40.02 + pageIndex * 1e-8],
+        },
+        properties: { OBJECTID: pageIndex * 2000 + featureIndex + 1 },
+      })),
+      properties: { exceededTransferLimit: pageIndex < 5 },
+    }));
+    pages.push({ type: "FeatureCollection", features: [], properties: {} });
+    let requestCount = 0;
+    const fetchImpl = async () => ({
+      ok: true,
+      json: async () => pages[requestCount++],
+    }) as Response;
+
+    const result = await fetchBoulderTreeGeoJson(
+      [-105.21, 40.01, -105.17, 40.03],
+      fetchImpl,
+    );
+
+    assert.equal(result.features.length, 12_000);
+    assert.equal(result.metadata.truncated, false);
+    assert.equal(requestCount, 7);
+  });
+
   it("keeps inventory attributes with each tree placement", () => {
     const placements = treePlacements({
       type: "FeatureCollection",
@@ -237,13 +321,69 @@ describe("distribution-network bundled plugin", () => {
     ]);
   });
 
+  it("estimates conservative engine collision envelopes from Boulder DBH and genus", () => {
+    const estimate = estimateTreeCollisionEnvelope({ GENUS: "Quercus", DBHINT: 12 });
+
+    assert.equal(estimate.method, "usfs_itree_genus_quercus");
+    assert.equal(estimate.confidence, "modeled");
+    assert.equal(estimate.canopyDiameterMeters, 8.079);
+    assert.equal(estimate.collisionHalfExtentMeters, 5.347);
+    assert.deepEqual(estimate.collisionBox, {
+      min_x_m: -5.347,
+      max_x_m: 5.347,
+      min_y_m: -5.347,
+      max_y_m: 5.347,
+    });
+  });
+
+  it("exports Boulder locations in the engine TreeAssetSnapshot contract", () => {
+    const snapshot = buildEngineTreeAssetSnapshot(
+      {
+        type: "FeatureCollection",
+        metadata: { source: "City of Boulder public tree inventory" },
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [-105.2, 40.02] },
+            properties: {
+              FACILITYID: "TREE42",
+              COMMONNAME: "Oak, Bur",
+              LATINNAME: "Quercus macrocarpa",
+              GENUS: "Quercus",
+              DBHINT: 12,
+              CONFIDENCE: "High",
+            },
+          },
+        ],
+      },
+      { regionId: "boulder-test", assetVersion: "trees-v1" },
+    );
+
+    assert.equal(snapshot.region_id, "boulder-test");
+    assert.equal(snapshot.asset_version, "trees-v1");
+    assert.equal(snapshot.crs, "EPSG:26913");
+    assert.equal(snapshot.assets.length, 1);
+    assert.deepEqual(snapshot.assets[0].location, { lat: 40.02, lon: -105.2 });
+    assert.equal(snapshot.assets[0].classification, "quercus_macrocarpa");
+    assert.equal(snapshot.assets[0].source_ref, "boulder-tree-inventory://TREE42");
+    assert.equal(snapshot.assets[0].metadata.geometry_source, "estimated");
+    assert.equal(snapshot.assets[0].metadata.inventory_confidence, "High");
+    assert.deepEqual(snapshot.assets[0].collision_box, {
+      min_x_m: -5.347,
+      max_x_m: 5.347,
+      min_y_m: -5.347,
+      max_y_m: 5.347,
+    });
+  });
+
   it("replaces the previous imported tree model instead of stacking models", () => {
     const bundledPoles = { id: "bundled-poles", kind: "poles", bundled: true };
+    const bundledTrees = { id: "bundled-trees-1", kind: "trees", bundled: true };
     const oldTrees = { id: "trees-1", kind: "trees", modelUrl: "blob:pine" };
     const replacement = { id: "trees-2", kind: "trees", modelUrl: "blob:oak" };
 
     assert.deepEqual(
-      replaceImportedTreeDatasets([bundledPoles, oldTrees], replacement),
+      replaceImportedTreeDatasets([bundledPoles, bundledTrees, oldTrees], replacement),
       [bundledPoles, replacement],
     );
   });

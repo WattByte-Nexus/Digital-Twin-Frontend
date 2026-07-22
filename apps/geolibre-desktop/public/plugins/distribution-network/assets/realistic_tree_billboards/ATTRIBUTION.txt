@@ -1,0 +1,12 @@
+Realistic Tree Sprites
+Creator: klamtii
+Source: https://klamtii.itch.io/tree-sprites
+
+The creator permits copying, modifying, distributing, and deriving works from
+the images, including for commercial purposes, without requiring permission or
+attribution. Credit is appreciated.
+
+The GLB files in this directory were generated for GeoLibre from the 30 source
+sprites. Each model combines the three views from one tree family into three
+intersecting, double-sided planes. This keeps the trees realistic at map-camera
+distances while remaining lightweight enough for large public inventories.
