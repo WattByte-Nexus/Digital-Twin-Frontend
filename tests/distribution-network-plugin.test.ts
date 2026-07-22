@@ -11,6 +11,7 @@ import {
   buildNetwork,
   buildBoulderTreeQueryUrl,
   CONDUCTOR_HIT_WIDTH_PIXELS,
+  CONDUCTOR_HIT_TARGET_PARAMETERS,
   fetchBoulderTreeGeoJson,
   PICKING_RADIUS_PIXELS,
   TREE_DEFAULT_SCALE,
@@ -63,6 +64,12 @@ describe("distribution-network bundled plugin", () => {
   it("provides a forgiving pointer hit area for thin distribution assets", () => {
     assert.ok(PICKING_RADIUS_PIXELS >= 6);
     assert.ok(CONDUCTOR_HIT_WIDTH_PIXELS >= 16);
+  });
+
+  it("keeps the invisible conductor hit target out of the depth buffer", () => {
+    assert.deepEqual(CONDUCTOR_HIT_TARGET_PARAMETERS, {
+      depthWriteEnabled: false,
+    });
   });
 
   it("builds one conductor on each side over two spans and three aligned poles", async () => {

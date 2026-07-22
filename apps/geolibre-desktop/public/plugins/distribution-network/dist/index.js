@@ -5,6 +5,9 @@ const CONDUCTOR_HEIGHT_METERS = 8.2;
 const CONDUCTOR_OFFSETS_METERS = [-1.5, 1.5];
 export const PICKING_RADIUS_PIXELS = 8;
 export const CONDUCTOR_HIT_WIDTH_PIXELS = 18;
+export const CONDUCTOR_HIT_TARGET_PARAMETERS = Object.freeze({
+  depthWriteEnabled: false,
+});
 export const TREE_DEFAULT_SCALE = 0.5;
 export const BUNDLED_POLE_MODEL_PATH = "assets/13.8kv_power_pole.glb";
 export const BUNDLED_POLE_GEOJSON_PATH = "assets/testpowerlines.geojson";
@@ -566,6 +569,7 @@ function renderLayers() {
           getColor: [0, 0, 0, 0],
           getWidth: CONDUCTOR_HIT_WIDTH_PIXELS,
           widthUnits: "pixels",
+          parameters: CONDUCTOR_HIT_TARGET_PARAMETERS,
           pickable: true,
           onClick: ({ object, coordinate }) => selectFeature(object, coordinate),
         }),
