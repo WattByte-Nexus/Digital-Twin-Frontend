@@ -59,6 +59,7 @@ import type {
   GeoLibreCogLayerOptions,
   GeoLibreDeckGL,
   GeoLibreExternalNativeLayerRegistration,
+  GeoLibreExternalNativeLayerState,
   GeoLibreFileDialogOptions,
   GeoLibreMapControlPosition,
   GeoLibreMapPopupOptions,
@@ -812,6 +813,29 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       if (state.layers.some((layer) => layer.id === id)) {
         state.removeLayer(id);
       }
+    },
+    subscribeExternalNativeLayerState: (
+      id: string,
+      callback: (state: GeoLibreExternalNativeLayerState | null) => void,
+    ) => {
+      let previousState: GeoLibreExternalNativeLayerState | null | undefined;
+      const emit = (layers: ReturnType<typeof useAppStore.getState>["layers"]) => {
+        const layer = layers.find((candidate) => candidate.id === id);
+        const nextState = layer
+          ? { visible: layer.visible, opacity: layer.opacity }
+          : null;
+        if (
+          previousState !== undefined &&
+          previousState?.visible === nextState?.visible &&
+          previousState?.opacity === nextState?.opacity
+        ) {
+          return;
+        }
+        previousState = nextState;
+        callback(nextState);
+      };
+      emit(useAppStore.getState().layers);
+      return useAppStore.subscribe((state) => emit(state.layers));
     },
     addMapControl: (
       control: Parameters<MapController["addControl"]>[0],

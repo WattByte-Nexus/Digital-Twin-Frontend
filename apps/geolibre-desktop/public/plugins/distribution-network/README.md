@@ -23,6 +23,12 @@ import. Line vertices place poles and conductors; every unique coordinate places
 a tree. Selecting another tree model replaces the active imported tree layer so
 models do not stack at identical coordinates.
 
+Pole imports also replace the active pole-and-conductor network instead of
+stacking another copy. The pole model scale is applied to conductor height and
+crossarm offset as well as the GLB, keeping both wires attached to the scaled
+crossarm. Power-line objects and trees appear as separate entries in GeoLibre's
+Layers panel, including working visibility and opacity controls.
+
 Tree height and canopy width use `height_m`, `canopy_diameter_m`, and Boulder DBH
 attributes when available, with conservative mature-tree estimates otherwise.
 The model-scale control is a multiplier over those world-unit dimensions and

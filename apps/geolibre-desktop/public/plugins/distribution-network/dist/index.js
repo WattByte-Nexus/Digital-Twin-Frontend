@@ -1,6 +1,8 @@
 const PLUGIN_ID = "distribution-network";
 const PANEL_ID = "distribution-network-assets";
 const MENU_ID = "distribution-network-menu";
+export const POWER_LINE_OBJECTS_LAYER_ID = `${PLUGIN_ID}-power-line-objects`;
+export const TREES_LAYER_ID = `${PLUGIN_ID}-trees`;
 const CONDUCTOR_HEIGHT_METERS = 8.2;
 const CONDUCTOR_OFFSETS_METERS = [-1.5, 1.5];
 export const PICKING_RADIUS_PIXELS = 8;
@@ -71,6 +73,11 @@ let bundledTreeDatasets = [];
 let bundledTreeCount = 0;
 let latestTreeGeojson = null;
 let assetPopup = null;
+let unregisterLayerStateListeners = [];
+const layerPanelState = {
+  poles: { visible: true, opacity: 1 },
+  trees: { visible: true, opacity: 1 },
+};
 const objectUrls = new Set();
 
 function validCoordinate(coordinate) {
@@ -604,7 +611,12 @@ export function pickedFeatureDetails(object) {
   return null;
 }
 
-export function buildNetwork(geojson, height = CONDUCTOR_HEIGHT_METERS, maxCoordinates = 3) {
+export function buildNetwork(
+  geojson,
+  height = CONDUCTOR_HEIGHT_METERS,
+  maxCoordinates = 3,
+  modelScale = 1,
+) {
   const sourceCoordinates = lineCoordinates(geojson);
   const coordinates = (sourceCoordinates.length >= 2 ? sourceCoordinates : placementCoordinates(geojson))
     .slice(0, maxCoordinates)
@@ -615,6 +627,7 @@ export function buildNetwork(geojson, height = CONDUCTOR_HEIGHT_METERS, maxCoord
     throw new Error("The pole GeoJSON needs a line with at least two valid coordinates.");
   }
 
+  const geometryScale = Number.isFinite(modelScale) && modelScale > 0 ? modelScale : 1;
   return {
     poles: coordinates.map(([longitude, latitude], index) => {
       const bearing = lineBearing(coordinates, index);
@@ -629,7 +642,11 @@ export function buildNetwork(geojson, height = CONDUCTOR_HEIGHT_METERS, maxCoord
     }),
     conductors: CONDUCTOR_OFFSETS_METERS.flatMap((offset, sideIndex) => {
       const side = sideIndex === 0 ? "left" : "right";
-      const path = offsetPath(coordinates, offset, height);
+      const path = offsetPath(
+        coordinates,
+        offset * geometryScale,
+        height * geometryScale,
+      );
       return path.slice(0, -1).map((start, spanIndex) => {
         const spanPath = [start, path[spanIndex + 1]];
         return {
@@ -805,12 +822,14 @@ export function scenegraphSizingProps(sizeScale) {
   };
 }
 
-function modelLayer(dataset) {
+function modelLayer(dataset, groupState) {
   return new deck.meshLayers.ScenegraphLayer({
     id: `${PLUGIN_ID}-${dataset.id}-models`,
     data: dataset.points,
     scenegraph: dataset.modelUrl,
     _lighting: "pbr",
+    visible: groupState.visible,
+    opacity: groupState.opacity,
     ...scenegraphSizingProps(dataset.sizeScale),
     getPosition: (point) => point.position,
     getOrientation: (point) => [0, point.modelYaw ?? 0, 90],
@@ -822,10 +841,50 @@ function modelLayer(dataset) {
   });
 }
 
-function renderLayers() {
+function deckLayerIds(dataset) {
+  return [
+    ...(dataset.conductors?.length
+      ? [
+          `${PLUGIN_ID}-${dataset.id}-conductor-hit-targets`,
+          `${PLUGIN_ID}-${dataset.id}-conductors`,
+        ]
+      : []),
+    `${PLUGIN_ID}-${dataset.id}-models`,
+  ];
+}
+
+export function distributionLayerRegistrations(currentDatasets) {
+  const registration = (id, name, kind) => ({
+    id,
+    name,
+    type: "3d-tiles",
+    source: { type: "distribution-network" },
+    nativeLayerIds: currentDatasets.filter((dataset) => dataset.kind === kind).flatMap(deckLayerIds),
+    metadata: {
+      customLayerType: "distribution-network",
+      externalDeckLayer: true,
+      identifiable: false,
+      sourceKind: `distribution-network-${kind}`,
+    },
+  });
+  return [
+    registration(POWER_LINE_OBJECTS_LAYER_ID, "Power Line Objects", "poles"),
+    registration(TREES_LAYER_ID, "Trees", "trees"),
+  ];
+}
+
+function syncLayerPanelEntries() {
+  if (!currentApp?.registerExternalNativeLayer) return;
+  for (const registration of distributionLayerRegistrations(datasets)) {
+    currentApp.registerExternalNativeLayer(registration);
+  }
+}
+
+function renderLayers(syncPanel = true) {
   if (!overlay || !deck) return;
   const layers = [];
   for (const dataset of datasets) {
+    const groupState = layerPanelState[dataset.kind] ?? { visible: true, opacity: 1 };
     if (dataset.conductors?.length) {
       layers.push(
         new deck.layers.PathLayer({
@@ -836,6 +895,7 @@ function renderLayers() {
           getWidth: CONDUCTOR_HIT_WIDTH_PIXELS,
           widthUnits: "pixels",
           parameters: CONDUCTOR_HIT_TARGET_PARAMETERS,
+          visible: groupState.visible,
           pickable: true,
           onClick: ({ object, coordinate }) => selectFeature(object, coordinate),
         }),
@@ -843,10 +903,11 @@ function renderLayers() {
           id: `${PLUGIN_ID}-${dataset.id}-conductors`,
           data: dataset.conductors,
           getPath: (conductor) => conductor.path,
-          getColor: [15, 15, 15, 255],
+          getColor: [15, 15, 15, Math.round(255 * groupState.opacity)],
           getWidth: 2,
           widthUnits: "pixels",
           widthMinPixels: 1,
+          visible: groupState.visible,
           capRounded: true,
           jointRounded: true,
           pickable: true,
@@ -856,9 +917,33 @@ function renderLayers() {
         }),
       );
     }
-    layers.push(modelLayer(dataset));
+    layers.push(modelLayer(dataset, groupState));
   }
   overlay.setProps({ layers });
+  if (syncPanel) syncLayerPanelEntries();
+}
+
+function watchLayerPanelEntry(id, kind) {
+  const unsubscribe = currentApp?.subscribeExternalNativeLayerState?.(id, (state) => {
+    const nextState = state ?? { visible: false, opacity: 1 };
+    const previousState = layerPanelState[kind];
+    if (
+      previousState.visible === nextState.visible &&
+      previousState.opacity === nextState.opacity
+    ) {
+      return;
+    }
+    layerPanelState[kind] = nextState;
+    renderLayers(false);
+  });
+  if (unsubscribe) unregisterLayerStateListeners.push(unsubscribe);
+}
+
+function watchLayerPanelEntries() {
+  unregisterLayerStateListeners.forEach((unsubscribe) => unsubscribe());
+  unregisterLayerStateListeners = [];
+  watchLayerPanelEntry(POWER_LINE_OBJECTS_LAYER_ID, "poles");
+  watchLayerPanelEntry(TREES_LAYER_ID, "trees");
 }
 
 function fitDataset(bounds) {
@@ -914,19 +999,37 @@ function geoJsonFile(data, name) {
 
 async function addPoleDataset(modelFile, geojsonFile, sizeScale) {
   const geojson = await readGeoJson(geojsonFile);
-  const network = buildNetwork(geojson, CONDUCTOR_HEIGHT_METERS, Infinity);
+  const network = buildNetwork(geojson, CONDUCTOR_HEIGHT_METERS, Infinity, sizeScale);
   const modelUrl = rememberObjectUrl(modelFile);
-  datasets.push({
+  const replacement = {
     id: `poles-${nextDatasetId++}`,
     kind: "poles",
     modelUrl,
     points: network.poles,
     conductors: network.conductors,
     sizeScale,
-  });
+  };
+  const replacedPoleUrls = datasets
+    .filter((dataset) => dataset.kind === "poles" && !dataset.bundled)
+    .map((dataset) => dataset.modelUrl);
+  datasets = replacePoleDatasets(datasets, replacement);
+  for (const url of new Set(replacedPoleUrls)) {
+    if (objectUrls.delete(url)) URL.revokeObjectURL(url);
+  }
   renderLayers();
   fitDataset(network.bounds);
-  return `Added ${network.poles.length} aligned poles and ${network.conductors.length} selectable line spans.`;
+  return `Loaded ${network.poles.length} aligned poles and ${network.conductors.length} selectable line spans.`;
+}
+
+export function replacePoleDatasets(currentDatasets, replacement) {
+  const firstPoleIndex = currentDatasets.findIndex((dataset) => dataset.kind === "poles");
+  const remaining = currentDatasets.filter((dataset) => dataset.kind !== "poles");
+  const insertionIndex = firstPoleIndex < 0 ? remaining.length : firstPoleIndex;
+  return [
+    ...remaining.slice(0, insertionIndex),
+    replacement,
+    ...remaining.slice(insertionIndex),
+  ];
 }
 
 function treeDatasetsForModels(geojson, models, sizeScale, options = {}) {
@@ -1418,6 +1521,7 @@ const plugin = {
       ...bundledTreeDatasets,
     ];
     renderLayers();
+    watchLayerPanelEntries();
     registerAssetUi(app);
     fitDataset(boundsForCoordinates(treePlacementsForView.map((placement) => placement.position)));
     return true;
@@ -1431,7 +1535,11 @@ const plugin = {
     unregisterMenu?.();
     unregisterPanel = null;
     unregisterMenu = null;
+    unregisterLayerStateListeners.forEach((unsubscribe) => unsubscribe());
+    unregisterLayerStateListeners = [];
     if (overlay) app.removeMapControl(overlay);
+    app.unregisterExternalNativeLayer?.(POWER_LINE_OBJECTS_LAYER_ID);
+    app.unregisterExternalNativeLayer?.(TREES_LAYER_ID);
     overlay = null;
     deck = null;
     currentApp = null;
@@ -1439,6 +1547,8 @@ const plugin = {
     bundledTreeDatasets = [];
     bundledTreeCount = 0;
     latestTreeGeojson = null;
+    layerPanelState.poles = { visible: true, opacity: 1 };
+    layerPanelState.trees = { visible: true, opacity: 1 };
     for (const url of objectUrls) URL.revokeObjectURL(url);
     objectUrls.clear();
     if (previousProjection) app.setMapProjection?.(previousProjection);

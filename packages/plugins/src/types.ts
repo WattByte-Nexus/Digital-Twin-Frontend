@@ -31,6 +31,11 @@ export interface GeoLibreExternalNativeLayerRegistration {
   sourcePath?: string;
 }
 
+export interface GeoLibreExternalNativeLayerState {
+  visible: boolean;
+  opacity: number;
+}
+
 /** Options for a plugin popup rendered by GeoLibre's MapLibre instance. */
 export interface GeoLibreMapPopupOptions {
   coordinates: [number, number];
@@ -303,6 +308,17 @@ export interface GeoLibreAppAPI {
   importTextFile?: (options?: GeoLibreFileDialogOptions) => Promise<string | null>;
   registerExternalNativeLayer?: (layer: GeoLibreExternalNativeLayerRegistration) => void;
   unregisterExternalNativeLayer?: (id: string) => void;
+  /**
+   * Observe visibility and opacity changes made to a plugin-owned Layers-panel
+   * entry. The callback runs immediately with the current state (or `null` if
+   * the entry is absent), then after relevant store changes. External custom
+   * renderers use this to keep their scene in sync with the standard layer
+   * controls. Returns an unsubscribe function.
+   */
+  subscribeExternalNativeLayerState?: (
+    id: string,
+    callback: (state: GeoLibreExternalNativeLayerState | null) => void,
+  ) => () => void;
   addMapControl: (control: IControl, position?: GeoLibreMapControlPosition) => boolean;
   removeMapControl: (control: IControl) => void;
   setBuiltInMapControlVisible: (control: GeoLibreBuiltInMapControl, visible: boolean) => boolean;

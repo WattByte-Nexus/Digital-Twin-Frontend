@@ -15,12 +15,16 @@ import {
   buildBoulderTreeQueryUrl,
   CONDUCTOR_HIT_WIDTH_PIXELS,
   CONDUCTOR_HIT_TARGET_PARAMETERS,
+  distributionLayerRegistrations,
   fetchBoulderTreeGeoJson,
   estimateTreeCollisionEnvelope,
   PICKING_RADIUS_PIXELS,
+  POWER_LINE_OBJECTS_LAYER_ID,
   TREE_DEFAULT_SCALE,
+  TREES_LAYER_ID,
   pickedFeatureDetails,
   placementCoordinates,
+  replacePoleDatasets,
   replaceImportedTreeDatasets,
   scenegraphSizingProps,
   treeModelIndex,
@@ -149,6 +153,34 @@ describe("distribution-network bundled plugin", () => {
     );
     assert.ok(network.poles.every((pole) => Number.isFinite(pole.bearing)));
     assert.ok(network.conductors.every((conductor) => conductor.lengthMeters > 0));
+  });
+
+  it("scales conductor attachment height and offsets with the pole model", () => {
+    const geojson = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: [[0, 0], [0, 0.001]] },
+        },
+      ],
+    };
+    const original = buildNetwork(geojson, 8.2, 3, 1);
+    const scaled = buildNetwork(geojson, 8.2, 3, 2);
+    const originalSeparation = Math.abs(
+      original.conductors[0].path[0][0] - original.conductors[1].path[0][0],
+    );
+    const scaledSeparation = Math.abs(
+      scaled.conductors[0].path[0][0] - scaled.conductors[1].path[0][0],
+    );
+
+    assert.equal(scaled.conductors[0].path[0][2], 16.4);
+    assert.ok(Math.abs(scaledSeparation / originalSeparation - 2) < 1e-6);
+    assert.deepEqual(
+      scaled.poles.map((pole) => pole.position),
+      original.poles.map((pole) => pole.position),
+    );
   });
 
   it("describes clicked poles by ID and clicked lines by length", () => {
@@ -386,6 +418,41 @@ describe("distribution-network bundled plugin", () => {
       replaceImportedTreeDatasets([bundledPoles, bundledTrees, oldTrees], replacement),
       [bundledPoles, replacement],
     );
+  });
+
+  it("replaces the active pole network instead of stacking conductors", () => {
+    const bundledPoles = { id: "bundled-poles", kind: "poles", bundled: true };
+    const trees = { id: "trees-1", kind: "trees" };
+    const oldPoles = { id: "poles-1", kind: "poles" };
+    const replacement = { id: "poles-2", kind: "poles" };
+
+    assert.deepEqual(
+      replacePoleDatasets([bundledPoles, trees, oldPoles], replacement),
+      [replacement, trees],
+    );
+  });
+
+  it("surfaces power-line objects and trees as stable Layers-panel entries", () => {
+    const registrations = distributionLayerRegistrations([
+      { id: "poles-1", kind: "poles", conductors: [{ id: "line" }] },
+      { id: "trees-1", kind: "trees" },
+      { id: "trees-2", kind: "trees" },
+    ]);
+
+    assert.deepEqual(registrations.map(({ id, name }) => ({ id, name })), [
+      { id: POWER_LINE_OBJECTS_LAYER_ID, name: "Power Line Objects" },
+      { id: TREES_LAYER_ID, name: "Trees" },
+    ]);
+    assert.deepEqual(registrations[0].nativeLayerIds, [
+      "distribution-network-poles-1-conductor-hit-targets",
+      "distribution-network-poles-1-conductors",
+      "distribution-network-poles-1-models",
+    ]);
+    assert.deepEqual(registrations[1].nativeLayerIds, [
+      "distribution-network-trees-1-models",
+      "distribution-network-trees-2-models",
+    ]);
+    assert.ok(registrations.every((entry) => entry.metadata.externalDeckLayer === true));
   });
 
   it("shows which model a selected tree is using", () => {
