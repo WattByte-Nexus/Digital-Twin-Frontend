@@ -8,6 +8,7 @@ import {
   buildScenarioRequest,
   createDigitalTwinClient,
   normalizeApiBaseUrl,
+  selectDemoRegions,
   selectedTreeSummary,
 } from "../apps/geolibre-desktop/public/plugins/digital-twin-demo/dist/index.js";
 
@@ -143,6 +144,66 @@ describe("digital-twin-demo bundled plugin", () => {
           },
         ],
       },
+    );
+  });
+
+  it("shows the seeded Boulder region first and excludes legacy and smoke-test regions", () => {
+    const seededBoulder = {
+      region_id: "seeded-boulder",
+      name: "Boulder Demo",
+      status: "published",
+      bounds: {
+        west: -105.212285,
+        south: 40.000901,
+        east: -105.178684,
+        north: 40.034475,
+      },
+    };
+    const golden = {
+      region_id: "golden-co",
+      name: "Golden",
+      status: "published",
+      bounds: { west: -105.4, south: 39.68, east: -105.15, north: 39.83 },
+    };
+
+    assert.deepEqual(
+      selectDemoRegions([
+        {
+          region_id: "api-smoke",
+          name: "API smoke published 969c7b2d",
+          status: "published",
+          bounds: { west: -105.3, south: 39.7, east: -105.1, north: 39.9 },
+        },
+        {
+          region_id: "colorado",
+          name: "Colorado",
+          status: "published",
+          bounds: {
+            west: -105.451725656711,
+            south: 39.887996931377,
+            east: -105.127274343289,
+            north: 40.133003068623,
+          },
+        },
+        golden,
+        {
+          region_id: "boulder-co",
+          name: "Boulder",
+          status: "published",
+          bounds: {
+            west: -105.451725656711,
+            south: 39.887996931377,
+            east: -105.127274343289,
+            north: 40.133003068623,
+          },
+        },
+        {
+          ...seededBoulder,
+          region_id: "older-seeded-boulder",
+        },
+        seededBoulder,
+      ]),
+      [seededBoulder, golden],
     );
   });
 

@@ -3,8 +3,8 @@
 This first-party bundled plugin connects GeoLibre to the Digital Twin Engine
 HTTP API. It provides:
 
-- published-region and exact weather selection;
-- visible map polygons for all published region bounds, with the selection highlighted;
+- curated Golden and seeded Boulder region selection with exact weather;
+- visible map polygons for those demo-region bounds, with the selection highlighted;
 - clickable Engine tree assets as ignition points;
 - synthetic-wind scenario controls;
 - run submission, polling, cancellation, and recent-run recovery;
@@ -35,5 +35,8 @@ The command derives padded WGS84 bounds from `testpowerlines.geojson` and
 `testtrees.geojson`, creates the draft through `POST /api/v1/regions`, uploads
 each feature through `POST /api/v1/regions/{region_id}/assets`, and finishes
 with `POST /api/v1/regions/{region_id}/publish`. It creates a new region on each
-run. Use `-- --help` to see API URL, region-name, source-file, and concurrency
-overrides.
+run. The plugin prefers the newest published region named `Boulder Demo`, so
+rerunning the seed replaces the Boulder selection without exposing Engine smoke
+fixtures or legacy Colorado-wide bounds. Keep that default name for the bundled
+demo selector. Use `-- --help` to see API URL, source-file, concurrency, and
+advanced region-name overrides.

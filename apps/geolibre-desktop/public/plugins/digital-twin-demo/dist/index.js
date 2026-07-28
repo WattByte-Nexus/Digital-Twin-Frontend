@@ -1,6 +1,6 @@
 const PLUGIN_ID = "digital-twin-demo";
 const PLUGIN_NAME = "Digital Twin Demo";
-const PLUGIN_VERSION = "0.2.0";
+const PLUGIN_VERSION = "0.2.1";
 const PANEL_ID = "digital-twin-demo-panel";
 const API_STORAGE_KEY = "geolibre.digital-twin-demo.api-url";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
@@ -42,6 +42,19 @@ function asFeatureCollection(value, label = "GeoJSON") {
     throw new Error(`${label} must be a GeoJSON FeatureCollection.`);
   }
   return value;
+}
+
+export function selectDemoRegions(regions) {
+  if (!Array.isArray(regions)) throw new Error("Regions must be an array.");
+  let seededBoulder = null;
+  let golden = null;
+  for (const region of regions) {
+    if (!isRecord(region) || region.status !== "published") continue;
+    const name = typeof region.name === "string" ? region.name.trim().toLowerCase() : "";
+    if (name === "boulder demo") seededBoulder = region;
+    if (region.region_id === "golden-co" || name === "golden") golden = region;
+  }
+  return [seededBoulder, golden].filter(Boolean);
 }
 
 function httpUrl(value, label) {
@@ -869,7 +882,7 @@ class DigitalTwinDemoPanel {
         this.client.listDataSources(abort.signal),
       ]);
       if (abort.signal.aborted || this.destroyed) return;
-      this.regions = asPageItems(regionPage).filter((region) => region?.status === "published");
+      this.regions = selectDemoRegions(asPageItems(regionPage));
       this.populateRegions();
       const readySources = Array.isArray(sources)
         ? sources.filter((source) => source?.ready).length
