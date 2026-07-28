@@ -20,3 +20,19 @@ shows a clear metadata-only state when they are unavailable.
 
 For local development, restart `npm run dev` after adding or updating a bundled
 plugin so Vite rescans `public/plugins/`.
+
+## Seed the Boulder demo region
+
+With the Digital Twin Engine API running locally, create and publish a region
+from the Distribution Network demo's bundled power-line and tree GeoJSON:
+
+```sh
+npm run seed:digital-twin:boulder
+```
+
+The command derives padded WGS84 bounds from `testpowerlines.geojson` and
+`testtrees.geojson`, creates the draft through `POST /api/v1/regions`, uploads
+each feature through `POST /api/v1/regions/{region_id}/assets`, and finishes
+with `POST /api/v1/regions/{region_id}/publish`. It creates a new region on each
+run. Use `-- --help` to see API URL, region-name, source-file, and concurrency
+overrides.
