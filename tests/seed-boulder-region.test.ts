@@ -44,8 +44,8 @@ describe("Boulder Digital Twin seed", () => {
   it("uses the bundled demo files as one feeder and 864 Boulder trees", async () => {
     const [bundledPowerLines, bundledTrees] = await Promise.all(
       [
-        "../apps/geolibre-desktop/public/plugins/distribution-network/assets/testpowerlines.geojson",
-        "../apps/geolibre-desktop/public/plugins/distribution-network/assets/testtrees.geojson",
+        "../apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/testpowerlines.geojson",
+        "../apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/testtrees.geojson",
       ].map(async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"))),
     );
 

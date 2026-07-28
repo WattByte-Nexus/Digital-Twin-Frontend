@@ -25,7 +25,7 @@ plugin so Vite rescans `public/plugins/`.
 ## Seed the Boulder demo region
 
 With the Digital Twin Engine API running locally, create and publish a region
-from the Distribution Network demo's bundled power-line and tree GeoJSON:
+from this plugin's bundled power-line and tree GeoJSON:
 
 ```sh
 npm run seed:digital-twin:boulder

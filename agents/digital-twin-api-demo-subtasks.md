@@ -35,7 +35,7 @@ Frontend:
 - `packages/plugins/src/plugins/weather-layer.ts`
 - `packages/plugins/src/plugins/maplibre-earth-engine.ts`
 - `apps/geolibre-desktop/src/hooks/usePlugins.ts`
-- `apps/geolibre-desktop/public/plugins/distribution-network/`
+- `apps/geolibre-desktop/public/plugins/digital-twin-demo/`
 - `docs/plugin-api.md`
 
 ## Assumptions
@@ -51,9 +51,9 @@ Frontend:
   uses scenario-backed runs, because direct-time submissions accept one
   `ignition_location`, while scenario-backed submissions accept 1-100 ordered
   GeoJSON ignition points.
-- The existing Distribution Network Demo may remain as a visual showcase, but
-  the Engine API asset catalog is the source of truth for selectable ignition
-  trees.
+- The legacy Distribution Network Demo is removed. Its compact power-line and
+  tree fixtures are owned by the Digital Twin Demo, while the Engine API asset
+  catalog remains the source of truth for selectable ignition trees.
 - The Engine's existing weather and Earth Engine catalog endpoints are not
   sufficient to render those datasets. They currently return metadata and
   readiness without a COG, tile template, or other browser-readable data URL.
@@ -267,8 +267,7 @@ apps/geolibre-desktop/public/plugins/digital-twin-demo/
 
 Use `activeByDefault: true` for the dedicated demo build. This reuses the
 existing `public/plugins/<id>/` discovery path and keeps the integration out of
-GeoLibre core. Model it after the Distribution Network Demo, but keep all
-Engine transport and state inside this plugin.
+GeoLibre core. Keep all Engine transport and state inside this plugin.
 
 ### Right panel
 
@@ -466,8 +465,8 @@ features as ignition points.
 **Scope:** Bundled plugin shell, right panel bootstrap, assets layer, tree-only
 selection and highlight. No run submission yet.
 
-**Context packet:** GeoLibre plugin API/types, bundled-plugin discovery,
-Distribution Network Demo, GeoJSON layer ID conventions.
+**Context packet:** GeoLibre plugin API/types, bundled-plugin discovery, and
+GeoJSON layer ID conventions.
 
 **Instructions:**
 

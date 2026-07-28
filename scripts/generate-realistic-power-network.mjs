@@ -13,7 +13,7 @@ if (!sourceDirectory) {
 
 const outputPath =
   requestedOutputPath ??
-  "apps/geolibre-desktop/public/plugins/distribution-network/assets/boulder_13_8kv_feeder_large.geojson";
+  "apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/boulder_13_8kv_feeder_large.geojson";
 
 const ORIGIN = { longitude: -105.27, latitude: 40.0275 };
 const EARTH_RADIUS_M = 6_371_008.8;

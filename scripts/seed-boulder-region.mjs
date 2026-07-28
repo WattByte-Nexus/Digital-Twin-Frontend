@@ -6,9 +6,9 @@ import { pathToFileURL } from "node:url";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
 const DEFAULT_REGION_NAME = "Boulder Demo";
 const DEFAULT_POWER_LINE_PATH =
-  "apps/geolibre-desktop/public/plugins/distribution-network/assets/testpowerlines.geojson";
+  "apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/testpowerlines.geojson";
 const DEFAULT_TREE_PATH =
-  "apps/geolibre-desktop/public/plugins/distribution-network/assets/testtrees.geojson";
+  "apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/testtrees.geojson";
 const DEFAULT_PADDING_DEGREES = 0.001;
 const DEFAULT_CONCURRENCY = 12;
 

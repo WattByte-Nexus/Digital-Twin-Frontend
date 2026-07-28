@@ -134,15 +134,16 @@ The OSM pole model provides useful controlled vocabulary for `material`, `struct
 
 ## Current frontend compatibility
 
-The distribution plugin does not yet consume the rich topology above:
+The legacy Distribution Network visualization plugin has been removed. The
+Digital Twin Demo now owns the compact `testpowerlines.geojson` and
+`testtrees.geojson` fixtures used by its Boulder API seeder. The larger topology
+described here remains a generation and engine-testing fixture; it is not loaded
+directly by the frontend.
 
-- Bundled startup uses only the first three route coordinates and renders two conductors. ([plugin README](../../apps/geolibre-desktop/public/plugins/distribution-network/README.md#L3-L12), [`buildNetwork` startup call](../../apps/geolibre-desktop/public/plugins/distribution-network/dist/index.js#L1039-L1046))
-- Manual import uses every vertex as a pole, but the parser returns only the first usable `LineString` or first member of a `MultiLineString`; all later line Features are ignored. ([line parser](../../apps/geolibre-desktop/public/plugins/distribution-network/dist/index.js#L60-L71), [manual importer](../../apps/geolibre-desktop/public/plugins/distribution-network/dist/index.js#L648-L650))
-- It discards input asset IDs/properties, regenerates sequential IDs, fixes conductor height, renders only two lateral offsets, and does not generate sag. ([network builder](../../apps/geolibre-desktop/public/plugins/distribution-network/dist/index.js#L342-L376), [offset path](../../apps/geolibre-desktop/public/plugins/distribution-network/dist/index.js#L238-L259))
-
-Therefore, for an immediately usable fixture, make the **first Feature one long, connected 2D LineString whose vertices are precisely the intended pole locations**. Put richer pole/equipment Features after it for engine tests, knowing the current frontend will ignore them. Use the manual importer to see the complete route; bundled activation will still show only three poles until its coordinate limit is changed.
-
-For full realism, the frontend needs a small loader upgrade: retain all line and point Features, resolve `from_pole_id`/`to_pole_id`, use supplied IDs/properties, render the configured conductor count, and create sag samples between poles. Densifying the input route is not a workaround because each added coordinate currently creates a false pole.
+The public Engine asset endpoints currently preserve the WGS84 line geometry,
+power-line name, and tree species/height needed by the wildfire demo. Rich pole,
+span, equipment, conductor, and sag properties require additive Engine asset
+contracts before they can become authoritative frontend data.
 
 ## Validation checklist
 
