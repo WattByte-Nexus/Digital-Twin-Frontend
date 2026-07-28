@@ -4,6 +4,7 @@ This first-party bundled plugin connects GeoLibre to the Digital Twin Engine
 HTTP API. It provides:
 
 - published-region and exact weather selection;
+- visible map polygons for all published region bounds, with the selection highlighted;
 - clickable Engine tree assets as ignition points;
 - synthetic-wind scenario controls;
 - run submission, polling, cancellation, and recent-run recovery;

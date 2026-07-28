@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
   ApiProblem,
+  buildRegionBoundsGeoJson,
   buildRunRequest,
   buildScenarioRequest,
   createDigitalTwinClient,
@@ -79,6 +80,68 @@ describe("digital-twin-demo bundled plugin", () => {
         wind_speed: { value: 15, unit: "mph" },
         wind_direction: { bearing_degrees: 90, reference: "towards" },
         duration_hours: 4,
+      },
+    );
+  });
+
+  it("builds visible region polygons and marks the selected bounds", () => {
+    assert.deepEqual(
+      buildRegionBoundsGeoJson(
+        [
+          {
+            region_id: "golden-co",
+            name: "Golden",
+            bounds: { west: -105.4, south: 39.68, east: -105.15, north: 39.83 },
+          },
+          {
+            region_id: "boulder-co",
+            name: "Boulder",
+            bounds: {
+              west: -105.451725656711,
+              south: 39.887996931377,
+              east: -105.127274343289,
+              north: 40.133003068623,
+            },
+          },
+        ],
+        "boulder-co",
+      ),
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { region_id: "golden-co", name: "Golden", selected: false },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [-105.4, 39.68],
+                  [-105.15, 39.68],
+                  [-105.15, 39.83],
+                  [-105.4, 39.83],
+                  [-105.4, 39.68],
+                ],
+              ],
+            },
+          },
+          {
+            type: "Feature",
+            properties: { region_id: "boulder-co", name: "Boulder", selected: true },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [-105.451725656711, 39.887996931377],
+                  [-105.127274343289, 39.887996931377],
+                  [-105.127274343289, 40.133003068623],
+                  [-105.451725656711, 40.133003068623],
+                  [-105.451725656711, 39.887996931377],
+                ],
+              ],
+            },
+          },
+        ],
       },
     );
   });

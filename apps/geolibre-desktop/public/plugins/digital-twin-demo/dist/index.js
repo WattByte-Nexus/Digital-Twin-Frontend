@@ -1,6 +1,6 @@
 const PLUGIN_ID = "digital-twin-demo";
 const PLUGIN_NAME = "Digital Twin Demo";
-const PLUGIN_VERSION = "0.1.0";
+const PLUGIN_VERSION = "0.2.0";
 const PANEL_ID = "digital-twin-demo-panel";
 const API_STORAGE_KEY = "geolibre.digital-twin-demo.api-url";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
@@ -10,6 +10,9 @@ const TREE_LAYER_ID = "digital-twin-demo-tree-points";
 const POWER_LINE_LAYER_ID = "digital-twin-demo-power-lines";
 const SELECTION_SOURCE_ID = "digital-twin-demo-selection-source";
 const SELECTION_LAYER_ID = "digital-twin-demo-selection-points";
+const REGION_SOURCE_ID = "digital-twin-demo-region-bounds-source";
+const REGION_FILL_LAYER_ID = "digital-twin-demo-region-bounds-fill";
+const REGION_LINE_LAYER_ID = "digital-twin-demo-region-bounds-line";
 const TERMINAL_RUN_STATUSES = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
 
 function isRecord(value) {
@@ -231,6 +234,40 @@ function boundsFromRegion(region) {
   return { west, south, east, north };
 }
 
+export function buildRegionBoundsGeoJson(regions, selectedRegionId) {
+  if (!Array.isArray(regions)) throw new Error("Regions must be an array.");
+  return {
+    type: "FeatureCollection",
+    features: regions.map((region) => {
+      const regionId = nonEmptyString(region?.region_id, "Region");
+      const { west, south, east, north } = boundsFromRegion(region);
+      return {
+        type: "Feature",
+        properties: {
+          region_id: regionId,
+          name:
+            typeof region.name === "string" && region.name.trim()
+              ? region.name.trim()
+              : regionId,
+          selected: regionId === selectedRegionId,
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [west, south],
+              [east, south],
+              [east, north],
+              [west, north],
+              [west, south],
+            ],
+          ],
+        },
+      };
+    }),
+  };
+}
+
 export function buildScenarioRequest({
   region,
   weatherVersion,
@@ -402,6 +439,7 @@ class AssetMapController {
     this.map = app.getMap?.() ?? null;
     this.data = emptyFeatureCollection();
     this.selection = emptyFeatureCollection();
+    this.regions = emptyFeatureCollection();
     this.entryUnregister = null;
     this.stateUnsubscribe = null;
     this.bound = false;
@@ -422,6 +460,13 @@ class AssetMapController {
       if (this.map) this.map.getCanvas().style.cursor = "";
     };
     this.map?.on("styledata", this.onStyleData);
+  }
+
+  setRegions(regions, selectedRegionId) {
+    this.regions = buildRegionBoundsGeoJson(regions, selectedRegionId);
+    this.ensureLayers();
+    const source = this.map?.getSource(REGION_SOURCE_ID);
+    if (source?.setData) source.setData(this.regions);
   }
 
   setData(data, regionName) {
@@ -463,6 +508,55 @@ class AssetMapController {
     const map = this.map;
     if (!map || typeof map.isStyleLoaded === "function" && !map.isStyleLoaded()) return;
     try {
+      const regionSource = map.getSource(REGION_SOURCE_ID);
+      if (!regionSource) {
+        map.addSource(REGION_SOURCE_ID, { type: "geojson", data: this.regions });
+      } else if (regionSource.setData) {
+        regionSource.setData(this.regions);
+      }
+      if (!map.getLayer(REGION_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: REGION_FILL_LAYER_ID,
+          type: "fill",
+          source: REGION_SOURCE_ID,
+          paint: {
+            "fill-color": [
+              "case",
+              ["boolean", ["get", "selected"], false],
+              "#ff6b35",
+              "#1f8a5b",
+            ],
+            "fill-opacity": [
+              "case",
+              ["boolean", ["get", "selected"], false],
+              0.13,
+              0.04,
+            ],
+          },
+        });
+      }
+      if (!map.getLayer(REGION_LINE_LAYER_ID)) {
+        map.addLayer({
+          id: REGION_LINE_LAYER_ID,
+          type: "line",
+          source: REGION_SOURCE_ID,
+          paint: {
+            "line-color": [
+              "case",
+              ["boolean", ["get", "selected"], false],
+              "#ff6b35",
+              "#17724f",
+            ],
+            "line-width": [
+              "case",
+              ["boolean", ["get", "selected"], false],
+              3,
+              1.5,
+            ],
+            "line-dasharray": [3, 2],
+          },
+        });
+      }
       const assetSource = map.getSource(ASSET_SOURCE_ID);
       if (!assetSource) {
         map.addSource(ASSET_SOURCE_ID, { type: "geojson", data: this.data });
@@ -566,14 +660,20 @@ class AssetMapController {
       map.off("mouseenter", TREE_LAYER_ID, this.onEnter);
       map.off("mouseleave", TREE_LAYER_ID, this.onLeave);
     }
-    for (const layerId of [SELECTION_LAYER_ID, TREE_LAYER_ID, POWER_LINE_LAYER_ID]) {
+    for (const layerId of [
+      SELECTION_LAYER_ID,
+      TREE_LAYER_ID,
+      POWER_LINE_LAYER_ID,
+      REGION_LINE_LAYER_ID,
+      REGION_FILL_LAYER_ID,
+    ]) {
       try {
         if (map.getLayer(layerId)) map.removeLayer(layerId);
       } catch {
         // Best-effort plugin cleanup during style changes.
       }
     }
-    for (const sourceId of [SELECTION_SOURCE_ID, ASSET_SOURCE_ID]) {
+    for (const sourceId of [SELECTION_SOURCE_ID, ASSET_SOURCE_ID, REGION_SOURCE_ID]) {
       try {
         if (map.getSource(sourceId)) map.removeSource(sourceId);
       } catch {
@@ -647,6 +747,11 @@ class DigitalTwinDemoPanel {
     inputs.body.append(
       labelledField("Published region", this.regionSelect),
       this.regionMeta,
+      el(
+        "div",
+        "dt-hint",
+        "Dashed polygons show every published region; the selected bounds are orange.",
+      ),
       labelledField("Exact weather version", this.weatherSelect),
       this.sourceStatus,
       el("div", "dt-subhead", "Weather map layers"),
@@ -798,10 +903,12 @@ class DigitalTwinDemoPanel {
       this.regionSelect.append(option);
     }
     this.regionSelect.disabled = this.regions.length === 0;
+    this.assetMap.setRegions(this.regions, this.regionSelect.value);
   }
 
   async loadRegion(regionId) {
     if (!this.client || !regionId) return;
+    this.assetMap.setRegions(this.regions, regionId);
     this.loadAbort?.abort();
     const abort = new AbortController();
     this.loadAbort = abort;
