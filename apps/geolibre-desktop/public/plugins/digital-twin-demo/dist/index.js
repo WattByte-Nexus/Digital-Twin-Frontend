@@ -1,6 +1,6 @@
 const PLUGIN_ID = "digital-twin-demo";
 const PLUGIN_NAME = "Digital Twin Demo";
-const PLUGIN_VERSION = "0.2.1";
+const PLUGIN_VERSION = "0.3.0";
 const PANEL_ID = "digital-twin-demo-panel";
 const API_STORAGE_KEY = "geolibre.digital-twin-demo.api-url";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
@@ -8,6 +8,11 @@ const ASSET_ENTRY_ID = "digital-twin-demo-assets";
 const ASSET_SOURCE_ID = "digital-twin-demo-assets-source";
 const TREE_LAYER_ID = "digital-twin-demo-tree-points";
 const POWER_LINE_LAYER_ID = "digital-twin-demo-power-lines";
+const POWER_LINE_POLE_LAYER_ID = "digital-twin-demo-power-line-poles";
+const POWER_LINE_CONDUCTOR_LAYER_ID = "digital-twin-demo-power-line-conductors";
+const POWER_LINE_MODEL_PATH = "assets/13.8kv_power_pole.glb";
+const CONDUCTOR_HEIGHT_METERS = 8.2;
+const CONDUCTOR_OFFSETS_METERS = [-1.5, 1.5];
 const SELECTION_SOURCE_ID = "digital-twin-demo-selection-source";
 const SELECTION_LAYER_ID = "digital-twin-demo-selection-points";
 const REGION_SOURCE_ID = "digital-twin-demo-region-bounds-source";
@@ -42,6 +47,99 @@ function asFeatureCollection(value, label = "GeoJSON") {
     throw new Error(`${label} must be a GeoJSON FeatureCollection.`);
   }
   return value;
+}
+
+function validCoordinate(coordinate) {
+  const longitude = Number(coordinate?.[0]);
+  const latitude = Number(coordinate?.[1]);
+  return Number.isFinite(longitude) &&
+    Number.isFinite(latitude) &&
+    Math.abs(longitude) <= 180 &&
+    Math.abs(latitude) <= 90
+    ? [longitude, latitude]
+    : null;
+}
+
+function powerLinePaths(collection) {
+  const paths = [];
+  for (const feature of collection.features) {
+    if (feature?.properties?.kind !== "power_line") continue;
+    const geometry = feature?.geometry;
+    const candidates =
+      geometry?.type === "LineString"
+        ? [geometry.coordinates]
+        : geometry?.type === "MultiLineString"
+          ? geometry.coordinates
+          : [];
+    for (const candidate of candidates) {
+      const path = candidate.map(validCoordinate).filter(Boolean);
+      if (path.length >= 2) paths.push(path);
+    }
+  }
+  return paths;
+}
+
+function lineBearing(coordinates, index) {
+  const previous = coordinates[Math.max(0, index - 1)];
+  const next = coordinates[Math.min(coordinates.length - 1, index + 1)];
+  const averageLatitude = (previous[1] + next[1]) / 2;
+  const metersPerLongitude = Math.max(
+    Math.abs(111_320 * Math.cos((averageLatitude * Math.PI) / 180)),
+    1,
+  );
+  const dx = (next[0] - previous[0]) * metersPerLongitude;
+  const dy = (next[1] - previous[1]) * 110_540;
+  return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+}
+
+function offsetPath(coordinates, offsetMeters, heightMeters) {
+  const averageLatitude =
+    coordinates.reduce((sum, coordinate) => sum + coordinate[1], 0) / coordinates.length;
+  const metersPerLongitude = Math.max(
+    Math.abs(111_320 * Math.cos((averageLatitude * Math.PI) / 180)),
+    1,
+  );
+  const metersPerLatitude = 110_540;
+  return coordinates.map(([longitude, latitude], index) => {
+    const previous = coordinates[Math.max(0, index - 1)];
+    const next = coordinates[Math.min(coordinates.length - 1, index + 1)];
+    const dx = (next[0] - previous[0]) * metersPerLongitude;
+    const dy = (next[1] - previous[1]) * metersPerLatitude;
+    const length = Math.hypot(dx, dy) || 1;
+    return [
+      longitude + ((-dy / length) * offsetMeters) / metersPerLongitude,
+      latitude + ((dx / length) * offsetMeters) / metersPerLatitude,
+      heightMeters,
+    ];
+  });
+}
+
+export function buildPowerLineNetwork(collection) {
+  const paths = powerLinePaths(asFeatureCollection(collection, "Engine assets"));
+  const polesByCoordinate = new Map();
+  paths.forEach((path) => {
+    path.forEach(([longitude, latitude], index) => {
+      const key = `${longitude.toFixed(7)},${latitude.toFixed(7)}`;
+      if (polesByCoordinate.has(key)) return;
+      const bearing = lineBearing(path, index);
+      polesByCoordinate.set(key, {
+        id: `pole-${polesByCoordinate.size + 1}`,
+        kind: "pole",
+        position: [longitude, latitude, 0],
+        bearing,
+        // The supplied pole model's crossarm lies on local Z once stood upright.
+        modelYaw: (90 - bearing + 360) % 360,
+      });
+    });
+  });
+  const conductors = paths.flatMap((path, pathIndex) =>
+    CONDUCTOR_OFFSETS_METERS.map((offset, sideIndex) => ({
+      id: `line-${pathIndex + 1}-${sideIndex === 0 ? "left" : "right"}`,
+      kind: "conductor",
+      path: offsetPath(path, offset, CONDUCTOR_HEIGHT_METERS),
+    })),
+  );
+  return { poles: [...polesByCoordinate.values()], conductors };
 }
 
 export function selectDemoRegions(regions) {
@@ -456,6 +554,10 @@ class AssetMapController {
     this.entryUnregister = null;
     this.stateUnsubscribe = null;
     this.bound = false;
+    this.destroyed = false;
+    this.deck = null;
+    this.overlay = null;
+    this.previousProjection = null;
     this.layerState = { visible: true, opacity: 1 };
     this.onStyleData = () => this.ensureLayers();
     this.onClick = (event) => {
@@ -473,6 +575,83 @@ class AssetMapController {
       if (this.map) this.map.getCanvas().style.cursor = "";
     };
     this.map?.on("styledata", this.onStyleData);
+    void this.initializePowerLineOverlay();
+  }
+
+  async initializePowerLineOverlay() {
+    if (!this.app.getDeckGL || !this.app.addMapControl) return;
+    try {
+      const deck = await this.app.getDeckGL();
+      if (this.destroyed) return;
+      const overlay = new deck.mapbox.MapboxOverlay({
+        interleaved: true,
+        pickingRadius: 8,
+        layers: [],
+      });
+      this.previousProjection = this.app.getMapProjection?.() ?? null;
+      this.app.setMapProjection?.("mercator");
+      if (!this.app.addMapControl(overlay)) {
+        if (this.previousProjection) this.app.setMapProjection?.(this.previousProjection);
+        this.previousProjection = null;
+        return;
+      }
+      this.deck = deck;
+      this.overlay = overlay;
+      try {
+        if (this.map?.getLayer(POWER_LINE_LAYER_ID)) {
+          this.map.removeLayer(POWER_LINE_LAYER_ID);
+        }
+      } catch {
+        // A style transition can race overlay startup; styledata will retry.
+      }
+      this.renderPowerLineObjects();
+    } catch (error) {
+      console.error("[Digital Twin Demo] Could not initialize 3D power-line rendering.", error);
+    }
+  }
+
+  poleModelUrl() {
+    return (
+      this.app.resolvePluginAssetUrl?.(PLUGIN_ID, POWER_LINE_MODEL_PATH) ??
+      new URL(`plugins/${PLUGIN_ID}/${POWER_LINE_MODEL_PATH}`, document.baseURI).href
+    );
+  }
+
+  renderPowerLineObjects() {
+    if (!this.overlay || !this.deck) return;
+    const network = buildPowerLineNetwork(this.data);
+    const visible = this.layerState.visible;
+    const opacity = this.layerState.opacity;
+    this.overlay.setProps({
+      layers: [
+        new this.deck.layers.PathLayer({
+          id: POWER_LINE_CONDUCTOR_LAYER_ID,
+          data: network.conductors,
+          getPath: (conductor) => conductor.path,
+          getColor: [15, 15, 15, Math.round(255 * opacity)],
+          getWidth: 2,
+          widthUnits: "pixels",
+          widthMinPixels: 1,
+          visible,
+          capRounded: true,
+          jointRounded: true,
+        }),
+        new this.deck.meshLayers.ScenegraphLayer({
+          id: POWER_LINE_POLE_LAYER_ID,
+          data: network.poles,
+          scenegraph: this.poleModelUrl(),
+          _lighting: "pbr",
+          visible,
+          opacity,
+          sizeScale: 1,
+          sizeMinPixels: 0,
+          sizeMaxPixels: Number.MAX_SAFE_INTEGER,
+          getPosition: (pole) => pole.position,
+          getOrientation: (pole) => [0, pole.modelYaw, 90],
+          getScale: [1, 1, 1],
+        }),
+      ],
+    });
   }
 
   setRegions(regions, selectedRegionId) {
@@ -493,12 +672,20 @@ class AssetMapController {
         name: `Engine assets · ${regionName}`,
         type: "geojson",
         geojson: this.data,
-        nativeLayerIds: [POWER_LINE_LAYER_ID, TREE_LAYER_ID],
+        nativeLayerIds: [
+          POWER_LINE_LAYER_ID,
+          POWER_LINE_CONDUCTOR_LAYER_ID,
+          POWER_LINE_POLE_LAYER_ID,
+          TREE_LAYER_ID,
+        ],
         sourceIds: [ASSET_SOURCE_ID],
         opacity: 1,
         metadata: {
           provider: "Digital Twin Engine",
           description: "Canonical region tree and power-line assets. Click a tree to select it.",
+          customLayerType: "digital-twin-assets",
+          externalDeckLayer: true,
+          identifiable: false,
         },
       }) ?? null;
     this.stateUnsubscribe?.();
@@ -508,6 +695,7 @@ class AssetMapController {
         this.layerState = state;
         this.applyLayerState();
       }) ?? null;
+    this.renderPowerLineObjects();
   }
 
   setSelection(features) {
@@ -570,13 +758,16 @@ class AssetMapController {
           },
         });
       }
+      if (this.overlay && map.getLayer(POWER_LINE_LAYER_ID)) {
+        map.removeLayer(POWER_LINE_LAYER_ID);
+      }
       const assetSource = map.getSource(ASSET_SOURCE_ID);
       if (!assetSource) {
         map.addSource(ASSET_SOURCE_ID, { type: "geojson", data: this.data });
       } else if (assetSource.setData) {
         assetSource.setData(this.data);
       }
-      if (!map.getLayer(POWER_LINE_LAYER_ID)) {
+      if (!this.overlay && !map.getLayer(POWER_LINE_LAYER_ID)) {
         map.addLayer({
           id: POWER_LINE_LAYER_ID,
           type: "line",
@@ -658,13 +849,20 @@ class AssetMapController {
         this.layerState.opacity,
       );
     }
+    this.renderPowerLineObjects();
   }
 
   destroy() {
+    this.destroyed = true;
     this.stateUnsubscribe?.();
     this.entryUnregister?.();
     this.stateUnsubscribe = null;
     this.entryUnregister = null;
+    if (this.overlay) this.app.removeMapControl?.(this.overlay);
+    this.overlay = null;
+    this.deck = null;
+    if (this.previousProjection) this.app.setMapProjection?.(this.previousProjection);
+    this.previousProjection = null;
     const map = this.map;
     if (!map) return;
     map.off("styledata", this.onStyleData);

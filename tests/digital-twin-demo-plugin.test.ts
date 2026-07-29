@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
   ApiProblem,
+  buildPowerLineNetwork,
   buildRegionBoundsGeoJson,
   buildRunRequest,
   buildScenarioRequest,
@@ -44,6 +45,59 @@ const treeFeature = {
 };
 
 describe("digital-twin-demo bundled plugin", () => {
+  it("places one pole model at each unique loaded power-line vertex and connects every span", () => {
+    const network = buildPowerLineNetwork({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { kind: "power_line", asset_id: "span-1" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [-105.2, 40],
+              [-105.1995, 40.0005],
+            ],
+          },
+        },
+        {
+          type: "Feature",
+          properties: { kind: "power_line", asset_id: "span-2" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [-105.1995, 40.0005],
+              [-105.199, 40.001],
+            ],
+          },
+        },
+        {
+          type: "Feature",
+          properties: { kind: "tree", asset_id: "tree-1" },
+          geometry: { type: "Point", coordinates: [-105.198, 40.002] },
+        },
+      ],
+    });
+
+    assert.equal(network.poles.length, 3);
+    assert.deepEqual(
+      network.poles.map((pole: { position: number[] }) => pole.position),
+      [
+        [-105.2, 40, 0],
+        [-105.1995, 40.0005, 0],
+        [-105.199, 40.001, 0],
+      ],
+    );
+    assert.equal(network.conductors.length, 4);
+    assert.ok(
+      network.conductors.every(
+        (conductor: { path: number[][] }) =>
+          conductor.path.length === 2 &&
+          conductor.path.every((coordinate) => coordinate[2] === 8.2),
+      ),
+    );
+  });
+
   it("normalizes the configured API origin without losing a path prefix", () => {
     assert.equal(normalizeApiBaseUrl("http://127.0.0.1:8000/"), "http://127.0.0.1:8000");
     assert.equal(
@@ -294,10 +348,12 @@ describe("digital-twin-demo bundled plugin", () => {
 
   it("declares a matching bundled active-by-default plugin manifest", async () => {
     const manifest = JSON.parse(await readFile(new URL("plugin.json", pluginRoot), "utf8"));
+    const poleModel = await readFile(new URL("assets/13.8kv_power_pole.glb", pluginRoot));
     const { default: plugin } = await import(
       "../apps/geolibre-desktop/public/plugins/digital-twin-demo/dist/index.js"
     );
 
+    assert.ok(poleModel.byteLength > 0);
     assert.equal(manifest.activeByDefault, true);
     assert.equal(manifest.style, "dist/style.css");
     assert.equal(plugin.id, manifest.id);

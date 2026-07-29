@@ -1,7 +1,7 @@
 {
   "id": "digital-twin-demo",
   "name": "Digital Twin Demo",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "entry": "dist/index.js",
   "style": "dist/style.css",
   "description": "Runs Digital Twin Engine wildfire scenarios from selected tree assets and renders their inputs and results.",
