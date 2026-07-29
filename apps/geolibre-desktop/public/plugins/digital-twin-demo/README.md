@@ -5,9 +5,11 @@ HTTP API. It provides:
 
 - curated Golden and seeded Boulder region selection for wildfire inputs;
 - visible map polygons for those demo-region bounds, with the selection highlighted;
-- clickable Engine tree assets as ignition points;
+- freely placeable ignition points anywhere on the map;
 - synthetic-wind scenario controls;
 - run submission, durable live SSE progress, cancellation, and recent-run recovery;
+- a GeoLibre time-slider-style map dock for scrubbing, looping, and replaying
+  every durable positive tick from completed simulation runs;
 - browser-ready weather and Earth Engine layer discovery across every curated
   coverage, independent of the selected wildfire region; and
 - completed burn-footprint GeoJSON rendering.
@@ -18,6 +20,18 @@ stream with its last SSE event ID, the panel replaces local counts after a
 `stream_reset`, and terminal events close the browser connection before the
 authoritative run and result resources are refreshed. Status polling remains a
 compatibility fallback when the event stream cannot be opened.
+
+Completed runs expose a **Replay** action in Prior runs. It opens the replay
+dock at the bottom of the map and loads immutable
+`GET /api/v1/simulation-runs/{run_id}/ticks/{tick}/result.geojson` artifacts as
+the user scrubs or plays the timeline. Frames are cached after their first load,
+with a bounded recent-frame window, and superseded requests are cancelled so
+fast scrubbing cannot paint an older tick over the current one. Dragging the
+scrubber loads a throttled stream of the latest frames instead of requesting
+every intermediate tick, then loads the final position immediately on release.
+Tick `0` remains the Engine's private initial-state lineage entry and is not
+offered because the public artifact endpoint accepts positive compute ticks
+only.
 
 The default API URL is `http://127.0.0.1:8000`. A deployment can set
 `window.__DIGITAL_TWIN_API_URL__` before GeoLibre starts, or the user can edit

@@ -1,6 +1,6 @@
 const PLUGIN_ID = "digital-twin-demo";
 const PLUGIN_NAME = "Digital Twin Demo";
-const PLUGIN_VERSION = "0.3.0";
+const PLUGIN_VERSION = "0.4.0";
 const PANEL_ID = "digital-twin-demo-panel";
 const API_STORAGE_KEY = "geolibre.digital-twin-demo.api-url";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
@@ -20,6 +20,7 @@ const POWER_POLE_MODEL_SCALE = POWER_POLE_HEIGHT_AGL_METERS / POWER_POLE_MODEL_H
 const CONDUCTOR_HEIGHT_METERS = 9.5;
 const CONDUCTOR_OFFSETS_METERS = [-1.5, 1.5];
 const SELECTION_SOURCE_ID = "digital-twin-demo-selection-source";
+const SELECTION_HALO_LAYER_ID = "digital-twin-demo-selection-halo";
 const SELECTION_LAYER_ID = "digital-twin-demo-selection-points";
 const REGION_SOURCE_ID = "digital-twin-demo-region-bounds-source";
 const REGION_FILL_LAYER_ID = "digital-twin-demo-region-bounds-fill";
@@ -574,26 +575,41 @@ export function createRunArtifactCoordinator(client, callbacks = {}) {
   if (!client || typeof client.getRunArtifact !== "function") {
     throw new Error("A simulation artifact client is required.");
   }
+  const liveFrameIntervalMs = Number.isFinite(callbacks.liveFrameIntervalMs)
+    ? Math.max(0, Math.min(1000, callbacks.liveFrameIntervalMs))
+    : 120;
+  const now =
+    typeof callbacks.now === "function"
+      ? callbacks.now
+      : () => globalThis.performance?.now?.() ?? Date.now();
+  const wait =
+    typeof callbacks.wait === "function"
+      ? callbacks.wait
+      : (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
   let generation = 0;
-  let activeAbort = null;
+  const activeAborts = new Set();
   let activePromise = null;
+  let applyTail = Promise.resolve(null);
   let activeRunId = null;
   let latestRequestedTick = 0;
   let latestRequestedUrl = null;
   let latestAppliedTick = 0;
+  let lastAppliedAt = null;
   const cache = new Map();
 
   const begin = (runId) => {
     const normalizedRunId = nonEmptyString(runId, "Run ID");
     if (activeRunId === normalizedRunId) return;
     generation += 1;
-    activeAbort?.abort();
-    activeAbort = null;
+    for (const abort of activeAborts) abort.abort();
+    activeAborts.clear();
     activePromise = null;
+    applyTail = Promise.resolve(null);
     activeRunId = normalizedRunId;
     latestRequestedTick = 0;
     latestRequestedUrl = null;
     latestAppliedTick = 0;
+    lastAppliedAt = null;
   };
 
   const update = (progress) => {
@@ -615,26 +631,49 @@ export function createRunArtifactCoordinator(client, callbacks = {}) {
 
     latestRequestedTick = artifact.tick;
     latestRequestedUrl = artifact.artifactUrl;
-    generation += 1;
     const requestGeneration = generation;
-    activeAbort?.abort();
     const abort = new AbortController();
-    activeAbort = abort;
+    activeAborts.add(abort);
     const cached = cache.get(artifact.artifactUrl);
-    activePromise = (async () => {
+    const fetchPromise = (async () => {
       try {
         const response = await client.getRunArtifact(artifact.artifactUrl, {
           etag: cached?.etag,
           signal: abort.signal,
         });
-        if (
-          abort.signal.aborted ||
-          requestGeneration !== generation ||
-          activeRunId !== artifact.runId ||
-          artifact.tick < latestRequestedTick
-        ) {
-          return null;
+        return { response };
+      } catch (error) {
+        return { error };
+      } finally {
+        activeAborts.delete(abort);
+      }
+    })();
+    activePromise = applyTail.then(async () => {
+      const outcome = await fetchPromise;
+      if (
+        abort.signal.aborted ||
+        requestGeneration !== generation ||
+        activeRunId !== artifact.runId
+      ) {
+        return null;
+      }
+      if ("error" in outcome) {
+        if (outcome.error?.name !== "AbortError") callbacks.onError?.(outcome.error, artifact);
+        return null;
+      }
+      try {
+        if (lastAppliedAt !== null && liveFrameIntervalMs > 0) {
+          const remaining = liveFrameIntervalMs - Math.max(0, now() - lastAppliedAt);
+          if (remaining > 0) await wait(remaining);
+          if (
+            abort.signal.aborted ||
+            requestGeneration !== generation ||
+            activeRunId !== artifact.runId
+          ) {
+            return null;
+          }
         }
+        const response = outcome.response;
         const data = response.notModified ? cached?.collection : response.data;
         if (!data) throw new Error("Engine returned 304 without a cached simulation artifact.");
         const collection = asFeatureCollection(data, `Simulation tick ${artifact.tick}`);
@@ -651,31 +690,283 @@ export function createRunArtifactCoordinator(client, callbacks = {}) {
           collection,
         };
         callbacks.onArtifact?.(applied);
+        lastAppliedAt = now();
         return applied;
       } catch (error) {
-        if (abort.signal.aborted || error?.name === "AbortError") return null;
         callbacks.onError?.(error, artifact);
         return null;
-      } finally {
-        if (activeAbort === abort) activeAbort = null;
       }
-    })();
+    });
+    applyTail = activePromise.catch(() => null);
     return activePromise;
   };
 
+  const updateRun = (run) =>
+    Promise.all(
+      buildSimulationReplayFrames(run).map((frame) =>
+        update({
+          run_id: frame.runId,
+          completed_ticks: frame.tick,
+          tick: frame.tick,
+          artifact_url: frame.artifactUrl,
+        }),
+      ),
+    );
+
+  const flush = () => applyTail;
+
   const stop = () => {
     generation += 1;
-    activeAbort?.abort();
-    activeAbort = null;
+    for (const abort of activeAborts) abort.abort();
+    activeAborts.clear();
     activePromise = null;
+    applyTail = Promise.resolve(null);
+    lastAppliedAt = null;
   };
 
   return {
     begin,
     update,
+    updateRun,
+    flush,
     stop,
     get latestAppliedTick() {
       return latestAppliedTick;
+    },
+  };
+}
+
+export function buildSimulationReplayFrames(run) {
+  if (!isRecord(run)) throw new Error("A completed simulation run is required.");
+  const runId = nonEmptyString(run.run_id, "Run ID");
+  const refs = Array.isArray(run.tick_refs) ? run.tick_refs : [];
+  const ticks = new Set();
+  for (const ref of refs) {
+    if (!isRecord(ref) || !Number.isInteger(ref.tick) || ref.tick < 1) continue;
+    ticks.add(ref.tick);
+  }
+  const completedTicks = Number(run.completed_ticks);
+  // Terminal REST runs carry the complete authoritative tick_refs lineage. Its
+  // tick 0 is the initial state and has no public artifact route (the route is
+  // explicitly positive-only), so replay only the positive references. Live
+  // progress does not expose internal refs and instead supplies a count.
+  if (refs.length === 0 && Number.isInteger(completedTicks) && completedTicks > 0) {
+    for (let tick = 1; tick <= completedTicks; tick += 1) ticks.add(tick);
+    if (Number.isInteger(run.tick) && run.tick > 0) ticks.add(run.tick);
+  }
+  const encodedRunId = encodeURIComponent(runId);
+  return [...ticks]
+    .sort((left, right) => left - right)
+    .map((tick) => ({
+      runId,
+      tick,
+      artifactUrl: `/api/v1/simulation-runs/${encodedRunId}/ticks/${tick}/result.geojson`,
+    }));
+}
+
+export const REPLAY_CACHE_MAX_FRAMES = 48;
+export const REPLAY_PREFETCH_RADIUS = 12;
+export const REPLAY_PREFETCH_CONCURRENCY = 4;
+
+export function createSimulationReplayController(client, callbacks = {}) {
+  if (!client || typeof client.getRunArtifact !== "function") {
+    throw new Error("A simulation replay artifact client is required.");
+  }
+  const prefetchRadius = Number.isFinite(callbacks.prefetchRadius)
+    ? Math.max(0, Math.min(REPLAY_CACHE_MAX_FRAMES - 1, Math.round(callbacks.prefetchRadius)))
+    : REPLAY_PREFETCH_RADIUS;
+  const prefetchConcurrency = Number.isFinite(callbacks.prefetchConcurrency)
+    ? Math.max(1, Math.min(8, Math.round(callbacks.prefetchConcurrency)))
+    : REPLAY_PREFETCH_CONCURRENCY;
+  let runGeneration = 0;
+  let selectionGeneration = 0;
+  let runId = null;
+  let frames = [];
+  let frameByTick = new Map();
+  let frameIndexByTick = new Map();
+  let currentTick = null;
+  const cache = new Map();
+  const activeRequests = new Map();
+
+  const getCachedFrame = (artifactUrl) => {
+    const cached = cache.get(artifactUrl);
+    if (!cached) return null;
+    cache.delete(artifactUrl);
+    cache.set(artifactUrl, cached);
+    return cached;
+  };
+
+  const rememberFrame = (artifactUrl, value) => {
+    cache.delete(artifactUrl);
+    cache.set(artifactUrl, value);
+    while (cache.size > REPLAY_CACHE_MAX_FRAMES) {
+      cache.delete(cache.keys().next().value);
+    }
+  };
+
+  const stopRequests = () => {
+    runGeneration += 1;
+    selectionGeneration += 1;
+    for (const request of activeRequests.values()) request.abort.abort();
+    activeRequests.clear();
+  };
+
+  const setRun = (run) => {
+    stopRequests();
+    const nextFrames = buildSimulationReplayFrames(run);
+    const nextRunId = nextFrames[0]?.runId ?? nonEmptyString(run.run_id, "Run ID");
+    if (nextRunId !== runId) cache.clear();
+    frames = nextFrames;
+    frameByTick = new Map(frames.map((frame) => [frame.tick, frame]));
+    frameIndexByTick = new Map(frames.map((frame, index) => [frame.tick, index]));
+    runId = nextRunId;
+    currentTick = null;
+    callbacks.onRunChange?.({ runId, frames: [...frames] });
+    return [...frames];
+  };
+
+  const frameForTick = (tick) => {
+    const frame = frameByTick.get(tick);
+    if (!frame || frame.runId !== runId) {
+      throw new Error(`Simulation tick ${tick} is not available for replay.`);
+    }
+    return frame;
+  };
+
+  const loadFrame = (frame) => {
+    const cached = getCachedFrame(frame.artifactUrl);
+    if (cached) return Promise.resolve({ ...frame, ...cached });
+    const existing = activeRequests.get(frame.artifactUrl);
+    if (existing) return existing.promise;
+
+    const requestRunGeneration = runGeneration;
+    const abort = new AbortController();
+    const promise = (async () => {
+      try {
+        const response = await client.getRunArtifact(frame.artifactUrl, {
+          signal: abort.signal,
+        });
+        if (
+          abort.signal.aborted ||
+          requestRunGeneration !== runGeneration ||
+          frame.runId !== runId
+        ) {
+          return null;
+        }
+        const data = response.notModified
+          ? getCachedFrame(frame.artifactUrl)?.collection
+          : response.data;
+        if (!data) throw new Error("Engine returned an empty simulation replay artifact.");
+        const collection = asFeatureCollection(data, `Simulation replay tick ${frame.tick}`);
+        const cachedFrame = {
+          collection,
+          etag: response.etag ?? null,
+          url: response.url ?? client.resolveUrl?.(frame.artifactUrl) ?? frame.artifactUrl,
+        };
+        rememberFrame(frame.artifactUrl, cachedFrame);
+        return { ...frame, ...cachedFrame };
+      } finally {
+        const active = activeRequests.get(frame.artifactUrl);
+        if (active?.abort === abort) activeRequests.delete(frame.artifactUrl);
+      }
+    })();
+    activeRequests.set(frame.artifactUrl, { abort, promise });
+    return promise;
+  };
+
+  const prefetchTick = async (tick) => {
+    if (prefetchRadius === 0 || frames.length === 0) return [];
+    const centerIndex = frameIndexByTick.get(tick);
+    if (centerIndex === undefined) return [];
+    const requestRunGeneration = runGeneration;
+    const targets = [frames[centerIndex]];
+    for (let distance = 1; distance <= prefetchRadius; distance += 1) {
+      if (frames[centerIndex - distance]) targets.push(frames[centerIndex - distance]);
+      if (frames[centerIndex + distance]) targets.push(frames[centerIndex + distance]);
+    }
+    let cursor = 0;
+    const loaded = [];
+    const worker = async () => {
+      while (cursor < targets.length && requestRunGeneration === runGeneration) {
+        const frame = targets[cursor];
+        cursor += 1;
+        try {
+          const result = await loadFrame(frame);
+          if (result) loaded.push(result);
+        } catch (error) {
+          if (error?.name !== "AbortError") callbacks.onPrefetchError?.(error, frame);
+        }
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(prefetchConcurrency, targets.length) },
+        () => worker(),
+      ),
+    );
+    return loaded;
+  };
+
+  const primeFrame = (tick, collection, { etag = null, url = null } = {}) => {
+    const frame = frameForTick(tick);
+    const cachedFrame = {
+      collection: asFeatureCollection(collection, `Simulation replay tick ${frame.tick}`),
+      etag,
+      url: url ?? client.resolveUrl?.(frame.artifactUrl) ?? frame.artifactUrl,
+    };
+    rememberFrame(frame.artifactUrl, cachedFrame);
+    return { ...frame, ...cachedFrame };
+  };
+
+  const showTick = async (tick) => {
+    const frame = frameForTick(tick);
+    const requestSelectionGeneration = ++selectionGeneration;
+    const cached = getCachedFrame(frame.artifactUrl);
+    if (!cached) callbacks.onLoading?.(frame);
+    try {
+      const applied = cached ? { ...frame, ...cached } : await loadFrame(frame);
+      if (
+        !applied ||
+        requestSelectionGeneration !== selectionGeneration ||
+        frame.runId !== runId
+      ) {
+        return null;
+      }
+      if (currentTick !== frame.tick) {
+        currentTick = frame.tick;
+        callbacks.onFrame?.(applied);
+      }
+      void prefetchTick(frame.tick);
+      return applied;
+    } catch (error) {
+      if (error?.name === "AbortError") return null;
+      callbacks.onError?.(error, frame);
+      throw error;
+    }
+  };
+
+  const destroy = () => {
+    stopRequests();
+    frames = [];
+    frameByTick = new Map();
+    frameIndexByTick = new Map();
+    runId = null;
+    currentTick = null;
+    cache.clear();
+  };
+
+  return {
+    setRun,
+    showTick,
+    prefetchTick,
+    primeFrame,
+    stop: stopRequests,
+    destroy,
+    get frames() {
+      return [...frames];
+    },
+    get currentTick() {
+      return currentTick;
     },
   };
 }
@@ -765,50 +1056,59 @@ export function buildScenarioRequest({
   };
 }
 
-function treeCoordinates(feature) {
+function ignitionPointCoordinates(feature) {
   if (!isRecord(feature) || !isRecord(feature.geometry) || feature.geometry.type !== "Point") {
-    throw new Error("Every ignition tree must be a GeoJSON point.");
-  }
-  if (!isRecord(feature.properties) || feature.properties.kind !== "tree") {
-    throw new Error("Only Engine tree assets can be ignition points.");
+    throw new Error("Every ignition point must be a GeoJSON point.");
   }
   const coordinates = feature.geometry.coordinates;
   if (!Array.isArray(coordinates) || coordinates.length < 2) {
-    throw new Error("Every ignition tree must include longitude and latitude.");
+    throw new Error("Every ignition point must include longitude and latitude.");
   }
-  const longitude = finiteNumber(coordinates[0], "Tree longitude");
-  const latitude = finiteNumber(coordinates[1], "Tree latitude");
+  const longitude = finiteNumber(coordinates[0], "Ignition longitude");
+  const latitude = finiteNumber(coordinates[1], "Ignition latitude");
   if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
-    throw new Error("Ignition tree coordinates must be valid WGS84.");
+    throw new Error("Ignition point coordinates must be valid WGS84.");
   }
   return [longitude, latitude];
 }
 
 function treeAssetId(feature) {
-  return nonEmptyString(feature?.properties?.asset_id, "Tree asset ID");
+  return nonEmptyString(feature?.properties?.asset_id, "Ignition point ID");
+}
+
+export function buildIgnitionPointFeature(coordinates, id = makeId("ignition")) {
+  const feature = {
+    type: "Feature",
+    geometry: { type: "Point", coordinates },
+    properties: { kind: "ignition", asset_id: id },
+  };
+  ignitionPointCoordinates(feature);
+  return feature;
 }
 
 export function buildRunRequest(scenarioId, selectedTrees) {
   if (!Array.isArray(selectedTrees) || selectedTrees.length === 0) {
-    throw new Error("Select at least one tree ignition point.");
+    throw new Error("Select at least one ignition point.");
   }
-  if (selectedTrees.length > 100) throw new Error("Select no more than 100 tree ignition points.");
+  if (selectedTrees.length > 100) throw new Error("Select no more than 100 ignition points.");
   return {
     scenario_id: nonEmptyString(scenarioId, "Scenario"),
     ignition_points: selectedTrees.map((feature) => ({
       type: "Point",
-      coordinates: treeCoordinates(feature),
+      coordinates: ignitionPointCoordinates(feature),
     })),
   };
 }
 
 export function selectedTreeSummary(feature) {
-  const [longitude, latitude] = treeCoordinates(feature);
-  const properties = feature.properties;
+  const [longitude, latitude] = ignitionPointCoordinates(feature);
+  const properties = isRecord(feature.properties) ? feature.properties : {};
   const species =
     typeof properties.species === "string" && properties.species.trim()
       ? properties.species.trim()
-      : "Tree";
+      : properties.kind === "tree"
+        ? "Tree"
+        : "Ignition point";
   const height = Number(properties.height_m);
   return {
     assetId: treeAssetId(feature),
@@ -855,58 +1155,83 @@ function labelledControl(label, control, className = "") {
 }
 
 function createCompassControl(input) {
-  const bearings = [
-    { label: "N", value: 0 },
-    { label: "NE", value: 45 },
-    { label: "E", value: 90 },
-    { label: "SE", value: 135 },
-    { label: "S", value: 180 },
-    { label: "SW", value: 225 },
-    { label: "W", value: 270 },
-    { label: "NW", value: 315 },
-  ];
   const compass = el("div", "dt-compass");
-  compass.setAttribute("role", "radiogroup");
+  compass.setAttribute("role", "slider");
+  compass.setAttribute("aria-valuemin", "0");
+  compass.setAttribute("aria-valuemax", "359");
+  compass.setAttribute("aria-orientation", "horizontal");
+  compass.tabIndex = 0;
+  for (const [label, className] of [
+    ["N", "dt-compass-n"],
+    ["E", "dt-compass-e"],
+    ["S", "dt-compass-s"],
+    ["W", "dt-compass-w"],
+  ]) {
+    compass.append(el("span", `dt-compass-cardinal ${className}`, label));
+  }
+  const needle = el("img", "dt-compass-needle");
+  needle.src = "/plugins/digital-twin-demo/assets/navigation-2.svg";
+  needle.alt = "";
+  needle.draggable = false;
   const readout = el("output", "dt-compass-readout");
-  const buttons = bearings.map(({ label, value }) => {
-    const direction = button(label, `dt-compass-point dt-compass-${label.toLowerCase()}`);
-    direction.dataset.bearing = String(value);
-    direction.setAttribute("role", "radio");
-    direction.setAttribute("aria-label", `${label}, ${value} degrees`);
-    direction.addEventListener("click", () => {
-      input.value = String(value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      direction.focus();
-    });
-    compass.append(direction);
-    return direction;
-  });
-  compass.append(readout);
+  compass.append(needle, readout);
 
   const sync = () => {
     const rawValue = Number(input.value);
     const value = Number.isFinite(rawValue) ? ((rawValue % 360) + 360) % 360 : 0;
-    const selectedIndex = Math.round(value / 45) % bearings.length;
-    buttons.forEach((direction, index) => {
-      const selected = index === selectedIndex;
-      direction.setAttribute("aria-checked", String(selected));
-      direction.tabIndex = selected ? 0 : -1;
-    });
-    readout.value = `${Math.round(value)}° ${bearings[selectedIndex].label}`;
+    const rounded = Math.round(value) % 360;
+    const label = bearingLabel(rounded);
+    needle.style.transform = `rotate(${rounded}deg)`;
+    readout.value = `${rounded}° · ${label}`;
+    compass.setAttribute("aria-valuenow", String(rounded));
+    compass.setAttribute("aria-valuetext", `${rounded} degrees, ${label}`);
   };
+  const setBearingFromPointer = (event) => {
+    const bounds = compass.getBoundingClientRect();
+    const dx = event.clientX - (bounds.left + bounds.width / 2);
+    const dy = event.clientY - (bounds.top + bounds.height / 2);
+    const bearing = (Math.atan2(dx, -dy) * 180) / Math.PI;
+    input.value = String(Math.round((bearing + 360) % 360));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  let dragging = false;
+  compass.addEventListener("pointerdown", (event) => {
+    if (input.disabled) return;
+    dragging = true;
+    compass.setPointerCapture(event.pointerId);
+    compass.classList.add("dt-compass-dragging");
+    setBearingFromPointer(event);
+  });
+  compass.addEventListener("pointermove", (event) => {
+    if (dragging) setBearingFromPointer(event);
+  });
+  const stopDragging = (event) => {
+    if (!dragging) return;
+    dragging = false;
+    compass.classList.remove("dt-compass-dragging");
+    if (compass.hasPointerCapture(event.pointerId)) compass.releasePointerCapture(event.pointerId);
+    compass.focus();
+  };
+  compass.addEventListener("pointerup", stopDragging);
+  compass.addEventListener("pointercancel", stopDragging);
   const setDisabled = (disabled) => {
     compass.classList.toggle("dt-compass-disabled", disabled);
-    buttons.forEach((direction) => {
-      direction.disabled = disabled;
-    });
+    compass.setAttribute("aria-disabled", String(disabled));
+    compass.tabIndex = disabled ? -1 : 0;
   };
   compass.addEventListener("keydown", (event) => {
-    if (!["ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft"].includes(event.key)) return;
+    if (input.disabled) return;
+    const keys = ["ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft", "Home", "End"];
+    if (!keys.includes(event.key)) return;
     event.preventDefault();
-    const step = event.key === "ArrowUp" || event.key === "ArrowRight" ? 45 : -45;
-    input.value = String((Number(input.value || 0) + step + 360) % 360);
+    const step = event.shiftKey ? 10 : 1;
+    if (event.key === "Home") input.value = "0";
+    else if (event.key === "End") input.value = "359";
+    else {
+      const delta = event.key === "ArrowUp" || event.key === "ArrowRight" ? step : -step;
+      input.value = String((Number(input.value || 0) + delta + 360) % 360);
+    }
     input.dispatchEvent(new Event("input", { bubbles: true }));
-    buttons.find((direction) => direction.getAttribute("aria-checked") === "true")?.focus();
   });
   input.addEventListener("input", sync);
   sync();
@@ -1119,9 +1444,9 @@ export function buildSimulationRunStatusView(run) {
 }
 
 class AssetMapController {
-  constructor(app, onTreeClick) {
+  constructor(app, onIgnitionClick) {
     this.app = app;
-    this.onTreeClick = onTreeClick;
+    this.onIgnitionClick = onIgnitionClick;
     this.map = app.getMap?.() ?? null;
     this.data = emptyFeatureCollection();
     this.selection = emptyFeatureCollection();
@@ -1159,6 +1484,27 @@ class AssetMapController {
       }
       return nearest;
     };
+    this.selectionNearEvent = (event) => {
+      if (!this.map || !this.mapContainer || !this.layerState.visible) return null;
+      const bounds = this.mapContainer.getBoundingClientRect();
+      const point = {
+        x: event.clientX - bounds.left,
+        y: event.clientY - bounds.top,
+      };
+      let nearest = null;
+      let nearestDistance = 10 ** 2;
+      for (const feature of this.selection.features) {
+        const coordinates = feature?.geometry?.coordinates;
+        if (!Array.isArray(coordinates) || coordinates.length < 2) continue;
+        const projected = this.map.project(coordinates);
+        const distance = (projected.x - point.x) ** 2 + (projected.y - point.y) ** 2;
+        if (distance <= nearestDistance) {
+          nearest = feature;
+          nearestDistance = distance;
+        }
+      }
+      return nearest;
+    };
     this.setTreeCursor = (active) => {
       if (!this.map || !this.mapContainer || active === this.treeCursorActive) return;
       const cursor = active ? "pointer" : "";
@@ -1167,11 +1513,21 @@ class AssetMapController {
       this.treeCursorActive = active;
     };
     this.onMapContainerClick = (event) => {
-      const nearest = this.treeNearEvent(event);
-      if (nearest) this.onTreeClick(nearest);
+      const canvas = this.map?.getCanvas?.();
+      if (!this.map || !this.mapContainer || !canvas?.contains(event.target)) return;
+      const selectedPoint = this.selectionNearEvent(event);
+      const nearestTree = this.treeNearEvent(event);
+      const bounds = this.mapContainer.getBoundingClientRect();
+      const lngLat = this.map.unproject({
+        x: event.clientX - bounds.left,
+        y: event.clientY - bounds.top,
+      });
+      this.onIgnitionClick(
+        selectedPoint ?? nearestTree ?? buildIgnitionPointFeature([lngLat.lng, lngLat.lat]),
+      );
     };
     this.onMapContainerMouseMove = (event) => {
-      this.setTreeCursor(Boolean(this.treeNearEvent(event)));
+      this.setTreeCursor(Boolean(this.selectionNearEvent(event) ?? this.treeNearEvent(event)));
     };
     this.onMapContainerMouseLeave = () => this.setTreeCursor(false);
     this.onEnter = () => {
@@ -1291,7 +1647,7 @@ class AssetMapController {
         opacity: 1,
         metadata: {
           provider: "Digital Twin Engine",
-          description: "Canonical region tree and power-line assets. Click a tree to select it.",
+          description: "Canonical region tree and power-line assets. Click anywhere on the map to place an ignition point.",
           customLayerType: "digital-twin-assets",
           externalDeckLayer: true,
           identifiable: false,
@@ -1339,7 +1695,7 @@ class AssetMapController {
             "fill-opacity": [
               "case",
               ["boolean", ["get", "selected"], false],
-              0.13,
+              0,
               0.04,
             ],
           },
@@ -1410,19 +1766,38 @@ class AssetMapController {
       } else if (selectionSource.setData) {
         selectionSource.setData(this.selection);
       }
+      if (!map.getLayer(SELECTION_HALO_LAYER_ID)) {
+        map.addLayer({
+          id: SELECTION_HALO_LAYER_ID,
+          type: "circle",
+          source: SELECTION_SOURCE_ID,
+          paint: {
+            "circle-radius": TREE_CIRCLE_RADIUS_PX + 6,
+            "circle-color": "#ffffff",
+            "circle-stroke-color": "#111827",
+            "circle-stroke-width": 2.5,
+            "circle-opacity": 0.95,
+          },
+        });
+      }
       if (!map.getLayer(SELECTION_LAYER_ID)) {
         map.addLayer({
           id: SELECTION_LAYER_ID,
           type: "circle",
           source: SELECTION_SOURCE_ID,
           paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 7, 15, 12],
-            "circle-color": "rgba(255,255,255,0)",
-            "circle-stroke-color": "#ff6b35",
-            "circle-stroke-width": 4,
+            "circle-radius": TREE_CIRCLE_RADIUS_PX + 2,
+            "circle-color": "#ff6b35",
+            "circle-stroke-color": "#fff7ed",
+            "circle-stroke-width": 2,
           },
         });
       }
+      // Raster basemaps can add their imagery layer after the plugin responds to
+      // an early styledata event. Re-anchor the ignition overlay on every style
+      // update so satellite imagery can never cover the selected points.
+      if (map.getLayer(SELECTION_HALO_LAYER_ID)) map.moveLayer(SELECTION_HALO_LAYER_ID);
+      if (map.getLayer(SELECTION_LAYER_ID)) map.moveLayer(SELECTION_LAYER_ID);
       if (!this.bound) {
         map.on("mouseenter", TREE_LAYER_ID, this.onEnter);
         map.on("mouseleave", TREE_LAYER_ID, this.onLeave);
@@ -1486,6 +1861,7 @@ class AssetMapController {
     }
     for (const layerId of [
       SELECTION_LAYER_ID,
+      SELECTION_HALO_LAYER_ID,
       TREE_LAYER_ID,
       POWER_LINE_LAYER_ID,
       REGION_LINE_LAYER_ID,
@@ -1507,46 +1883,557 @@ class AssetMapController {
   }
 }
 
+export class SimulationReplayControl {
+  constructor(onSelectFrame, scheduling = {}) {
+    this.onSelectFrame = onSelectFrame;
+    this.requestFrame =
+      typeof scheduling.requestFrame === "function"
+        ? scheduling.requestFrame
+        : typeof globalThis.requestAnimationFrame === "function"
+          ? (callback) => globalThis.requestAnimationFrame(callback)
+          : (callback) => setTimeout(() => callback(Date.now()), 16);
+    this.cancelFrame =
+      typeof scheduling.cancelFrame === "function"
+        ? scheduling.cancelFrame
+        : typeof globalThis.cancelAnimationFrame === "function"
+          ? (request) => globalThis.cancelAnimationFrame(request)
+          : (request) => clearTimeout(request);
+    this.map = null;
+    this.container = null;
+    this.dock = null;
+    this.frames = [];
+    this.index = -1;
+    this.expanded = false;
+    this.playing = false;
+    this.loop = true;
+    this.speed = 800;
+    this.playTimer = null;
+    this.playGeneration = 0;
+    this.advanceInFlight = false;
+    this.selectionGeneration = 0;
+    this.scrubFrameRequest = null;
+    this.pendingScrubIndex = null;
+    this.wrapper = null;
+    this.mapContainer = null;
+    this.savedContainerCss = "";
+    this.resizeObserver = null;
+    this.dockId = makeId("replay-timeline");
+  }
+
+  onAdd(map) {
+    this.map = map;
+    this.container = el(
+      "div",
+      "maplibregl-ctrl maplibregl-ctrl-group dt-replay-toggle",
+    );
+    this.toggleButton = button("↻", "dt-replay-toggle-button");
+    this.toggleButton.setAttribute("aria-label", "Toggle simulation replay");
+    this.toggleButton.setAttribute("aria-controls", this.dockId);
+    this.toggleButton.setAttribute("aria-expanded", "false");
+    this.toggleButton.title = "Toggle simulation replay";
+    this.toggleButton.addEventListener("click", () => this.setExpanded(!this.expanded));
+    this.container.append(this.toggleButton);
+    this.buildDock();
+    this.mapContainer = map.getContainer?.() ?? null;
+    this.installLayout();
+    this.syncAvailability();
+    return this.container;
+  }
+
+  buildDock() {
+    this.dock = el("div");
+    this.dock.id = this.dockId;
+    this.dock.className = "maplibregl-time-slider-dock dt-replay-dock";
+    this.dock.setAttribute("role", "group");
+    this.dock.setAttribute("aria-label", "Simulation replay timeline");
+
+    const left = el("div", "ts-left");
+    const playback = el("div", "ts-playback");
+    this.previousButton = button("⏮", "time-slider-btn ts-prev");
+    this.previousButton.setAttribute("aria-label", "Previous simulation tick");
+    this.previousButton.title = "Previous simulation tick";
+    this.previousButton.addEventListener("click", () => {
+      void this.goToIndex(this.index - 1, { manual: true });
+    });
+    this.playButton = button("▶", "time-slider-btn ts-play");
+    this.playButton.setAttribute("aria-label", "Play simulation replay");
+    this.playButton.title = "Play simulation replay";
+    this.playButton.addEventListener("click", () => {
+      if (this.playing) this.pause();
+      else void this.play();
+    });
+    this.nextButton = button("⏭", "time-slider-btn ts-next");
+    this.nextButton.setAttribute("aria-label", "Next simulation tick");
+    this.nextButton.title = "Next simulation tick";
+    this.nextButton.addEventListener("click", () => {
+      void this.goToIndex(this.index + 1, { manual: true });
+    });
+    this.loopButton = button("↻", "time-slider-btn ts-loop");
+    this.loopButton.setAttribute("aria-label", "Toggle simulation replay loop");
+    this.loopButton.title = "Toggle simulation replay loop";
+    this.loopButton.setAttribute("aria-pressed", "true");
+    this.loopButton.classList.add("ts-active");
+    this.loopButton.addEventListener("click", () => {
+      this.loop = !this.loop;
+      this.loopButton.classList.toggle("ts-active", this.loop);
+      this.loopButton.setAttribute("aria-pressed", String(this.loop));
+    });
+    playback.append(
+      this.previousButton,
+      this.playButton,
+      this.nextButton,
+      this.loopButton,
+    );
+    const speed = el("label", "ts-speed");
+    this.speedInput = el("input", "ts-speed-input");
+    this.speedInput.type = "number";
+    this.speedInput.min = "100";
+    this.speedInput.step = "100";
+    this.speedInput.value = String(this.speed);
+    this.speedInput.title = "Replay speed (milliseconds per tick)";
+    this.speedInput.setAttribute("aria-label", "Replay speed in milliseconds per tick");
+    this.speedInput.addEventListener("change", () => {
+      const nextSpeed = Number.parseInt(this.speedInput.value, 10);
+      if (!Number.isFinite(nextSpeed)) return;
+      this.speed = Math.max(100, nextSpeed);
+      this.speedInput.value = String(this.speed);
+      if (this.playing && !this.advanceInFlight) this.scheduleNext();
+    });
+    speed.append(this.speedInput, el("span", "ts-speed-unit", "ms"));
+    left.append(playback, speed);
+
+    const axis = el("div", "dt-replay-axis");
+    const axisHeader = el("div", "dt-replay-axis-header");
+    this.runLabel = el("strong", "dt-replay-run", "Simulation replay");
+    this.tickLabel = el("span", "dt-replay-tick", "No run selected");
+    axisHeader.append(this.runLabel, this.tickLabel);
+    this.scrubber = el("input", "dt-replay-scrubber");
+    this.scrubber.type = "range";
+    this.scrubber.min = "0";
+    this.scrubber.max = "0";
+    this.scrubber.step = "1";
+    this.scrubber.value = "0";
+    this.scrubber.setAttribute("aria-label", "Simulation replay tick");
+    this.scrubber.addEventListener("input", () => {
+      this.queueScrub(Number(this.scrubber.value));
+    });
+    this.scrubber.addEventListener("change", () => {
+      this.commitScrub(Number(this.scrubber.value));
+    });
+    const axisFooter = el("div", "dt-replay-axis-footer");
+    this.firstTickLabel = el("span", "", "Tick —");
+    this.frameStatus = el("span", "dt-replay-frame-status", "Choose a completed run");
+    this.frameStatus.setAttribute("role", "status");
+    this.frameStatus.setAttribute("aria-live", "polite");
+    this.lastTickLabel = el("span", "", "Tick —");
+    axisFooter.append(this.firstTickLabel, this.frameStatus, this.lastTickLabel);
+    axis.append(axisHeader, this.scrubber, axisFooter);
+
+    const right = el("div", "ts-right");
+    this.closeButton = button("▾", "time-slider-btn ts-collapse-btn");
+    this.closeButton.setAttribute("aria-label", "Hide simulation replay timeline");
+    this.closeButton.title = "Hide simulation replay timeline";
+    this.closeButton.addEventListener("click", () => {
+      this.setExpanded(false);
+      this.toggleButton?.focus();
+    });
+    right.append(this.closeButton);
+    this.dock.append(left, axis, right);
+  }
+
+  setRun(run, options = {}) {
+    this.setFrames(buildSimulationReplayFrames(run), options);
+  }
+
+  setFrames(frames, { initialTick, expanded = true } = {}) {
+    this.cancelQueuedScrub();
+    this.pause();
+    this.selectionGeneration += 1;
+    this.frames = Array.isArray(frames) ? frames.map((frame) => ({ ...frame })) : [];
+    const requestedIndex = this.frames.findIndex((frame) => frame.tick === initialTick);
+    this.index =
+      this.frames.length === 0
+        ? -1
+        : requestedIndex >= 0
+          ? requestedIndex
+          : this.frames.length - 1;
+    this.expanded = this.frames.length > 0 && expanded;
+    this.syncAvailability();
+    this.syncFrame();
+  }
+
+  clear() {
+    this.setFrames([], { expanded: false });
+  }
+
+  setExpanded(expanded) {
+    this.expanded = Boolean(expanded && this.frames.length > 0);
+    this.syncAvailability();
+    this.map?.resize?.();
+  }
+
+  syncAvailability() {
+    const available = this.frames.length > 0;
+    if (this.container) this.container.style.display = available && !this.expanded ? "" : "none";
+    if (this.dock) this.dock.hidden = !available || !this.expanded;
+    this.toggleButton?.setAttribute("aria-expanded", String(available && this.expanded));
+    const disabled = !available || this.frames.length < 2;
+    for (const control of [
+      this.previousButton,
+      this.playButton,
+      this.nextButton,
+      this.loopButton,
+      this.scrubber,
+    ]) {
+      if (control) control.disabled = disabled;
+    }
+  }
+
+  syncFrame() {
+    const frame = this.frames[this.index];
+    if (!frame) {
+      if (this.tickLabel) this.tickLabel.textContent = "No run selected";
+      if (this.frameStatus) this.frameStatus.textContent = "Choose a completed run";
+      return;
+    }
+    if (this.runLabel) this.runLabel.textContent = `Replay · ${frame.runId}`;
+    if (this.tickLabel) {
+      this.tickLabel.textContent = `Tick ${frame.tick} · ${this.index + 1} of ${this.frames.length}`;
+    }
+    if (this.scrubber) {
+      this.scrubber.max = String(Math.max(0, this.frames.length - 1));
+      this.scrubber.value = String(this.index);
+      this.scrubber.setAttribute("aria-valuetext", `Simulation tick ${frame.tick}`);
+    }
+    if (this.firstTickLabel) this.firstTickLabel.textContent = `Tick ${this.frames[0].tick}`;
+    if (this.lastTickLabel) {
+      this.lastTickLabel.textContent = `Tick ${this.frames[this.frames.length - 1].tick}`;
+    }
+    if (this.frameStatus) this.frameStatus.textContent = "Ready";
+    if (this.previousButton) this.previousButton.disabled = this.frames.length < 2;
+    if (this.nextButton) this.nextButton.disabled = this.frames.length < 2;
+  }
+
+  setLoading(frame) {
+    if (!this.frameStatus || !frame) return;
+    this.frameStatus.textContent = `Loading tick ${frame.tick}…`;
+  }
+
+  setLoaded(frame, collection) {
+    if (!this.frameStatus || frame?.tick !== this.frames[this.index]?.tick) return;
+    const activeCells = Number(collection?.features?.[0]?.properties?.active_cell_count);
+    this.frameStatus.textContent = Number.isFinite(activeCells)
+      ? `${activeCells.toLocaleString()} active cells`
+      : "Loaded";
+  }
+
+  setError(frame, error) {
+    if (!this.frameStatus || frame?.tick !== this.frames[this.index]?.tick) return;
+    this.frameStatus.textContent = error instanceof Error ? error.message : "Could not load tick";
+  }
+
+  previewIndex(index) {
+    if (this.frames.length === 0 || !Number.isFinite(index)) return null;
+    this.pause();
+    this.selectionGeneration += 1;
+    this.index = Math.max(0, Math.min(this.frames.length - 1, Math.round(index)));
+    this.syncFrame();
+    if (this.frameStatus) this.frameStatus.textContent = "Loading as you scrub…";
+    return this.index;
+  }
+
+  queueScrub(index) {
+    const previewedIndex = this.previewIndex(index);
+    if (previewedIndex === null) return;
+    this.pendingScrubIndex = previewedIndex;
+    if (this.scrubFrameRequest !== null) return;
+    this.scrubFrameRequest = this.requestFrame(() => {
+      this.scrubFrameRequest = null;
+      this.loadQueuedScrub();
+    });
+  }
+
+  loadQueuedScrub() {
+    const index = this.pendingScrubIndex;
+    this.pendingScrubIndex = null;
+    if (index === null) return;
+    void this.goToIndex(index);
+  }
+
+  commitScrub(index) {
+    this.cancelQueuedScrub();
+    void this.goToIndex(index, { manual: true });
+  }
+
+  cancelQueuedScrub() {
+    if (this.scrubFrameRequest !== null) this.cancelFrame(this.scrubFrameRequest);
+    this.scrubFrameRequest = null;
+    this.pendingScrubIndex = null;
+  }
+
+  async goToIndex(index, { manual = false } = {}) {
+    if (this.frames.length === 0) return null;
+    if (manual) {
+      this.cancelQueuedScrub();
+      this.pause();
+    }
+    let nextIndex = index;
+    if (nextIndex < 0) nextIndex = this.loop ? this.frames.length - 1 : 0;
+    if (nextIndex >= this.frames.length) nextIndex = this.loop ? 0 : this.frames.length - 1;
+    this.index = nextIndex;
+    const frame = this.frames[this.index];
+    const selectionGeneration = ++this.selectionGeneration;
+    this.syncFrame();
+    this.setLoading(frame);
+    try {
+      const applied = await this.onSelectFrame?.(frame);
+      if (selectionGeneration === this.selectionGeneration && applied) {
+        this.setLoaded(frame, applied.collection);
+      }
+      return applied ?? null;
+    } catch (error) {
+      if (selectionGeneration === this.selectionGeneration) this.setError(frame, error);
+      return null;
+    }
+  }
+
+  async play({ fromStart = false } = {}) {
+    if (this.frames.length < 2 || this.playing) return;
+    this.cancelQueuedScrub();
+    const playGeneration = ++this.playGeneration;
+    if (fromStart || (!this.loop && this.index >= this.frames.length - 1)) {
+      await this.goToIndex(0);
+    }
+    if (playGeneration !== this.playGeneration) return;
+    this.playing = true;
+    this.playButton.textContent = "⏸";
+    this.playButton.setAttribute("aria-label", "Pause simulation replay");
+    this.playButton.title = "Pause simulation replay";
+    this.playButton.classList.add("ts-active");
+    this.scheduleNext();
+  }
+
+  pause() {
+    this.playGeneration += 1;
+    this.playing = false;
+    clearTimeout(this.playTimer);
+    this.playTimer = null;
+    if (!this.playButton) return;
+    this.playButton.textContent = "▶";
+    this.playButton.setAttribute("aria-label", "Play simulation replay");
+    this.playButton.title = "Play simulation replay";
+    this.playButton.classList.remove("ts-active");
+  }
+
+  scheduleNext() {
+    clearTimeout(this.playTimer);
+    if (!this.playing) return;
+    this.playTimer = setTimeout(() => void this.advance(), this.speed);
+  }
+
+  async advance() {
+    if (!this.playing || this.advanceInFlight) return;
+    if (!this.loop && this.index >= this.frames.length - 1) {
+      this.pause();
+      return;
+    }
+    this.advanceInFlight = true;
+    try {
+      await this.goToIndex(this.index + 1);
+    } finally {
+      this.advanceInFlight = false;
+      if (this.playing) this.scheduleNext();
+    }
+  }
+
+  fillSize(element, property, computed) {
+    const inline = element.style.getPropertyValue(property);
+    if (inline) return inline;
+    const rect = element.getBoundingClientRect();
+    if (
+      typeof window !== "undefined" &&
+      property === "width" &&
+      Math.abs(rect.width - window.innerWidth) <= 2
+    ) {
+      return "100%";
+    }
+    if (
+      typeof window !== "undefined" &&
+      property === "height" &&
+      Math.abs(rect.height - window.innerHeight) <= 2
+    ) {
+      return "100vh";
+    }
+    return computed;
+  }
+
+  installLayout() {
+    const mapContainer = this.mapContainer;
+    const dock = this.dock;
+    if (!mapContainer || !dock) return;
+    const parent = mapContainer.parentElement;
+    if (!parent || typeof getComputedStyle !== "function") {
+      mapContainer.append(dock);
+      return;
+    }
+    const wrapper = el("div", "maplibregl-time-slider-layout dt-replay-layout");
+    const computed = getComputedStyle(mapContainer);
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.overflow = "hidden";
+    wrapper.style.position = computed.position === "static" ? "relative" : computed.position;
+    for (const side of ["top", "right", "bottom", "left"]) {
+      const value =
+        mapContainer.style.getPropertyValue(side) ||
+        (computed.position !== "static" ? computed.getPropertyValue(side) : "");
+      if (value && value !== "auto") wrapper.style.setProperty(side, value);
+    }
+    wrapper.style.margin = computed.margin;
+    wrapper.style.zIndex = computed.zIndex !== "auto" ? computed.zIndex : "";
+    wrapper.style.width = this.fillSize(mapContainer, "width", computed.width);
+    const height = this.fillSize(mapContainer, "height", computed.height);
+    wrapper.style.height = height === "100vh" ? "100dvh" : height;
+    parent.insertBefore(wrapper, mapContainer);
+    this.wrapper = wrapper;
+    this.savedContainerCss = mapContainer.getAttribute("style") ?? "";
+    mapContainer.style.position = "relative";
+    mapContainer.style.top = "";
+    mapContainer.style.right = "";
+    mapContainer.style.bottom = "";
+    mapContainer.style.left = "";
+    mapContainer.style.margin = "0";
+    mapContainer.style.width = "100%";
+    mapContainer.style.height = "auto";
+    mapContainer.style.flex = "1 1 auto";
+    mapContainer.style.minHeight = "0";
+    wrapper.append(mapContainer, dock);
+    dock.classList.add("ts-docked");
+    if (
+      typeof ResizeObserver !== "undefined" &&
+      (wrapper.style.width.endsWith("px") || wrapper.style.height.endsWith("px"))
+    ) {
+      this.resizeObserver = new ResizeObserver(() => {
+        if (!this.wrapper) return;
+        if (this.wrapper.style.width.endsWith("px") && parent.clientWidth > 0) {
+          this.wrapper.style.width = `${parent.clientWidth}px`;
+        }
+        if (this.wrapper.style.height.endsWith("px") && parent.clientHeight > 0) {
+          this.wrapper.style.height = `${parent.clientHeight}px`;
+        }
+        this.map?.resize?.();
+      });
+      this.resizeObserver.observe(parent);
+    }
+    this.map?.resize?.();
+  }
+
+  uninstallLayout() {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.dock?.classList.remove("ts-docked");
+    if (this.wrapper && this.mapContainer) {
+      const parent = this.wrapper.parentElement;
+      this.mapContainer.setAttribute("style", this.savedContainerCss);
+      parent?.insertBefore(this.mapContainer, this.wrapper);
+      this.wrapper.remove();
+      this.wrapper = null;
+      this.map?.resize?.();
+    }
+  }
+
+  onRemove() {
+    this.cancelQueuedScrub();
+    this.pause();
+    this.selectionGeneration += 1;
+    this.uninstallLayout();
+    this.dock?.remove();
+    this.container?.remove();
+    this.dock = null;
+    this.container = null;
+    this.mapContainer = null;
+    this.map = null;
+  }
+}
+
 export class WildfireMapController {
-  constructor(app) {
+  constructor(app, scheduling = {}) {
     this.app = app;
     this.map = app.getMap?.() ?? null;
+    this.scheduleRegistration =
+      typeof scheduling.scheduleRegistration === "function"
+        ? scheduling.scheduleRegistration
+        : (callback) => setTimeout(callback, 160);
+    this.cancelRegistration =
+      typeof scheduling.cancelRegistration === "function"
+        ? scheduling.cancelRegistration
+        : (request) => clearTimeout(request);
+    this.registrationRequest = null;
     this.data = emptyFeatureCollection();
     this.runId = null;
     this.tick = null;
     this.sourceUrl = null;
-    this.registeredRunId = null;
     this.layerState = { visible: true, opacity: 1 };
+    this.layerRegistered = false;
     this.stateUnsubscribe = null;
     this.onStyleData = () => this.ensureLayers();
     this.map?.on("styledata", this.onStyleData);
   }
 
-  setData(collection, { runId, tick, sourceUrl } = {}) {
+  setData(collection, { runId, tick, sourceUrl, deferRegistration = false } = {}) {
     this.data = asFeatureCollection(collection, "Wildfire simulation artifact");
     this.runId = nonEmptyString(runId, "Run ID");
     this.tick = Number.isInteger(tick) ? tick : null;
     this.sourceUrl = typeof sourceUrl === "string" ? sourceUrl : null;
     this.ensureLayers();
-    if (this.registeredRunId !== this.runId) {
-      this.app.registerExternalNativeLayer?.({
-        id: WILDFIRE_ENTRY_ID,
-        name: `Wildfire · ${this.runId}`,
-        type: "geojson",
-        geojson: this.data,
-        nativeLayerIds: [WILDFIRE_FILL_LAYER_ID, WILDFIRE_LINE_LAYER_ID],
-        sourceIds: [WILDFIRE_SOURCE_ID],
-        opacity: 0.82,
-        metadata: {
-          provider: "Digital Twin Engine",
-          description: "Live durable wildfire footprint.",
-          customLayerType: "digital-twin-wildfire",
-          runId: this.runId,
-          identifiable: false,
-        },
-      });
-      this.registeredRunId = this.runId;
+    if (deferRegistration) {
+      this.scheduleStoreRegistration();
+    } else {
+      this.cancelStoreRegistration();
+      this.syncRegistration();
     }
+  }
+
+  scheduleStoreRegistration() {
+    this.cancelStoreRegistration();
+    this.registrationRequest = this.scheduleRegistration(() => {
+      this.registrationRequest = null;
+      this.syncRegistration();
+    });
+  }
+
+  cancelStoreRegistration() {
+    if (this.registrationRequest !== null) {
+      this.cancelRegistration(this.registrationRequest);
+    }
+    this.registrationRequest = null;
+  }
+
+  syncRegistration() {
+    if (!this.runId) return;
+    // Keep GeoLibre's store copy in lockstep with the control-owned MapLibre
+    // source. Layer synchronization reapplies the registered GeoJSON whenever
+    // app state changes, so registering only the first tick would restore a
+    // stale footprint after setData updated the native source.
+    const registration = {
+      id: WILDFIRE_ENTRY_ID,
+      name: `Wildfire · ${this.runId}`,
+      type: "geojson",
+      geojson: this.data,
+      nativeLayerIds: [WILDFIRE_FILL_LAYER_ID, WILDFIRE_LINE_LAYER_ID],
+      sourceIds: [WILDFIRE_SOURCE_ID],
+      metadata: {
+        provider: "Digital Twin Engine",
+        description: "Live durable wildfire footprint.",
+        customLayerType: "digital-twin-wildfire",
+        runId: this.runId,
+        identifiable: false,
+      },
+    };
+    // Supply the default only for the first registration. Omitting opacity on
+    // subsequent tick updates preserves any Layers-panel adjustment.
+    if (!this.layerRegistered) registration.opacity = 0.82;
+    this.app.registerExternalNativeLayer?.(registration);
+    this.layerRegistered = true;
     if (!this.stateUnsubscribe) {
       this.stateUnsubscribe =
         this.app.subscribeExternalNativeLayerState?.(WILDFIRE_ENTRY_ID, (state) => {
@@ -1558,14 +2445,15 @@ export class WildfireMapController {
   }
 
   clear() {
+    this.cancelStoreRegistration();
     this.data = emptyFeatureCollection();
     this.runId = null;
     this.tick = null;
     this.sourceUrl = null;
-    this.registeredRunId = null;
     const source = this.map?.getSource(WILDFIRE_SOURCE_ID);
     if (source?.setData) source.setData(this.data);
     this.app.unregisterExternalNativeLayer?.(WILDFIRE_ENTRY_ID);
+    this.layerRegistered = false;
   }
 
   ensureLayers() {
@@ -1646,9 +2534,11 @@ export class WildfireMapController {
   }
 
   destroy() {
+    this.cancelStoreRegistration();
     this.stateUnsubscribe?.();
     this.stateUnsubscribe = null;
     this.app.unregisterExternalNativeLayer?.(WILDFIRE_ENTRY_ID);
+    this.layerRegistered = false;
     const map = this.map;
     if (!map) return;
     map.off("styledata", this.onStyleData);
@@ -1686,6 +2576,10 @@ class DigitalTwinDemoPanel {
     this.runEventStartupTimer = null;
     this.runTerminalizing = null;
     this.runArtifactCoordinator = null;
+    this.replayController = null;
+    this.replayLoadGeneration = 0;
+    this.resultLoadGeneration = 0;
+    this.resultAbort = null;
     this.pollAbort = null;
     this.loadAbort = null;
     this.visualizationAbort = null;
@@ -1696,6 +2590,11 @@ class DigitalTwinDemoPanel {
     this.assetMap = new AssetMapController(app, (feature) => this.toggleTree(feature));
     this.wildfireMap = new WildfireMapController(app);
     this.build();
+    this.replayControl = new SimulationReplayControl((frame) =>
+      this.replayController?.showTick(frame.tick),
+    );
+    this.replayControlAdded =
+      this.app.addMapControl?.(this.replayControl, "bottom-left") === true;
     this.connect();
   }
 
@@ -1798,13 +2697,13 @@ class DigitalTwinDemoPanel {
     const ignitionHeading = el("div", "dt-ignition-heading");
     ignitionHeading.append(
       el("span", "dt-ignition-label", "Ignition"),
-      el("h3", "", "Pick ignition trees on the map"),
+      el("h3", "", "Place ignition points on the map"),
     );
     this.selectionCount = el("strong", "dt-selection-count", "0 selected");
     const ignitionCopy = el("div", "dt-ignition-copy");
     ignitionCopy.append(
       this.selectionCount,
-      el("p", "", "Select green tree assets to define where the fire starts."),
+      el("p", "", "Click anywhere on the map to define where the fire starts."),
     );
     const ignitionBar = el("div", "dt-selection-bar");
     this.clearTreesButton = button("Clear selection", "dt-text-button");
@@ -1888,7 +2787,7 @@ class DigitalTwinDemoPanel {
     this.readinessText = el(
       "div",
       "dt-readiness",
-      "Choose an area and ignition trees to prepare the run.",
+      "Choose an area and ignition points to prepare the run.",
     );
     this.runStatus = el("div", "dt-run-card");
     const runHeader = el("div", "dt-run-header");
@@ -1985,6 +2884,13 @@ class DigitalTwinDemoPanel {
     this.stopPolling();
     this.runArtifactCoordinator?.stop();
     this.runArtifactCoordinator = null;
+    this.replayController?.destroy();
+    this.replayController = null;
+    this.replayLoadGeneration += 1;
+    this.replayControl?.clear();
+    this.resultLoadGeneration += 1;
+    this.resultAbort?.abort();
+    this.resultAbort = null;
     const abort = new AbortController();
     this.loadAbort = abort;
     this.setConnection("muted", "Connecting", "Checking Engine readiness…");
@@ -1992,6 +2898,26 @@ class DigitalTwinDemoPanel {
     try {
       const baseUrl = normalizeApiBaseUrl(this.apiInput.value);
       this.client = createDigitalTwinClient(baseUrl);
+      this.replayController = createSimulationReplayController(this.client, {
+        onLoading: (frame) => this.replayControl?.setLoading(frame),
+        onFrame: ({ runId, tick, url, collection }) => {
+          if (this.destroyed) return;
+          this.wildfireMap.setData(collection, {
+            runId,
+            tick,
+            sourceUrl: url,
+            deferRegistration: true,
+          });
+        },
+        onError: (error, frame) => {
+          if (this.destroyed) return;
+          console.error("[Digital Twin Demo] Could not replay a simulation tick.", error);
+          this.showMessage(
+            `Replay tick ${frame?.tick ?? ""} could not be displayed: ${this.errorMessage(error)}`,
+            "warning",
+          );
+        },
+      });
       this.runArtifactCoordinator = createRunArtifactCoordinator(this.client, {
         onArtifact: ({ runId, tick, url, collection }) => {
           if (this.destroyed || this.activeRun?.run_id !== runId) return;
@@ -2044,6 +2970,13 @@ class DigitalTwinDemoPanel {
       if (abort.signal.aborted || this.destroyed) return;
       this.runArtifactCoordinator?.stop();
       this.runArtifactCoordinator = null;
+      this.replayController?.destroy();
+      this.replayController = null;
+      this.replayLoadGeneration += 1;
+      this.replayControl?.clear();
+      this.resultLoadGeneration += 1;
+      this.resultAbort?.abort();
+      this.resultAbort = null;
       this.client = null;
       this.setConnection("error", "Offline", this.errorMessage(error));
     }
@@ -2455,7 +3388,7 @@ class DigitalTwinDemoPanel {
             ? "Connect to the Engine to prepare a simulation."
             : !regionReady
               ? "Choose an area and wait for the latest weather dataset."
-              : "Select at least one ignition tree on the map.";
+              : "Select at least one ignition point on the map.";
     }
   }
 
@@ -2475,6 +3408,12 @@ class DigitalTwinDemoPanel {
   async startRun() {
     if (!this.client || !this.region) return;
     try {
+      this.replayController?.stop();
+      this.replayLoadGeneration += 1;
+      this.replayControl?.clear();
+      this.resultLoadGeneration += 1;
+      this.resultAbort?.abort();
+      this.resultAbort = null;
       const weather = this.selectedWeather();
       const selected = [...this.selectedTrees.values()];
       const scenarioCandidate = buildScenarioRequest({
@@ -2617,8 +3556,9 @@ class DigitalTwinDemoPanel {
     const streamedCompletedTicks = this.activeRun?.completed_ticks;
     const streamedTotalTicks = this.activeRun?.total_ticks;
     this.stopRunMonitoring();
-    this.runArtifactCoordinator?.stop();
     this.setSubmitting(false);
+    await this.runArtifactCoordinator?.flush();
+    this.runArtifactCoordinator?.stop();
     try {
       try {
         const run = await this.client.getRun(runId);
@@ -2660,6 +3600,7 @@ class DigitalTwinDemoPanel {
         this.activeRun = run;
         this.renderRunStatus(run);
         this.updateRunAvailability();
+        await this.runArtifactCoordinator?.updateRun(run);
         const status = runStatusValue(run);
         if (TERMINAL_RUN_STATUSES.has(status)) {
           await this.finishRun(run.run_id);
@@ -2766,11 +3707,25 @@ class DigitalTwinDemoPanel {
 
   async showResult(runId, signal) {
     if (!this.client) return;
+    const resultLoadGeneration = ++this.resultLoadGeneration;
+    this.resultAbort?.abort();
+    const abort = new AbortController();
+    this.resultAbort = abort;
+    const abortFromCaller = () => abort.abort();
+    if (signal?.aborted) abort.abort();
+    else signal?.addEventListener("abort", abortFromCaller, { once: true });
     try {
       const result = asFeatureCollection(
-        await this.client.getResult(runId, signal),
+        await this.client.getResult(runId, abort.signal),
         "Simulation result",
       );
+      if (
+        this.destroyed ||
+        abort.signal.aborted ||
+        resultLoadGeneration !== this.resultLoadGeneration
+      ) {
+        return;
+      }
       const sourceUrl = this.client.resolveUrl(
         `/api/v1/simulation-runs/${encodeURIComponent(runId)}/result.geojson`,
       );
@@ -2780,6 +3735,14 @@ class DigitalTwinDemoPanel {
         tick: Number.isInteger(tick) ? tick : null,
         sourceUrl,
       });
+      if (this.activeRun?.run_id === runId && runStatusValue(this.activeRun) === "COMPLETED") {
+        this.prepareReplay(this.activeRun, {
+          initialTick: Number.isInteger(tick) ? tick : undefined,
+          initialFrame: Number.isInteger(tick)
+            ? { collection: result, url: sourceUrl }
+            : undefined,
+        });
+      }
       const bounds = geoJsonBounds(result);
       if (bounds) this.app.fitBounds?.(bounds);
       const properties = result.features[0]?.properties ?? {};
@@ -2788,8 +3751,67 @@ class DigitalTwinDemoPanel {
         "success",
       );
     } catch (error) {
-      if (signal?.aborted) return;
+      if (
+        abort.signal.aborted ||
+        resultLoadGeneration !== this.resultLoadGeneration
+      ) {
+        return;
+      }
       this.showMessage(`Run completed, but the result could not be displayed: ${this.errorMessage(error)}`, "error");
+    } finally {
+      signal?.removeEventListener("abort", abortFromCaller);
+      if (this.resultAbort === abort) this.resultAbort = null;
+    }
+  }
+
+  prepareReplay(run, { initialTick, initialFrame, autoPlay = false } = {}) {
+    if (!this.replayController || !this.replayControlAdded) return [];
+    const frames = this.replayController.setRun(run);
+    if (initialFrame && Number.isInteger(initialTick)) {
+      this.replayController.primeFrame(initialTick, initialFrame.collection, {
+        etag: initialFrame.etag,
+        url: initialFrame.url,
+      });
+    }
+    this.replayControl.setFrames(frames, { initialTick, expanded: frames.length > 0 });
+    const warmTick = autoPlay ? frames[0]?.tick : initialTick ?? frames.at(-1)?.tick;
+    if (Number.isInteger(warmTick)) void this.replayController.prefetchTick(warmTick);
+    if (autoPlay && frames.length === 1) void this.replayControl.goToIndex(0);
+    else if (autoPlay && frames.length > 1) {
+      void this.replayControl.play({ fromStart: true });
+    }
+    return frames;
+  }
+
+  async replayRun(runId) {
+    if (!this.client) return;
+    if (this.activeRun && !TERMINAL_RUN_STATUSES.has(runStatusValue(this.activeRun))) {
+      this.showMessage(
+        "Wait for or cancel the active run before replaying a prior run.",
+        "warning",
+      );
+      return;
+    }
+    this.resultLoadGeneration += 1;
+    this.resultAbort?.abort();
+    this.resultAbort = null;
+    const replayLoadGeneration = ++this.replayLoadGeneration;
+    try {
+      const run = await this.client.getRun(runId);
+      if (this.destroyed || replayLoadGeneration !== this.replayLoadGeneration) return;
+      const frames = this.prepareReplay(run, { autoPlay: true });
+      if (frames.length === 0) {
+        this.showMessage("This completed run has no durable ticks to replay.", "warning");
+        await this.showResult(runId);
+        return;
+      }
+      this.showMessage(
+        `Replaying ${frames.length} simulation tick${frames.length === 1 ? "" : "s"}.`,
+        "success",
+      );
+    } catch (error) {
+      if (replayLoadGeneration !== this.replayLoadGeneration) return;
+      this.showMessage(`Run replay could not start: ${this.errorMessage(error)}`, "error");
     }
   }
 
@@ -2812,7 +3834,12 @@ class DigitalTwinDemoPanel {
       this.historyList.append(el("div", "dt-empty", "No simulation runs yet."));
       return;
     }
+    const liveRunActive =
+      this.activeRun && !TERMINAL_RUN_STATUSES.has(runStatusValue(this.activeRun));
     for (const run of runs) {
+      const completedTickCount = Array.isArray(run.tick_refs)
+        ? run.tick_refs.filter((ref) => Number.isInteger(ref?.tick) && ref.tick > 0).length
+        : 0;
       const row = el("div", "dt-history-row");
       const copy = el("div", "dt-history-copy");
       copy.append(
@@ -2821,16 +3848,26 @@ class DigitalTwinDemoPanel {
         el(
           "span",
           "",
-          `${Array.isArray(run.tick_refs) ? run.tick_refs.length : 0} ticks · ${run.region_id}`,
+          `${completedTickCount} ticks · ${run.region_id}`,
         ),
       );
       const action = button(
-        runStatusValue(run) === "COMPLETED" ? "Show" : "Monitor",
+        runStatusValue(run) === "COMPLETED" ? "Replay" : "Monitor",
         "dt-button dt-button-small",
       );
+      if (runStatusValue(run) === "COMPLETED" && liveRunActive) {
+        action.disabled = true;
+        action.title = "Replay is available after the active run finishes.";
+      }
       action.addEventListener("click", () => {
-        if (runStatusValue(run) === "COMPLETED") void this.showResult(run.run_id);
+        if (runStatusValue(run) === "COMPLETED") void this.replayRun(run.run_id);
         else {
+          this.replayLoadGeneration += 1;
+          this.replayController?.stop();
+          this.replayControl?.clear();
+          this.resultLoadGeneration += 1;
+          this.resultAbort?.abort();
+          this.resultAbort = null;
           this.activeRun = run;
           this.renderRunStatus(run);
           this.monitorRun(run.run_id);
@@ -2855,6 +3892,15 @@ class DigitalTwinDemoPanel {
     this.stopRunMonitoring();
     this.runArtifactCoordinator?.stop();
     this.runArtifactCoordinator = null;
+    this.replayController?.destroy();
+    this.replayController = null;
+    this.replayLoadGeneration += 1;
+    this.replayControl?.clear();
+    this.resultLoadGeneration += 1;
+    this.resultAbort?.abort();
+    this.resultAbort = null;
+    if (this.replayControlAdded) this.app.removeMapControl?.(this.replayControl);
+    this.replayControlAdded = false;
     clearTimeout(this.toastTimer);
     this.wildfireMap.destroy();
     this.assetMap.destroy();

@@ -25,6 +25,230 @@
   box-sizing: border-box;
 }
 
+.dt-replay-dock {
+  --ts-bg: hsl(var(--card, 0 0% 100%));
+  --ts-fg: hsl(var(--foreground, 222.2 84% 4.9%));
+  --ts-fg-strong: hsl(var(--foreground, 222.2 84% 4.9%));
+  --ts-fg-muted: hsl(var(--muted-foreground, 215.4 16.3% 40%));
+  --ts-border: hsl(var(--border, 214.3 31.8% 91.4%));
+  --ts-marker: #218449;
+  --ts-btn-bg: hsl(var(--muted, 210 40% 96.1%));
+  --ts-btn-border: hsl(var(--input, 214.3 31.8% 86%));
+  --ts-btn-hover-bg: color-mix(in srgb, #218449 10%, var(--ts-bg));
+  --ts-btn-hover-border: #218449;
+  --ts-input-bg: hsl(var(--background, 0 0% 100%));
+  --ts-input-border: hsl(var(--input, 214.3 31.8% 86%));
+  --ts-accent: #218449;
+  --ts-accent-hover: #176b3a;
+  --ts-accent-ring: color-mix(in srgb, #218449 24%, transparent);
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  height: 72px;
+  align-items: stretch;
+  box-sizing: border-box;
+  color: var(--ts-fg);
+  border-top: 1px solid var(--ts-border);
+  background: var(--ts-bg);
+  box-shadow: 0 -1px 8px rgba(0, 0, 0, .18);
+  font: 12px/1.3 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dt-replay-dock[hidden] {
+  display: none;
+}
+
+.dt-replay-dock.ts-docked {
+  position: relative;
+  z-index: auto;
+  flex: 0 0 auto;
+}
+
+.dt-replay-dock *,
+.dt-replay-dock *::before,
+.dt-replay-dock *::after {
+  box-sizing: border-box;
+}
+
+.dt-replay-toggle .dt-replay-toggle-button {
+  display: flex;
+  width: 29px;
+  height: 29px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: inherit;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.dt-replay-dock .ts-left,
+.dt-replay-dock .ts-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.dt-replay-dock .ts-left {
+  border-right: 1px solid var(--ts-border);
+}
+
+.dt-replay-dock .ts-right {
+  border-left: 1px solid var(--ts-border);
+}
+
+.dt-replay-dock .ts-playback {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dt-replay-dock .time-slider-btn {
+  display: inline-flex;
+  width: 28px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--ts-fg);
+  border: 1px solid var(--ts-btn-border);
+  border-radius: 4px;
+  background: var(--ts-btn-bg);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.dt-replay-dock .time-slider-btn:hover:not(:disabled) {
+  border-color: var(--ts-btn-hover-border);
+  background: var(--ts-btn-hover-bg);
+}
+
+.dt-replay-dock .time-slider-btn.ts-active {
+  color: #fff;
+  border-color: var(--ts-accent-hover);
+  background: var(--ts-accent);
+}
+
+.dt-replay-dock .time-slider-btn:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.dt-replay-dock .ts-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+  color: var(--ts-fg-muted);
+  font-size: 11px;
+}
+
+.dt-replay-dock .ts-speed-input {
+  width: 58px;
+  padding: 4px 5px;
+  color: var(--ts-fg);
+  border: 1px solid var(--ts-input-border);
+  border-radius: 3px;
+  background: var(--ts-input-bg);
+  text-align: center;
+}
+
+.dt-replay-axis {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  grid-template-rows: auto 20px auto;
+  gap: 2px;
+  padding: 7px 12px 5px;
+}
+
+.dt-replay-axis-header,
+.dt-replay-axis-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dt-replay-run,
+.dt-replay-tick,
+.dt-replay-axis-footer {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dt-replay-run {
+  color: var(--ts-fg-strong);
+  font-size: 11px;
+}
+
+.dt-replay-tick,
+.dt-replay-axis-footer {
+  color: var(--ts-fg-muted);
+  font-size: 10px;
+}
+
+.dt-replay-scrubber {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--ts-accent);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.dt-replay-scrubber:focus-visible,
+.dt-replay-dock button:focus-visible,
+.dt-replay-dock input:focus-visible {
+  outline: 2px solid var(--ts-accent);
+  outline-offset: 2px;
+}
+
+.dt-replay-frame-status {
+  text-align: center;
+}
+
+.dt-replay-dock .ts-collapse-btn {
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .dt-replay-dock {
+    height: auto;
+    min-height: 96px;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 2px;
+    padding-bottom: 4px;
+  }
+
+  .dt-replay-axis {
+    order: -1;
+    min-height: 56px;
+    flex: 1 1 100%;
+    padding: 8px 12px 4px;
+  }
+
+  .dt-replay-dock .ts-left {
+    flex: 1 1 auto;
+    padding: 2px 8px;
+    border-right: 0;
+  }
+
+  .dt-replay-dock .ts-right {
+    flex: 0 1 auto;
+    padding: 2px 8px;
+    border-left: 0;
+  }
+}
+
 .dt-console-main {
   display: grid;
   padding: 18px 18px 0;
@@ -213,77 +437,84 @@
 
 .dt-compass {
   position: relative;
-  display: grid;
   width: min(100%, 152px);
   aspect-ratio: 1;
-  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
-  align-items: center;
-  justify-items: center;
-  padding: 8px;
+  user-select: none;
   border: 1px solid var(--dt-input-line);
   border-radius: 50%;
   background: var(--dt-bg);
+  cursor: grab;
+  touch-action: none;
 }
 
-.dt-compass-point {
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  color: var(--dt-muted);
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  font: inherit;
-  font-size: 10px;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.dt-compass-point:hover:not(:disabled) {
-  color: var(--dt-ink);
-  background: var(--dt-soft);
-}
-
-.dt-compass-point[aria-checked="true"] {
-  color: #fff;
-  background: var(--dt-green);
-}
-
-.dt-compass-point:focus-visible {
-  outline: 2px solid var(--dt-green);
-  outline-offset: 2px;
-}
-
-.dt-compass-n { grid-area: 1 / 2; }
-.dt-compass-ne { grid-area: 1 / 3; }
-.dt-compass-e { grid-area: 2 / 3; }
-.dt-compass-se { grid-area: 3 / 3; }
-.dt-compass-s { grid-area: 3 / 2; }
-.dt-compass-sw { grid-area: 3 / 1; }
-.dt-compass-w { grid-area: 2 / 1; }
-.dt-compass-nw { grid-area: 1 / 1; }
-
-.dt-compass-readout {
-  display: grid;
-  width: 54px;
-  height: 54px;
-  grid-area: 2 / 2;
-  place-items: center;
-  color: var(--dt-ink);
+.dt-compass::after {
+  position: absolute;
+  inset: 27px;
   border: 1px solid var(--dt-line);
   border-radius: 50%;
-  background: var(--dt-soft);
+  content: "";
+}
+
+.dt-compass:hover:not(.dt-compass-disabled) {
+  border-color: color-mix(in srgb, var(--dt-green) 55%, var(--dt-input-line));
+}
+
+.dt-compass:focus-visible {
+  outline: 2px solid var(--dt-green);
+  outline-offset: 3px;
+}
+
+.dt-compass-dragging {
+  cursor: grabbing;
+}
+
+.dt-compass-cardinal {
+  position: absolute;
+  z-index: 2;
+  color: var(--dt-muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.dt-compass-n { top: 8px; left: 50%; transform: translateX(-50%); }
+.dt-compass-e { top: 50%; right: 8px; transform: translateY(-50%); }
+.dt-compass-s { bottom: 8px; left: 50%; transform: translateX(-50%); }
+.dt-compass-w { top: 50%; left: 8px; transform: translateY(-50%); }
+
+.dt-compass-needle {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  width: 66px;
+  height: 66px;
+  margin: -33px;
+  transform-origin: 50% 50%;
+  pointer-events: none;
+}
+
+.dt-compass-readout {
+  position: absolute;
+  z-index: 3;
+  bottom: -30px;
+  left: 50%;
+  width: max-content;
+  transform: translateX(-50%);
+  color: var(--dt-ink);
   font-size: 11px;
   font-weight: 700;
 }
 
-.dt-compass-disabled {
-  background: var(--dt-soft);
-  opacity: .6;
+.dt-compass-field {
+  padding-bottom: 26px;
 }
 
-.dt-compass-point:disabled {
+.dt-compass-disabled {
+  background: var(--dt-soft);
   cursor: not-allowed;
+  opacity: .6;
 }
 
 .dt-inline {

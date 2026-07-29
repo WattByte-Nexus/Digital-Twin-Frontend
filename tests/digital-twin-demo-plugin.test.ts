@@ -3,18 +3,23 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
   ApiProblem,
+  buildIgnitionPointFeature,
   buildPowerLineNetwork,
   buildRegionBoundsGeoJson,
   buildRunRequest,
   buildScenarioRequest,
   buildSimulationRunStatusView,
+  buildSimulationReplayFrames,
   createDigitalTwinClient,
   createRunArtifactCoordinator,
+  createSimulationReplayController,
   mergeRunProgress,
   normalizeApiBaseUrl,
+  REPLAY_CACHE_MAX_FRAMES,
   selectDemoAssetRegionIds,
   selectDemoRegions,
   selectedTreeSummary,
+  SimulationReplayControl,
   TREE_CIRCLE_RADIUS_PX,
   WildfireMapController,
 } from "../apps/geolibre-desktop/public/plugins/digital-twin-demo/dist/index.js";
@@ -66,15 +71,15 @@ describe("digital-twin-demo bundled plugin", () => {
     assert.match(source, /this\.mapContainer\.style\.cursor = cursor/);
   });
 
-  it("uses an accessible compass instead of a numeric wind-bearing spinner", async () => {
+  it("uses a draggable accessible compass instead of a numeric wind-bearing spinner", async () => {
     const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
 
     assert.match(source, /function createCompassControl\(input\)/);
-    assert.match(source, /compass\.setAttribute\("role", "radiogroup"\)/);
-    assert.match(source, /\{ label: "N", value: 0 \}/);
-    assert.match(source, /\{ label: "E", value: 90 \}/);
-    assert.match(source, /\{ label: "S", value: 180 \}/);
-    assert.match(source, /\{ label: "W", value: 270 \}/);
+    assert.match(source, /compass\.setAttribute\("role", "slider"\)/);
+    assert.match(source, /compass\.addEventListener\("pointerdown"/);
+    assert.match(source, /compass\.addEventListener\("pointermove"/);
+    assert.match(source, /Math\.atan2\(dx, -dy\)/);
+    assert.match(source, /needle\.style\.transform = `rotate\(\$\{rounded\}deg\)`/);
     assert.match(source, /this\.windBearingInput\.type = "hidden"/);
     assert.doesNotMatch(source, /this\.windBearingInput\.type = "number"/);
   });
@@ -244,6 +249,15 @@ describe("digital-twin-demo bundled plugin", () => {
     );
   });
 
+  it("renders the selected region as an outline without a fill", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.match(
+      source,
+      /"fill-opacity": \[\s*"case",\s*\["boolean", \["get", "selected"\], false\],\s*0,\s*0\.04,\s*\]/,
+    );
+  });
+
   it("shows the weather-enabled canonical Boulder region first and excludes seeded duplicates", () => {
     const seededBoulder = {
       region_id: "seeded-boulder",
@@ -314,11 +328,10 @@ describe("digital-twin-demo bundled plugin", () => {
     );
   });
 
-  it("maps selected Engine tree coordinates to ordered GeoJSON ignition points", () => {
+  it("maps arbitrary selected coordinates to ordered GeoJSON ignition points", () => {
     const second = {
-      ...treeFeature,
+      ...buildIgnitionPointFeature([-105.19, 39.81], "ignition-2"),
       geometry: { type: "Point" as const, coordinates: [-105.19, 39.81] },
-      properties: { ...treeFeature.properties, asset_id: "tree-43" },
     };
 
     assert.deepEqual(buildRunRequest("scenario-1", [treeFeature, second]), {
@@ -328,7 +341,40 @@ describe("digital-twin-demo bundled plugin", () => {
         { type: "Point", coordinates: [-105.19, 39.81] },
       ],
     });
-    assert.throws(() => buildRunRequest("scenario-1", []), /at least one tree/i);
+    assert.throws(() => buildRunRequest("scenario-1", []), /at least one ignition point/i);
+  });
+
+  it("places an ignition point from every map-canvas click without requiring a tree hit", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.match(source, /canvas\?\.contains\(event\.target\)/);
+    assert.match(source, /this\.map\.unproject\(/);
+    assert.match(source, /buildIgnitionPointFeature\(\[lngLat\.lng, lngLat\.lat\]\)/);
+  });
+
+  it("renders ignition points above satellite imagery with a dual-contrast halo", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.match(source, /nearestTree \?\? buildIgnitionPointFeature/);
+    assert.match(source, /id: SELECTION_HALO_LAYER_ID/);
+    assert.match(source, /"circle-radius": TREE_CIRCLE_RADIUS_PX \+ 6/);
+    assert.match(source, /"circle-color": "#ffffff"/);
+    assert.match(source, /"circle-stroke-color": "#111827"/);
+    assert.match(source, /"circle-radius": TREE_CIRCLE_RADIUS_PX \+ 2/);
+    assert.match(source, /"circle-color": "#ff6b35"/);
+    assert.match(source, /map\.moveLayer\(SELECTION_HALO_LAYER_ID\)/);
+    assert.match(source, /map\.moveLayer\(SELECTION_LAYER_ID\)/);
+    assert.doesNotMatch(source, /"circle-color": "rgba\(255,255,255,0\)"/);
+  });
+
+  it("toggles an existing orange ignition marker off when it is clicked again", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.match(source, /this\.selectionNearEvent = \(event\) =>/);
+    assert.match(
+      source,
+      /selectedPoint \?\? nearestTree \?\? buildIgnitionPointFeature/,
+    );
   });
 
   it("formats selected tree lineage for the panel without dropping its asset id", () => {
@@ -526,7 +572,7 @@ describe("digital-twin-demo bundled plugin", () => {
     assert.equal(new Headers(calls[1].init?.headers).get("If-None-Match"), '"tick-4"');
   });
 
-  it("applies only the newest durable tick when artifact fetches finish out of order", async () => {
+  it("applies every durable live tick in order when progress outruns artifact loading", async () => {
     type PendingArtifact = {
       signal?: AbortSignal;
       resolve: (value: {
@@ -566,14 +612,16 @@ describe("digital-twin-demo bundled plugin", () => {
       tick: 2,
       artifact_url: tickTwoUrl,
     });
-    assert.equal(pending.get(tickOneUrl)?.signal?.aborted, true);
+    assert.equal(pending.get(tickOneUrl)?.signal?.aborted, false);
+    assert.equal(pending.has(tickTwoUrl), true);
     pending.get(tickTwoUrl)?.resolve({
       notModified: false,
-      data: { type: "FeatureCollection", features: [] },
+      data: { type: "FeatureCollection", features: [{ properties: { tick: 2 } }] },
       etag: '"tick-2"',
       url: `http://engine.test${tickTwoUrl}`,
     });
-    await tickTwo;
+    await Promise.resolve();
+    assert.deepEqual(applied, []);
     pending.get(tickOneUrl)?.resolve({
       notModified: false,
       data: { type: "FeatureCollection", features: [{ properties: { tick: 1 } }] },
@@ -581,16 +629,129 @@ describe("digital-twin-demo bundled plugin", () => {
       url: `http://engine.test${tickOneUrl}`,
     });
     await tickOne;
+    assert.deepEqual(applied.map(({ tick }) => tick), [1]);
+    await tickTwo;
 
     assert.deepEqual(applied, [
+      {
+        runId: "run-1",
+        tick: 1,
+        artifactUrl: tickOneUrl,
+        url: `http://engine.test${tickOneUrl}`,
+        collection: {
+          type: "FeatureCollection",
+          features: [{ properties: { tick: 1 } }],
+        },
+      },
       {
         runId: "run-1",
         tick: 2,
         artifactUrl: tickTwoUrl,
         url: `http://engine.test${tickTwoUrl}`,
-        collection: { type: "FeatureCollection", features: [] },
+        collection: {
+          type: "FeatureCollection",
+          features: [{ properties: { tick: 2 } }],
+        },
       },
     ]);
+  });
+
+  it("paces downloaded live ticks so each footprint reaches a browser frame", async () => {
+    let now = 0;
+    const waits: number[] = [];
+    const applied: number[] = [];
+    const client = {
+      resolveUrl: (path: string) => `http://engine.test${path}`,
+      getRunArtifact: async (path: string) => {
+        const tick = Number(path.match(/\/ticks\/(\d+)\//)?.[1]);
+        return {
+          notModified: false,
+          data: {
+            type: "FeatureCollection",
+            features: [{ properties: { tick } }],
+          },
+          etag: `"tick-${tick}"`,
+          url: `http://engine.test${path}`,
+        };
+      },
+    };
+    const coordinator = createRunArtifactCoordinator(client, {
+      liveFrameIntervalMs: 120,
+      now: () => now,
+      wait: async (milliseconds: number) => {
+        waits.push(milliseconds);
+        now += milliseconds;
+      },
+      onArtifact: ({ tick }: { tick: number }) => applied.push(tick),
+    });
+
+    await Promise.all([
+      coordinator.update({
+        run_id: "run-1",
+        completed_ticks: 1,
+        tick: 1,
+        artifact_url: "/api/v1/simulation-runs/run-1/ticks/1/result.geojson",
+      }),
+      coordinator.update({
+        run_id: "run-1",
+        completed_ticks: 2,
+        tick: 2,
+        artifact_url: "/api/v1/simulation-runs/run-1/ticks/2/result.geojson",
+      }),
+    ]);
+
+    assert.deepEqual(applied, [1, 2]);
+    assert.deepEqual(waits, [120]);
+  });
+
+  it("drains queued live ticks before terminal run cleanup", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+    let resolveArtifact!: (value: {
+      notModified: false;
+      data: object;
+      etag: string;
+      url: string;
+    }) => void;
+    const applied: number[] = [];
+    const client = {
+      resolveUrl: (path: string) => `http://engine.test${path}`,
+      getRunArtifact: () =>
+        new Promise((resolve) => {
+          resolveArtifact = resolve;
+        }),
+    };
+    const coordinator = createRunArtifactCoordinator(client, {
+      onArtifact: ({ tick }: { tick: number }) => applied.push(tick),
+    });
+    const artifactUrl = "/api/v1/simulation-runs/run-1/ticks/1/result.geojson";
+
+    void coordinator.update({
+      run_id: "run-1",
+      completed_ticks: 1,
+      tick: 1,
+      artifact_url: artifactUrl,
+    });
+    const drained = coordinator.flush();
+    let didDrain = false;
+    void drained.then(() => {
+      didDrain = true;
+    });
+    await Promise.resolve();
+    assert.equal(didDrain, false);
+
+    resolveArtifact({
+      notModified: false,
+      data: { type: "FeatureCollection", features: [{ properties: { tick: 1 } }] },
+      etag: '"tick-1"',
+      url: `http://engine.test${artifactUrl}`,
+    });
+    await drained;
+
+    assert.deepEqual(applied, [1]);
+    assert.match(
+      source,
+      /await this\.runArtifactCoordinator\?\.flush\(\);\s*this\.runArtifactCoordinator\?\.stop\(\)/,
+    );
   });
 
   it("uses snapshot artifact URLs and deduplicates replayed progress", async () => {
@@ -624,10 +785,433 @@ describe("digital-twin-demo bundled plugin", () => {
     assert.deepEqual(applied, [3]);
   });
 
+  it("loads all newly completed artifacts while live monitoring falls back to polling", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+    const calls: string[] = [];
+    const applied: number[] = [];
+    const client = {
+      resolveUrl: (path: string) => `http://engine.test${path}`,
+      getRunArtifact: async (path: string) => {
+        calls.push(path);
+        const tick = Number(path.match(/\/ticks\/(\d+)\//)?.[1]);
+        return {
+          notModified: false,
+          data: {
+            type: "FeatureCollection",
+            features: [{ properties: { tick } }],
+          },
+          etag: `"tick-${tick}"`,
+          url: `http://engine.test${path}`,
+        };
+      },
+    };
+    const coordinator = createRunArtifactCoordinator(client, {
+      onArtifact: ({ tick }: { tick: number }) => applied.push(tick),
+    });
+    const run = {
+      run_id: "run-1",
+      status: "STARTED",
+      completed_ticks: 3,
+      tick_refs: [
+        { tick: 0, world_state_ref: "state://initial" },
+        { tick: 1, world_state_ref: "state://tick-1" },
+        { tick: 2, world_state_ref: "state://tick-2" },
+        { tick: 3, world_state_ref: "state://tick-3" },
+      ],
+    };
+
+    await coordinator.updateRun(run);
+    await coordinator.updateRun(run);
+
+    assert.deepEqual(calls, [
+      "/api/v1/simulation-runs/run-1/ticks/1/result.geojson",
+      "/api/v1/simulation-runs/run-1/ticks/2/result.geojson",
+      "/api/v1/simulation-runs/run-1/ticks/3/result.geojson",
+    ]);
+    assert.deepEqual(applied, [1, 2, 3]);
+    assert.match(source, /await this\.runArtifactCoordinator\?\.updateRun\(run\)/);
+  });
+
+  it("builds replay frames for every durable simulation tick", () => {
+    assert.deepEqual(
+      buildSimulationReplayFrames({
+        run_id: "run/1",
+        completed_ticks: 3,
+        tick_refs: [
+          { tick: 0, world_state_ref: "state://initial" },
+          { tick: 1, world_state_ref: "state://tick-1" },
+          {
+            tick: 2,
+            artifact_url: "https://untrusted.example/tick-2.geojson",
+          },
+        ],
+      }),
+      [
+        {
+          runId: "run/1",
+          tick: 1,
+          artifactUrl: "/api/v1/simulation-runs/run%2F1/ticks/1/result.geojson",
+        },
+        {
+          runId: "run/1",
+          tick: 2,
+          artifactUrl: "/api/v1/simulation-runs/run%2F1/ticks/2/result.geojson",
+        },
+      ],
+    );
+    assert.deepEqual(
+      buildSimulationReplayFrames({ run_id: "live-run", completed_ticks: 2 }),
+      [
+        {
+          runId: "live-run",
+          tick: 1,
+          artifactUrl: "/api/v1/simulation-runs/live-run/ticks/1/result.geojson",
+        },
+        {
+          runId: "live-run",
+          tick: 2,
+          artifactUrl: "/api/v1/simulation-runs/live-run/ticks/2/result.geojson",
+        },
+      ],
+    );
+  });
+
+  it("keeps superseded tick downloads warm while applying only the newest request", async () => {
+    type PendingReplay = {
+      signal?: AbortSignal;
+      resolve: (value: {
+        notModified: false;
+        data: object;
+        etag: string;
+        url: string;
+      }) => void;
+    };
+    const pending = new Map<string, PendingReplay>();
+    const calls: string[] = [];
+    const applied: number[] = [];
+    const client = {
+      getRunArtifact: (path: string, options: { signal?: AbortSignal } = {}) => {
+        calls.push(path);
+        return new Promise((resolve) => {
+          pending.set(path, {
+            signal: options.signal,
+            resolve: resolve as PendingReplay["resolve"],
+          });
+        });
+      },
+    };
+    const replay = createSimulationReplayController(client, {
+      onFrame: ({ tick }: { tick: number }) => applied.push(tick),
+      prefetchRadius: 0,
+    });
+    replay.setRun({ run_id: "run-1", completed_ticks: 2 });
+
+    const first = replay.showTick(1);
+    const second = replay.showTick(2);
+    const tickOneUrl = "/api/v1/simulation-runs/run-1/ticks/1/result.geojson";
+    const tickTwoUrl = "/api/v1/simulation-runs/run-1/ticks/2/result.geojson";
+    assert.equal(pending.get(tickOneUrl)?.signal?.aborted, false);
+    pending.get(tickTwoUrl)?.resolve({
+      notModified: false,
+      data: {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: { tick: 2 }, geometry: null }],
+      },
+      etag: '"tick-2"',
+      url: `http://engine.test${tickTwoUrl}`,
+    });
+    await second;
+    pending.get(tickOneUrl)?.resolve({
+      notModified: false,
+      data: {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: { tick: 1 }, geometry: null }],
+      },
+      etag: '"stale-tick-1"',
+      url: `http://engine.test${tickOneUrl}`,
+    });
+    await first;
+
+    await replay.showTick(1);
+    await replay.showTick(2);
+
+    assert.deepEqual(applied, [2, 1, 2]);
+    assert.deepEqual(calls, [tickOneUrl, tickTwoUrl]);
+    replay.destroy();
+  });
+
+  it("prefetches nearby replay ticks with bounded concurrency", async () => {
+    const calls: number[] = [];
+    let active = 0;
+    let maxActive = 0;
+    const releases: Array<() => void> = [];
+    const client = {
+      getRunArtifact: async (path: string) => {
+        const tick = Number(path.match(/ticks\/(\d+)/)?.[1]);
+        calls.push(tick);
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active -= 1;
+        return {
+          notModified: false,
+          data: {
+            type: "FeatureCollection",
+            features: [{ type: "Feature", properties: { tick }, geometry: null }],
+          },
+          etag: `"tick-${tick}"`,
+          url: `http://engine.test${path}`,
+        };
+      },
+    };
+    const replay = createSimulationReplayController(client, {
+      prefetchConcurrency: 2,
+      prefetchRadius: 2,
+    });
+    replay.setRun({ run_id: "run-1", completed_ticks: 8 });
+
+    const prefetch = replay.prefetchTick(4);
+    while (releases.length < 2) await Promise.resolve();
+    assert.equal(maxActive, 2);
+    while (active > 0 || calls.length < 5) {
+      releases.splice(0).forEach((release) => release());
+      await Promise.resolve();
+    }
+    await prefetch;
+
+    assert.deepEqual(calls, [4, 3, 5, 2, 6]);
+    replay.destroy();
+  });
+
+  it("bounds the replay cache while retaining recently viewed ticks", async () => {
+    const calls: string[] = [];
+    const client = {
+      getRunArtifact: async (path: string) => {
+        calls.push(path);
+        const tick = Number(path.match(/ticks\/(\d+)/)?.[1]);
+        return {
+          notModified: false,
+          data: {
+            type: "FeatureCollection",
+            features: [{ type: "Feature", properties: { tick }, geometry: null }],
+          },
+          etag: `"tick-${tick}"`,
+          url: `http://engine.test${path}`,
+        };
+      },
+    };
+    const replay = createSimulationReplayController(client, { prefetchRadius: 0 });
+    replay.setRun({
+      run_id: "long-run",
+      completed_ticks: REPLAY_CACHE_MAX_FRAMES + 1,
+    });
+
+    for (let tick = 1; tick <= REPLAY_CACHE_MAX_FRAMES + 1; tick += 1) {
+      await replay.showTick(tick);
+    }
+    await replay.showTick(REPLAY_CACHE_MAX_FRAMES + 1);
+    await replay.showTick(1);
+
+    assert.equal(calls.length, REPLAY_CACHE_MAX_FRAMES + 2);
+    assert.equal(
+      calls.filter((path) => path.endsWith("/ticks/1/result.geojson")).length,
+      2,
+    );
+    replay.destroy();
+  });
+
+  it("duplicates the GeoLibre time-slider transport and scrubbable dock for run replay", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.match(source, /class SimulationReplayControl/);
+    assert.match(source, /className = "maplibregl-time-slider-dock dt-replay-dock"/);
+    assert.match(source, /aria-label", "Previous simulation tick"/);
+    assert.match(source, /aria-label", "Play simulation replay"/);
+    assert.match(source, /this\.scrubber\.type = "range"/);
+    assert.match(source, /maplibregl-time-slider-layout dt-replay-layout/);
+    assert.match(source, /Wait for or cancel the active run before replaying a prior run/);
+    assert.match(source, /resultLoadGeneration !== this\.resultLoadGeneration/);
+  });
+
+  it("does not resume autoplay after a manual scrub interrupts the first frame load", async () => {
+    const pending = new Map<number, (value: object) => void>();
+    const control = new SimulationReplayControl(
+      (frame: { tick: number }) =>
+        new Promise((resolve) => {
+          pending.set(frame.tick, resolve);
+        }),
+    );
+    control.playButton = {
+      textContent: "",
+      title: "",
+      setAttribute: () => {},
+      classList: { add: () => {}, remove: () => {} },
+    };
+    control.setFrames([
+      { runId: "run-1", tick: 1, artifactUrl: "/tick-1" },
+      { runId: "run-1", tick: 2, artifactUrl: "/tick-2" },
+    ]);
+
+    const autoplay = control.play({ fromStart: true });
+    const manual = control.goToIndex(1, { manual: true });
+    pending.get(1)?.({ collection: { type: "FeatureCollection", features: [] } });
+    await autoplay;
+    pending.get(2)?.({ collection: { type: "FeatureCollection", features: [] } });
+    await manual;
+
+    assert.equal(control.playing, false);
+    control.onRemove();
+  });
+
+  it("coalesces live scrubber input to the newest tick on each browser frame", async () => {
+    const selected: number[] = [];
+    let scheduledFrame: (() => void) | null = null;
+    const control = new SimulationReplayControl(
+      async (frame: { tick: number }) => {
+        selected.push(frame.tick);
+        return { collection: { type: "FeatureCollection", features: [] } };
+      },
+      {
+        requestFrame: (callback: () => void) => {
+          scheduledFrame = callback;
+          return 41;
+        },
+        cancelFrame: () => {
+          scheduledFrame = null;
+        },
+      },
+    );
+    control.playButton = {
+      textContent: "",
+      title: "",
+      setAttribute: () => {},
+      classList: { add: () => {}, remove: () => {} },
+    };
+    control.setFrames(
+      Array.from({ length: 100 }, (_, index) => ({
+        runId: "run-1",
+        tick: index + 1,
+        artifactUrl: `/tick-${index + 1}`,
+      })),
+    );
+
+    control.queueScrub(10);
+    control.queueScrub(70);
+    control.queueScrub(99);
+    assert.deepEqual(selected, []);
+    assert.equal(control.index, 99);
+
+    scheduledFrame?.();
+    await Promise.resolve();
+    assert.deepEqual(selected, [100]);
+    control.onRemove();
+  });
+
+  it("updates the map immediately while deferring replay store synchronization", () => {
+    const sources = new Map<string, { data: object; setData: (data: object) => void }>();
+    const layers = new Map<string, object>();
+    const registrations: Array<{ geojson: object }> = [];
+    let scheduledRegistration: (() => void) | null = null;
+    const map = {
+      isStyleLoaded: () => true,
+      on: () => {},
+      off: () => {},
+      getSource: (id: string) => sources.get(id),
+      addSource: (id: string, source: { data: object }) => {
+        const mutable = {
+          data: source.data,
+          setData(data: object) {
+            mutable.data = data;
+          },
+        };
+        sources.set(id, mutable);
+      },
+      removeSource: (id: string) => sources.delete(id),
+      getLayer: (id: string) => layers.get(id),
+      addLayer: (layer: { id: string }) => layers.set(layer.id, layer),
+      removeLayer: (id: string) => layers.delete(id),
+      setLayoutProperty: () => {},
+      setPaintProperty: () => {},
+    };
+    const app = {
+      getMap: () => map,
+      registerExternalNativeLayer: (registration: { geojson: object }) =>
+        registrations.push(registration),
+      unregisterExternalNativeLayer: () => {},
+      subscribeExternalNativeLayerState: () => () => {},
+    };
+    const controller = new WildfireMapController(app, {
+      scheduleRegistration: (callback: () => void) => {
+        scheduledRegistration = callback;
+        return 17;
+      },
+      cancelRegistration: () => {
+        scheduledRegistration = null;
+      },
+    });
+    const frame = (tick: number) => ({
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: { tick }, geometry: null }],
+    });
+
+    controller.setData(frame(1), {
+      runId: "run-1",
+      tick: 1,
+      sourceUrl: "http://engine/tick-1",
+      deferRegistration: true,
+    });
+    controller.setData(frame(2), {
+      runId: "run-1",
+      tick: 2,
+      sourceUrl: "http://engine/tick-2",
+      deferRegistration: true,
+    });
+
+    assert.deepEqual([...sources.values()][0].data, frame(2));
+    assert.deepEqual(registrations, []);
+    scheduledRegistration?.();
+    assert.deepEqual(registrations.map(({ geojson }) => geojson), [frame(2)]);
+    controller.destroy();
+  });
+
+  it("does not skip a replay tick when another advance is requested during loading", async () => {
+    let resolveSelection: ((value: object) => void) | undefined;
+    const selected: number[] = [];
+    const control = new SimulationReplayControl(
+      (frame: { tick: number }) =>
+        new Promise((resolve) => {
+          selected.push(frame.tick);
+          resolveSelection = resolve;
+        }),
+    );
+    control.playButton = {
+      textContent: "",
+      title: "",
+      setAttribute: () => {},
+      classList: { add: () => {}, remove: () => {} },
+    };
+    control.setFrames([
+      { runId: "run-1", tick: 1, artifactUrl: "/tick-1" },
+      { runId: "run-1", tick: 2, artifactUrl: "/tick-2" },
+      { runId: "run-1", tick: 3, artifactUrl: "/tick-3" },
+    ]);
+    control.index = 0;
+    control.playing = true;
+
+    const firstAdvance = control.advance();
+    const competingAdvance = control.advance();
+    assert.deepEqual(selected, [2]);
+    resolveSelection?.({ collection: { type: "FeatureCollection", features: [] } });
+    await Promise.all([firstAdvance, competingAdvance]);
+
+    assert.equal(control.index, 1);
+    control.onRemove();
+  });
+
   it("replaces one stable wildfire map source as durable ticks grow", () => {
     const sources = new Map<string, { data: object; setData: (data: object) => void }>();
     const layers = new Map<string, object>();
-    const registrations: Array<{ id: string }> = [];
+    const registrations: Array<{ id: string; geojson: object; opacity?: number }> = [];
     let addSourceCalls = 0;
     const map = {
       isStyleLoaded: () => true,
@@ -655,6 +1239,8 @@ describe("digital-twin-demo bundled plugin", () => {
       getMap: () => map,
       registerExternalNativeLayer: (registration: {
         id: string;
+        geojson: object;
+        opacity?: number;
       }) => registrations.push(registration),
       unregisterExternalNativeLayer: () => {},
       subscribeExternalNativeLayerState: (
@@ -667,11 +1253,45 @@ describe("digital-twin-demo bundled plugin", () => {
     };
     const first = {
       type: "FeatureCollection",
-      features: [{ type: "Feature", properties: { tick: 1 }, geometry: null }],
+      features: [
+        {
+          type: "Feature",
+          properties: { tick: 1 },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+                [0, 0],
+              ],
+            ],
+          },
+        },
+      ],
     };
     const second = {
       type: "FeatureCollection",
-      features: [{ type: "Feature", properties: { tick: 2 }, geometry: null }],
+      features: [
+        {
+          type: "Feature",
+          properties: { tick: 2 },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [2, 0],
+                [2, 2],
+                [0, 2],
+                [0, 0],
+              ],
+            ],
+          },
+        },
+      ],
     };
     const controller = new WildfireMapController(app);
 
@@ -681,7 +1301,15 @@ describe("digital-twin-demo bundled plugin", () => {
     assert.equal(addSourceCalls, 1);
     assert.equal(layers.size, 2);
     assert.deepEqual([...sources.values()][0].data, second);
-    assert.deepEqual(registrations.map(({ id }) => id), ["digital-twin-demo-wildfire"]);
+    assert.deepEqual(
+      registrations.map(({ id, geojson }) => ({ id, geojson })),
+      [
+        { id: "digital-twin-demo-wildfire", geojson: first },
+        { id: "digital-twin-demo-wildfire", geojson: second },
+      ],
+    );
+    assert.equal(registrations[0].opacity, 0.82);
+    assert.equal(registrations[1].opacity, undefined);
     controller.destroy();
   });
 
