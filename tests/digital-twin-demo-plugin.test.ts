@@ -7,6 +7,7 @@ import {
   buildRegionBoundsGeoJson,
   buildRunRequest,
   buildScenarioRequest,
+  buildSimulationRunStatusView,
   createDigitalTwinClient,
   createRunArtifactCoordinator,
   mergeRunProgress,
@@ -713,6 +714,96 @@ describe("digital-twin-demo bundled plugin", () => {
         tick: 2,
       },
     );
+  });
+
+  it("keeps live run progress monotonic when snapshots arrive out of order", () => {
+    assert.deepEqual(
+      mergeRunProgress(
+        {
+          run_id: "run-1",
+          status: "COMPLETED",
+          completed_ticks: 4,
+          total_ticks: 4,
+          tick: 4,
+        },
+        {
+          schema_version: 1,
+          run_id: "run-1",
+          status: "STARTED",
+          completed_ticks: 3,
+          total_ticks: null,
+          tick: 3,
+        },
+      ),
+      {
+        run_id: "run-1",
+        status: "COMPLETED",
+        completed_ticks: 4,
+        total_ticks: 4,
+        tick: 4,
+        schema_version: 1,
+      },
+    );
+  });
+
+  it("builds stable determinate and indeterminate live status views", () => {
+    assert.deepEqual(
+      buildSimulationRunStatusView({
+        run_id: "run-1",
+        region_id: "front-range",
+        status: "STARTED",
+        completed_ticks: 3,
+        total_ticks: 8,
+      }),
+      {
+        active: true,
+        completedTicks: 3,
+        detail: "3 / 8 ticks completed",
+        failure: null,
+        identifier: "run-1",
+        progressRatio: 0.375,
+        progressText: "3 of 8 simulation ticks completed",
+        regionText: "Region front-range",
+        status: "STARTED",
+        statusLabel: "STARTED",
+        totalTicks: 8,
+      },
+    );
+    assert.deepEqual(
+      buildSimulationRunStatusView({
+        scenario_id: "scenario-1",
+        status: "SUBMITTING",
+        completed_ticks: 0,
+      }),
+      {
+        active: true,
+        completedTicks: 0,
+        detail: "0 ticks produced",
+        failure: null,
+        identifier: "scenario-1",
+        progressRatio: null,
+        progressText: "Simulation is SUBMITTING",
+        regionText: "",
+        status: "SUBMITTING",
+        statusLabel: "SUBMITTING",
+        totalTicks: null,
+      },
+    );
+  });
+
+  it("keeps the live status DOM stable and animates only the progress fill", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+    const styles = await readFile(new URL("dist/style.css", pluginRoot), "utf8");
+
+    assert.doesNotMatch(
+      source,
+      /renderRunStatus\(run\) \{\s*this\.runStatus\.replaceChildren\(\)/,
+    );
+    assert.match(source, /this\.runProgressFill\.style\.setProperty\("--dt-run-progress"/);
+    assert.match(source, /this\.runProgress\.setAttribute\("role", "progressbar"\)/);
+    assert.match(styles, /\.dt-run-progress-fill\s*\{[^}]*transition: transform/s);
+    assert.match(styles, /\.dt-run-progress-indeterminate \.dt-run-progress-fill/s);
+    assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.dt-run-progress-fill/);
   });
 
   it("turns problem-details responses into a safe typed error", async () => {

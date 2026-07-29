@@ -1049,11 +1049,28 @@ export function mergeRunProgress(run, progress) {
   if (run.run_id && progress.run_id !== run.run_id) {
     throw new Error("Simulation progress does not belong to the active run.");
   }
-  return {
+  const currentStatus = runStatusValue(run);
+  const nextStatus = runStatusValue(progress);
+  const merged = {
     ...run,
     ...progress,
-    status: runStatusValue(progress),
+    status:
+      TERMINAL_RUN_STATUSES.has(currentStatus) && !TERMINAL_RUN_STATUSES.has(nextStatus)
+        ? currentStatus
+        : nextStatus,
   };
+  for (const field of ["completed_ticks", "total_ticks", "tick"]) {
+    const currentValue = run[field];
+    const nextValue = progress[field];
+    if (
+      Number.isInteger(currentValue) &&
+      currentValue >= 0 &&
+      (!Number.isInteger(nextValue) || nextValue < currentValue)
+    ) {
+      merged[field] = currentValue;
+    }
+  }
+  return merged;
 }
 
 function safeRunFailure(run) {
@@ -1063,6 +1080,42 @@ function safeRunFailure(run) {
     return failure.error_message;
   }
   return "The simulation failed.";
+}
+
+export function buildSimulationRunStatusView(run) {
+  if (!isRecord(run)) return null;
+  const status = runStatusValue(run);
+  const statusLabel = status.replaceAll("_", " ");
+  const completedTicks = Math.max(
+    0,
+    Number.isInteger(run.completed_ticks)
+      ? run.completed_ticks
+      : Array.isArray(run.tick_refs)
+        ? run.tick_refs.filter((ref) => Number.isInteger(ref?.tick) && ref.tick > 0).length
+        : 0,
+  );
+  const totalTicks =
+    Number.isInteger(run.total_ticks) && run.total_ticks > 0 ? run.total_ticks : null;
+  const active = !TERMINAL_RUN_STATUSES.has(status);
+  const progressRatio =
+    totalTicks === null ? null : Math.min(1, Math.max(0, completedTicks / totalTicks));
+  return {
+    active,
+    completedTicks,
+    detail: totalTicks
+      ? `${completedTicks} / ${totalTicks} ticks completed`
+      : `${completedTicks} tick${completedTicks === 1 ? "" : "s"} produced`,
+    failure: safeRunFailure(run),
+    identifier: String(run.run_id ?? run.scenario_id ?? ""),
+    progressRatio,
+    progressText: totalTicks
+      ? `${completedTicks} of ${totalTicks} simulation ticks completed`
+      : `Simulation is ${statusLabel}`,
+    regionText: run.region_id ? `Region ${run.region_id}` : "",
+    status,
+    statusLabel,
+    totalTicks,
+  };
 }
 
 class AssetMapController {
@@ -1838,6 +1891,24 @@ class DigitalTwinDemoPanel {
       "Choose an area and ignition trees to prepare the run.",
     );
     this.runStatus = el("div", "dt-run-card");
+    const runHeader = el("div", "dt-run-header");
+    this.runStatusLabel = el("span", "dt-run-status");
+    this.runStatusLabel.setAttribute("aria-live", "polite");
+    this.runStatusLabel.setAttribute("aria-atomic", "true");
+    this.runIdentifier = el("span", "dt-mono");
+    runHeader.append(this.runStatusLabel, this.runIdentifier);
+    const runDetail = el("div", "dt-run-detail");
+    this.runTicks = el("span", "dt-run-ticks");
+    this.runRegion = el("span");
+    runDetail.append(this.runTicks, this.runRegion);
+    this.runProgress = el("div", "dt-run-progress");
+    this.runProgress.setAttribute("role", "progressbar");
+    this.runProgress.setAttribute("aria-label", "Simulation tick progress");
+    this.runProgress.setAttribute("aria-valuemin", "0");
+    this.runProgressFill = el("div", "dt-run-progress-fill");
+    this.runProgress.append(this.runProgressFill);
+    this.runFailure = el("div", "dt-run-failure");
+    this.runStatus.append(runHeader, runDetail, this.runProgress, this.runFailure);
     this.renderRunStatus(null);
     const runActions = el("div", "dt-actions");
     this.runButton = button("Run simulation", "dt-button dt-button-primary");
@@ -2645,46 +2716,52 @@ class DigitalTwinDemoPanel {
   }
 
   renderRunStatus(run) {
-    this.runStatus.replaceChildren();
-    if (!run) {
+    const view = buildSimulationRunStatusView(run);
+    if (!view) {
       this.runStatus.hidden = true;
+      this.runProgress.hidden = true;
+      this.runProgressFill.style.setProperty("--dt-run-progress", "0");
+      this.runFailure.hidden = true;
       return;
     }
     this.runStatus.hidden = false;
-    const status = runStatusValue(run);
-    this.runStatus.className = `dt-run-card dt-run-${status.toLowerCase().replaceAll("_", "-")}`;
-    const header = el("div", "dt-run-header");
-    header.append(
-      el("span", "dt-run-status", status.replaceAll("_", " ")),
-      el("span", "dt-mono", run.run_id ?? run.scenario_id ?? ""),
-    );
-    const completedTicks = Number.isInteger(run.completed_ticks)
-      ? run.completed_ticks
-      : Array.isArray(run.tick_refs)
-        ? run.tick_refs.length
-        : 0;
-    const totalTicks = Number.isInteger(run.total_ticks) ? run.total_ticks : null;
-    const detail = el("div", "dt-run-detail");
-    detail.append(
-      el(
-        "span",
-        "",
-        totalTicks
-          ? `${completedTicks} / ${totalTicks} ticks completed`
-          : `${completedTicks} tick${completedTicks === 1 ? "" : "s"} produced`,
-      ),
-      el("span", "", run.region_id ? `Region ${run.region_id}` : ""),
-    );
-    const failure = safeRunFailure(run);
-    this.runStatus.append(header, detail);
-    if (totalTicks) {
-      const progress = el("progress", "dt-run-progress");
-      progress.max = totalTicks;
-      progress.value = Math.min(completedTicks, totalTicks);
-      progress.setAttribute("aria-label", "Simulation tick progress");
-      this.runStatus.append(progress);
+    this.runStatus.className = [
+      "dt-run-card",
+      `dt-run-${view.status.toLowerCase().replaceAll("_", "-")}`,
+      view.active ? "dt-run-live" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    this.runStatusLabel.textContent = view.statusLabel;
+    this.runIdentifier.textContent = view.identifier;
+    this.runIdentifier.hidden = !view.identifier;
+    this.runTicks.textContent = view.detail;
+    this.runRegion.textContent = view.regionText;
+    this.runRegion.hidden = !view.regionText;
+
+    const indeterminate = view.active && view.progressRatio === null;
+    this.runProgress.hidden = !indeterminate && view.totalTicks === null;
+    this.runProgress.classList.toggle("dt-run-progress-indeterminate", indeterminate);
+    this.runProgress.setAttribute("aria-valuetext", view.progressText);
+    if (view.totalTicks !== null) {
+      this.runProgress.setAttribute("aria-valuemax", String(view.totalTicks));
+      this.runProgress.setAttribute(
+        "aria-valuenow",
+        String(Math.min(view.completedTicks, view.totalTicks)),
+      );
+      this.runProgress.removeAttribute("aria-busy");
+      this.runProgressFill.style.setProperty(
+        "--dt-run-progress",
+        String(view.progressRatio),
+      );
+    } else {
+      this.runProgress.removeAttribute("aria-valuemax");
+      this.runProgress.removeAttribute("aria-valuenow");
+      this.runProgress.setAttribute("aria-busy", String(indeterminate));
+      this.runProgressFill.style.setProperty("--dt-run-progress", "0.32");
     }
-    if (failure) this.runStatus.append(el("div", "dt-run-failure", failure));
+    this.runFailure.textContent = view.failure ?? "";
+    this.runFailure.hidden = !view.failure;
   }
 
   async showResult(runId, signal) {
