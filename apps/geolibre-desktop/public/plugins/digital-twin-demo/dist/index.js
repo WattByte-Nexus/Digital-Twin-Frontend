@@ -79,67 +79,105 @@ function powerLinePaths(collection) {
   return paths;
 }
 
-function lineBearing(coordinates, index) {
-  const previous = coordinates[Math.max(0, index - 1)];
-  const next = coordinates[Math.min(coordinates.length - 1, index + 1)];
-  const averageLatitude = (previous[1] + next[1]) / 2;
+function coordinateKey([longitude, latitude]) {
+  return `${longitude.toFixed(7)},${latitude.toFixed(7)}`;
+}
+
+function bearingBetween(start, end) {
+  const averageLatitude = (start[1] + end[1]) / 2;
   const metersPerLongitude = Math.max(
     Math.abs(111_320 * Math.cos((averageLatitude * Math.PI) / 180)),
     1,
   );
-  const dx = (next[0] - previous[0]) * metersPerLongitude;
-  const dy = (next[1] - previous[1]) * 110_540;
+  const dx = (end[0] - start[0]) * metersPerLongitude;
+  const dy = (end[1] - start[1]) * 110_540;
   return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
 }
 
-function offsetPath(coordinates, offsetMeters, heightMeters) {
-  const averageLatitude =
-    coordinates.reduce((sum, coordinate) => sum + coordinate[1], 0) / coordinates.length;
+function sharedPoleBearing(bearings) {
+  const axes = bearings.map((bearing) => ((bearing % 180) + 180) % 180);
+  const vector = axes.reduce(
+    ({ x, y }, bearing) => {
+      const doubledRadians = ((bearing * 2) * Math.PI) / 180;
+      return {
+        x: x + Math.cos(doubledRadians),
+        y: y + Math.sin(doubledRadians),
+      };
+    },
+    { x: 0, y: 0 },
+  );
+  if (Math.hypot(vector.x, vector.y) < 1e-8) return axes[0] ?? 0;
+  return ((Math.atan2(vector.y, vector.x) * 90) / Math.PI + 180) % 180;
+}
+
+function conductorAttachment([longitude, latitude], bearing, offsetMeters) {
   const metersPerLongitude = Math.max(
-    Math.abs(111_320 * Math.cos((averageLatitude * Math.PI) / 180)),
+    Math.abs(111_320 * Math.cos((latitude * Math.PI) / 180)),
     1,
   );
   const metersPerLatitude = 110_540;
-  return coordinates.map(([longitude, latitude], index) => {
-    const previous = coordinates[Math.max(0, index - 1)];
-    const next = coordinates[Math.min(coordinates.length - 1, index + 1)];
-    const dx = (next[0] - previous[0]) * metersPerLongitude;
-    const dy = (next[1] - previous[1]) * metersPerLatitude;
-    const length = Math.hypot(dx, dy) || 1;
-    return [
-      longitude + ((-dy / length) * offsetMeters) / metersPerLongitude,
-      latitude + ((dx / length) * offsetMeters) / metersPerLatitude,
-      heightMeters,
-    ];
-  });
+  const radians = (bearing * Math.PI) / 180;
+  return [
+    longitude + (-Math.cos(radians) * offsetMeters) / metersPerLongitude,
+    latitude + (Math.sin(radians) * offsetMeters) / metersPerLatitude,
+    CONDUCTOR_HEIGHT_METERS,
+  ];
 }
 
 export function buildPowerLineNetwork(collection) {
   const paths = powerLinePaths(asFeatureCollection(collection, "Engine assets"));
-  const polesByCoordinate = new Map();
+  const poleRecords = new Map();
+  const recordFor = (coordinate) => {
+    const key = coordinateKey(coordinate);
+    let record = poleRecords.get(key);
+    if (!record) {
+      record = { coordinate, bearings: [] };
+      poleRecords.set(key, record);
+    }
+    return record;
+  };
+
   paths.forEach((path) => {
-    path.forEach(([longitude, latitude], index) => {
-      const key = `${longitude.toFixed(7)},${latitude.toFixed(7)}`;
-      if (polesByCoordinate.has(key)) return;
-      const bearing = lineBearing(path, index);
-      polesByCoordinate.set(key, {
-        id: `pole-${polesByCoordinate.size + 1}`,
-        kind: "pole",
-        position: [longitude, latitude, 0],
-        bearing,
-        // The supplied pole model's crossarm lies on local Z once stood upright.
-        modelYaw: (90 - bearing + 360) % 360,
-      });
+    path.slice(0, -1).forEach((start, index) => {
+      const end = path[index + 1];
+      const bearing = bearingBetween(start, end);
+      recordFor(start).bearings.push(bearing);
+      recordFor(end).bearings.push(bearing);
     });
   });
-  const conductors = paths.flatMap((path, pathIndex) =>
-    CONDUCTOR_OFFSETS_METERS.map((offset, sideIndex) => ({
-      id: `line-${pathIndex + 1}-${sideIndex === 0 ? "left" : "right"}`,
-      kind: "conductor",
-      path: offsetPath(path, offset, CONDUCTOR_HEIGHT_METERS),
-    })),
+
+  const poles = [...poleRecords.values()].map((record, index) => {
+    const [longitude, latitude] = record.coordinate;
+    const bearing = sharedPoleBearing(record.bearings);
+    record.bearing = bearing;
+    return {
+      id: `pole-${index + 1}`,
+      kind: "pole",
+      position: [longitude, latitude, 0],
+      bearing,
+      // The supplied pole model's crossarm lies on local Z once stood upright.
+      modelYaw: (90 - bearing + 360) % 360,
+    };
+  });
+
+  let spanIndex = 0;
+  const conductors = paths.flatMap((path) =>
+    path.slice(0, -1).flatMap((start, index) => {
+      const end = path[index + 1];
+      const startPole = poleRecords.get(coordinateKey(start));
+      const endPole = poleRecords.get(coordinateKey(end));
+      spanIndex += 1;
+      return CONDUCTOR_OFFSETS_METERS.map((offset, sideIndex) => ({
+        id: `line-${spanIndex}-${sideIndex === 0 ? "left" : "right"}`,
+        kind: "conductor",
+        path: [
+          conductorAttachment(startPole.coordinate, startPole.bearing, offset),
+          conductorAttachment(endPole.coordinate, endPole.bearing, offset),
+        ],
+      }));
+    }),
   );
-  return { poles: [...polesByCoordinate.values()], conductors };
+  return { poles, conductors };
 }
 
 export function selectDemoRegions(regions) {

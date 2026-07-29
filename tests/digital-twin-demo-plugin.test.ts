@@ -56,7 +56,7 @@ describe("digital-twin-demo bundled plugin", () => {
             type: "LineString",
             coordinates: [
               [-105.2, 40],
-              [-105.1995, 40.0005],
+              [-105.1995, 40],
             ],
           },
         },
@@ -66,8 +66,8 @@ describe("digital-twin-demo bundled plugin", () => {
           geometry: {
             type: "LineString",
             coordinates: [
+              [-105.19950002, 40.00000002],
               [-105.1995, 40.0005],
-              [-105.199, 40.001],
             ],
           },
         },
@@ -84,8 +84,8 @@ describe("digital-twin-demo bundled plugin", () => {
       network.poles.map((pole: { position: number[] }) => pole.position),
       [
         [-105.2, 40, 0],
+        [-105.1995, 40, 0],
         [-105.1995, 40.0005, 0],
-        [-105.199, 40.001, 0],
       ],
     );
     assert.equal(network.conductors.length, 4);
@@ -96,6 +96,8 @@ describe("digital-twin-demo bundled plugin", () => {
           conductor.path.every((coordinate) => coordinate[2] === 8.2),
       ),
     );
+    assert.deepEqual(network.conductors[0].path[1], network.conductors[2].path[0]);
+    assert.deepEqual(network.conductors[1].path[1], network.conductors[3].path[0]);
   });
 
   it("normalizes the configured API origin without losing a path prefix", () => {
