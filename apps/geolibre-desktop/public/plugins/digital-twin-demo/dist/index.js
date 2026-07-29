@@ -182,15 +182,36 @@ export function buildPowerLineNetwork(collection) {
 
 export function selectDemoRegions(regions) {
   if (!Array.isArray(regions)) throw new Error("Regions must be an array.");
+  let canonicalBoulder = null;
   let seededBoulder = null;
   let golden = null;
   for (const region of regions) {
     if (!isRecord(region) || region.status !== "published") continue;
     const name = typeof region.name === "string" ? region.name.trim().toLowerCase() : "";
-    if (name === "boulder demo") seededBoulder = region;
+    if (region.region_id === "boulder-co") canonicalBoulder = region;
+    else if (name === "boulder demo") seededBoulder = region;
     if (region.region_id === "golden-co" || name === "golden") golden = region;
   }
-  return [seededBoulder, golden].filter(Boolean);
+  return [canonicalBoulder ?? seededBoulder, golden].filter(Boolean);
+}
+
+export function selectDemoAssetRegionIds(regions) {
+  if (!Array.isArray(regions)) throw new Error("Regions must be an array.");
+  const seededBoulderIds = [];
+  let canonicalBoulderId = null;
+  for (const region of regions) {
+    if (!isRecord(region) || region.status !== "published") continue;
+    const name = typeof region.name === "string" ? region.name.trim().toLowerCase() : "";
+    if (region.region_id === "boulder-co") canonicalBoulderId = region.region_id;
+    if (name === "boulder demo" && typeof region.region_id === "string") {
+      seededBoulderIds.unshift(region.region_id);
+    }
+  }
+  const candidates = [
+    ...seededBoulderIds,
+    ...(canonicalBoulderId ? [canonicalBoulderId] : []),
+  ];
+  return candidates.length ? { "boulder-co": candidates } : {};
 }
 
 function httpUrl(value, label) {
@@ -939,6 +960,7 @@ class DigitalTwinDemoPanel {
     this.client = null;
     this.region = null;
     this.regions = [];
+    this.assetRegionIds = {};
     this.weatherDatasets = [];
     this.earthEngineMetadata = null;
     this.selectedTrees = new Map();
@@ -1118,7 +1140,9 @@ class DigitalTwinDemoPanel {
         this.client.listDataSources(abort.signal),
       ]);
       if (abort.signal.aborted || this.destroyed) return;
-      this.regions = selectDemoRegions(asPageItems(regionPage));
+      const catalogRegions = asPageItems(regionPage);
+      this.regions = selectDemoRegions(catalogRegions);
+      this.assetRegionIds = selectDemoAssetRegionIds(catalogRegions);
       this.populateRegions();
       const readySources = Array.isArray(sources)
         ? sources.filter((source) => source?.ready).length
@@ -1157,6 +1181,7 @@ class DigitalTwinDemoPanel {
 
   async loadRegion(regionId) {
     if (!this.client || !regionId) return;
+    const assetRegionIds = this.assetRegionIds[regionId] ?? [regionId];
     this.assetMap.setRegions(this.regions, regionId);
     this.loadAbort?.abort();
     const abort = new AbortController();
@@ -1168,7 +1193,7 @@ class DigitalTwinDemoPanel {
     try {
       const [region, assets, weatherPage, earthEngine] = await Promise.all([
         this.client.getRegion(regionId, abort.signal),
-        this.client.getAssetsGeoJson(regionId, abort.signal),
+        this.loadFirstPopulatedAssets(assetRegionIds, abort.signal),
         this.client.getWeatherDatasets(regionId, abort.signal),
         this.client.getEarthEngineMetadata(regionId, abort.signal),
       ]);
@@ -1194,6 +1219,16 @@ class DigitalTwinDemoPanel {
     } finally {
       if (!this.destroyed) this.regionSelect.disabled = this.regions.length === 0;
     }
+  }
+
+  async loadFirstPopulatedAssets(regionIds, signal) {
+    let fallback = emptyFeatureCollection();
+    for (const regionId of regionIds) {
+      const assets = await this.client.getAssetsGeoJson(regionId, signal);
+      fallback = assets;
+      if (asFeatureCollection(assets).features.length > 0) return assets;
+    }
+    return fallback;
   }
 
   renderRegionMeta(assets) {

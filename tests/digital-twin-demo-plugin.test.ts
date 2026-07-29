@@ -9,6 +9,7 @@ import {
   buildScenarioRequest,
   createDigitalTwinClient,
   normalizeApiBaseUrl,
+  selectDemoAssetRegionIds,
   selectDemoRegions,
   selectedTreeSummary,
 } from "../apps/geolibre-desktop/public/plugins/digital-twin-demo/dist/index.js";
@@ -203,7 +204,7 @@ describe("digital-twin-demo bundled plugin", () => {
     );
   });
 
-  it("shows the seeded Boulder region first and excludes legacy and smoke-test regions", () => {
+  it("shows the weather-enabled canonical Boulder region first and excludes seeded duplicates", () => {
     const seededBoulder = {
       region_id: "seeded-boulder",
       name: "Boulder Demo",
@@ -220,6 +221,17 @@ describe("digital-twin-demo bundled plugin", () => {
       name: "Golden",
       status: "published",
       bounds: { west: -105.4, south: 39.68, east: -105.15, north: 39.83 },
+    };
+    const canonicalBoulder = {
+      region_id: "boulder-co",
+      name: "Boulder",
+      status: "published",
+      bounds: {
+        west: -105.451725656711,
+        south: 39.887996931377,
+        east: -105.127274343289,
+        north: 40.133003068623,
+      },
     };
 
     assert.deepEqual(
@@ -242,24 +254,23 @@ describe("digital-twin-demo bundled plugin", () => {
           },
         },
         golden,
-        {
-          region_id: "boulder-co",
-          name: "Boulder",
-          status: "published",
-          bounds: {
-            west: -105.451725656711,
-            south: 39.887996931377,
-            east: -105.127274343289,
-            north: 40.133003068623,
-          },
-        },
+        canonicalBoulder,
         {
           ...seededBoulder,
           region_id: "older-seeded-boulder",
         },
         seededBoulder,
       ]),
-      [seededBoulder, golden],
+      [canonicalBoulder, golden],
+    );
+    assert.deepEqual(
+      selectDemoAssetRegionIds([
+        canonicalBoulder,
+        { ...seededBoulder, region_id: "older-seeded-boulder" },
+        seededBoulder,
+        golden,
+      ]),
+      { "boulder-co": ["seeded-boulder", "older-seeded-boulder", "boulder-co"] },
     );
   });
 
