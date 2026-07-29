@@ -24,6 +24,10 @@ const SELECTION_LAYER_ID = "digital-twin-demo-selection-points";
 const REGION_SOURCE_ID = "digital-twin-demo-region-bounds-source";
 const REGION_FILL_LAYER_ID = "digital-twin-demo-region-bounds-fill";
 const REGION_LINE_LAYER_ID = "digital-twin-demo-region-bounds-line";
+const WILDFIRE_ENTRY_ID = "digital-twin-demo-wildfire";
+const WILDFIRE_SOURCE_ID = "digital-twin-demo-wildfire-source";
+const WILDFIRE_FILL_LAYER_ID = "digital-twin-demo-wildfire-fill";
+const WILDFIRE_LINE_LAYER_ID = "digital-twin-demo-wildfire-line";
 const TERMINAL_RUN_STATUSES = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
 const RUN_PROGRESS_EVENT_NAMES = [
   "run_snapshot",
@@ -372,6 +376,37 @@ export function createDigitalTwinClient(baseUrl, options = {}) {
     return body;
   };
 
+  const getRunArtifact = async (path, { etag, signal } = {}) => {
+    const url = resolveUrl(path);
+    const headers = new Headers({ Accept: "application/geo+json, application/json" });
+    if (etag) headers.set("If-None-Match", etag);
+    const response = await fetchImpl(url, {
+      method: "GET",
+      headers,
+      signal,
+      cache: etag ? "no-cache" : "default",
+    });
+    const responseEtag = response.headers.get("etag");
+    if (response.status === 304) {
+      return {
+        notModified: true,
+        data: null,
+        etag: responseEtag ?? etag ?? null,
+        url,
+      };
+    }
+    const body = await responseBody(response);
+    if (!response.ok) {
+      throw new ApiProblem(response.status, problemMessage(response.status, body), body);
+    }
+    return {
+      notModified: false,
+      data: body,
+      etag: responseEtag,
+      url,
+    };
+  };
+
   const commandHeaders = ({ idempotencyKey, requestId } = {}) => {
     const headers = new Headers();
     if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
@@ -455,6 +490,7 @@ export function createDigitalTwinClient(baseUrl, options = {}) {
       }),
     getRun: (runId, signal) =>
       request(`/api/v1/simulation-runs/${encodeURIComponent(runId)}`, { signal }),
+    getRunArtifact,
     watchRun,
     cancelRun: (runId, signal) =>
       request(`/api/v1/simulation-runs/${encodeURIComponent(runId)}/cancel`, {
@@ -501,11 +537,146 @@ function parseRunProgressPayload(data, runId, eventName) {
   ) {
     throw new Error("Simulation progress has an invalid tick.");
   }
+  let artifactUrl = null;
+  if (payload.artifact_url !== undefined && payload.artifact_url !== null) {
+    artifactUrl = nonEmptyString(payload.artifact_url, "Simulation artifact URL");
+    if (/^state:/i.test(artifactUrl)) {
+      throw new Error("Simulation progress exposed an internal artifact reference.");
+    }
+  }
+  if (eventName === "tick_completed" && !artifactUrl) {
+    throw new Error("Simulation tick progress is missing its durable artifact URL.");
+  }
   return {
     ...payload,
     status,
     completed_ticks: completedTicks,
     total_ticks: totalTicks,
+    ...(artifactUrl ? { artifact_url: artifactUrl } : {}),
+  };
+}
+
+function progressArtifact(progress) {
+  if (!isRecord(progress) || progress.artifact_url === undefined) return null;
+  const runId = nonEmptyString(progress.run_id, "Run ID");
+  const artifactUrl = nonEmptyString(progress.artifact_url, "Simulation artifact URL");
+  if (/^state:/i.test(artifactUrl)) {
+    throw new Error("Simulation progress exposed an internal artifact reference.");
+  }
+  const tick = Number.isInteger(progress.tick) ? progress.tick : progress.completed_ticks;
+  if (!Number.isInteger(tick) || tick < 1) {
+    throw new Error("Simulation artifact progress has an invalid tick.");
+  }
+  return { runId, tick, artifactUrl };
+}
+
+export function createRunArtifactCoordinator(client, callbacks = {}) {
+  if (!client || typeof client.getRunArtifact !== "function") {
+    throw new Error("A simulation artifact client is required.");
+  }
+  let generation = 0;
+  let activeAbort = null;
+  let activePromise = null;
+  let activeRunId = null;
+  let latestRequestedTick = 0;
+  let latestRequestedUrl = null;
+  let latestAppliedTick = 0;
+  const cache = new Map();
+
+  const begin = (runId) => {
+    const normalizedRunId = nonEmptyString(runId, "Run ID");
+    if (activeRunId === normalizedRunId) return;
+    generation += 1;
+    activeAbort?.abort();
+    activeAbort = null;
+    activePromise = null;
+    activeRunId = normalizedRunId;
+    latestRequestedTick = 0;
+    latestRequestedUrl = null;
+    latestAppliedTick = 0;
+  };
+
+  const update = (progress) => {
+    let artifact;
+    try {
+      artifact = progressArtifact(progress);
+    } catch (error) {
+      callbacks.onError?.(error, progress);
+      return Promise.resolve(null);
+    }
+    if (!artifact) return Promise.resolve(null);
+    begin(artifact.runId);
+    if (
+      artifact.tick < latestRequestedTick ||
+      (artifact.tick === latestRequestedTick && artifact.artifactUrl === latestRequestedUrl)
+    ) {
+      return activePromise ?? Promise.resolve(null);
+    }
+
+    latestRequestedTick = artifact.tick;
+    latestRequestedUrl = artifact.artifactUrl;
+    generation += 1;
+    const requestGeneration = generation;
+    activeAbort?.abort();
+    const abort = new AbortController();
+    activeAbort = abort;
+    const cached = cache.get(artifact.artifactUrl);
+    activePromise = (async () => {
+      try {
+        const response = await client.getRunArtifact(artifact.artifactUrl, {
+          etag: cached?.etag,
+          signal: abort.signal,
+        });
+        if (
+          abort.signal.aborted ||
+          requestGeneration !== generation ||
+          activeRunId !== artifact.runId ||
+          artifact.tick < latestRequestedTick
+        ) {
+          return null;
+        }
+        const data = response.notModified ? cached?.collection : response.data;
+        if (!data) throw new Error("Engine returned 304 without a cached simulation artifact.");
+        const collection = asFeatureCollection(data, `Simulation tick ${artifact.tick}`);
+        cache.set(artifact.artifactUrl, {
+          etag: response.etag ?? cached?.etag ?? null,
+          collection,
+        });
+        latestAppliedTick = artifact.tick;
+        const applied = {
+          runId: artifact.runId,
+          tick: artifact.tick,
+          artifactUrl: artifact.artifactUrl,
+          url: response.url ?? client.resolveUrl?.(artifact.artifactUrl) ?? artifact.artifactUrl,
+          collection,
+        };
+        callbacks.onArtifact?.(applied);
+        return applied;
+      } catch (error) {
+        if (abort.signal.aborted || error?.name === "AbortError") return null;
+        callbacks.onError?.(error, artifact);
+        return null;
+      } finally {
+        if (activeAbort === abort) activeAbort = null;
+      }
+    })();
+    return activePromise;
+  };
+
+  const stop = () => {
+    generation += 1;
+    activeAbort?.abort();
+    activeAbort = null;
+    activePromise = null;
+  };
+
+  return {
+    begin,
+    update,
+    stop,
+    get latestAppliedTick() {
+      return latestAppliedTick;
+    },
   };
 }
 
@@ -1192,6 +1363,166 @@ class AssetMapController {
   }
 }
 
+export class WildfireMapController {
+  constructor(app) {
+    this.app = app;
+    this.map = app.getMap?.() ?? null;
+    this.data = emptyFeatureCollection();
+    this.runId = null;
+    this.tick = null;
+    this.sourceUrl = null;
+    this.registeredRunId = null;
+    this.layerState = { visible: true, opacity: 1 };
+    this.stateUnsubscribe = null;
+    this.onStyleData = () => this.ensureLayers();
+    this.map?.on("styledata", this.onStyleData);
+  }
+
+  setData(collection, { runId, tick, sourceUrl } = {}) {
+    this.data = asFeatureCollection(collection, "Wildfire simulation artifact");
+    this.runId = nonEmptyString(runId, "Run ID");
+    this.tick = Number.isInteger(tick) ? tick : null;
+    this.sourceUrl = typeof sourceUrl === "string" ? sourceUrl : null;
+    this.ensureLayers();
+    if (this.registeredRunId !== this.runId) {
+      this.app.registerExternalNativeLayer?.({
+        id: WILDFIRE_ENTRY_ID,
+        name: `Wildfire · ${this.runId}`,
+        type: "geojson",
+        geojson: this.data,
+        nativeLayerIds: [WILDFIRE_FILL_LAYER_ID, WILDFIRE_LINE_LAYER_ID],
+        sourceIds: [WILDFIRE_SOURCE_ID],
+        opacity: 0.82,
+        metadata: {
+          provider: "Digital Twin Engine",
+          description: "Live durable wildfire footprint.",
+          customLayerType: "digital-twin-wildfire",
+          runId: this.runId,
+          identifiable: false,
+        },
+      });
+      this.registeredRunId = this.runId;
+    }
+    if (!this.stateUnsubscribe) {
+      this.stateUnsubscribe =
+        this.app.subscribeExternalNativeLayerState?.(WILDFIRE_ENTRY_ID, (state) => {
+          if (!state) return;
+          this.layerState = state;
+          this.applyLayerState();
+        }) ?? null;
+    }
+  }
+
+  clear() {
+    this.data = emptyFeatureCollection();
+    this.runId = null;
+    this.tick = null;
+    this.sourceUrl = null;
+    this.registeredRunId = null;
+    const source = this.map?.getSource(WILDFIRE_SOURCE_ID);
+    if (source?.setData) source.setData(this.data);
+    this.app.unregisterExternalNativeLayer?.(WILDFIRE_ENTRY_ID);
+  }
+
+  ensureLayers() {
+    const map = this.map;
+    if (!map || (typeof map.isStyleLoaded === "function" && !map.isStyleLoaded())) return;
+    try {
+      const source = map.getSource(WILDFIRE_SOURCE_ID);
+      if (!source) {
+        map.addSource(WILDFIRE_SOURCE_ID, { type: "geojson", data: this.data });
+      } else if (source.setData) {
+        source.setData(this.data);
+      }
+      if (!map.getLayer(WILDFIRE_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: WILDFIRE_FILL_LAYER_ID,
+          type: "fill",
+          source: WILDFIRE_SOURCE_ID,
+          paint: {
+            "fill-color": [
+              "interpolate",
+              ["linear"],
+              ["coalesce", ["to-number", ["get", "active_cell_count"]], 1],
+              1,
+              "#ffb347",
+              100,
+              "#f4511e",
+              1000,
+              "#b71c1c",
+            ],
+            "fill-opacity": 0.55,
+          },
+        });
+      }
+      if (!map.getLayer(WILDFIRE_LINE_LAYER_ID)) {
+        map.addLayer({
+          id: WILDFIRE_LINE_LAYER_ID,
+          type: "line",
+          source: WILDFIRE_SOURCE_ID,
+          paint: {
+            "line-color": "#7f1d1d",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 15, 3],
+            "line-opacity": 0.95,
+          },
+        });
+      }
+      this.applyLayerState();
+    } catch {
+      // A basemap style can be between teardown and load; styledata retries.
+    }
+  }
+
+  applyLayerState() {
+    const map = this.map;
+    if (!map) return;
+    const visibility = this.layerState.visible ? "visible" : "none";
+    for (const layerId of [WILDFIRE_FILL_LAYER_ID, WILDFIRE_LINE_LAYER_ID]) {
+      if (!map.getLayer(layerId)) continue;
+      try {
+        map.setLayoutProperty(layerId, "visibility", visibility);
+      } catch {
+        // Ignore style transitions.
+      }
+    }
+    if (map.getLayer(WILDFIRE_FILL_LAYER_ID)) {
+      map.setPaintProperty(
+        WILDFIRE_FILL_LAYER_ID,
+        "fill-opacity",
+        0.55 * this.layerState.opacity,
+      );
+    }
+    if (map.getLayer(WILDFIRE_LINE_LAYER_ID)) {
+      map.setPaintProperty(
+        WILDFIRE_LINE_LAYER_ID,
+        "line-opacity",
+        0.95 * this.layerState.opacity,
+      );
+    }
+  }
+
+  destroy() {
+    this.stateUnsubscribe?.();
+    this.stateUnsubscribe = null;
+    this.app.unregisterExternalNativeLayer?.(WILDFIRE_ENTRY_ID);
+    const map = this.map;
+    if (!map) return;
+    map.off("styledata", this.onStyleData);
+    for (const layerId of [WILDFIRE_LINE_LAYER_ID, WILDFIRE_FILL_LAYER_ID]) {
+      try {
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+      } catch {
+        // Best-effort plugin cleanup during style changes.
+      }
+    }
+    try {
+      if (map.getSource(WILDFIRE_SOURCE_ID)) map.removeSource(WILDFIRE_SOURCE_ID);
+    } catch {
+      // Best-effort plugin cleanup during style changes.
+    }
+  }
+}
+
 class DigitalTwinDemoPanel {
   constructor(app, container) {
     this.app = app;
@@ -1210,6 +1541,7 @@ class DigitalTwinDemoPanel {
     this.runEventSource = null;
     this.runEventStartupTimer = null;
     this.runTerminalizing = null;
+    this.runArtifactCoordinator = null;
     this.pollAbort = null;
     this.loadAbort = null;
     this.visualizationAbort = null;
@@ -1218,6 +1550,7 @@ class DigitalTwinDemoPanel {
     this.destroyed = false;
     this.submissionKeys = null;
     this.assetMap = new AssetMapController(app, (feature) => this.toggleTree(feature));
+    this.wildfireMap = new WildfireMapController(app);
     this.build();
     this.connect();
   }
@@ -1487,6 +1820,8 @@ class DigitalTwinDemoPanel {
     this.loadAbort?.abort();
     this.visualizationAbort?.abort();
     this.stopPolling();
+    this.runArtifactCoordinator?.stop();
+    this.runArtifactCoordinator = null;
     const abort = new AbortController();
     this.loadAbort = abort;
     this.setConnection("muted", "Connecting", "Checking Engine readiness…");
@@ -1494,6 +1829,23 @@ class DigitalTwinDemoPanel {
     try {
       const baseUrl = normalizeApiBaseUrl(this.apiInput.value);
       this.client = createDigitalTwinClient(baseUrl);
+      this.runArtifactCoordinator = createRunArtifactCoordinator(this.client, {
+        onArtifact: ({ runId, tick, url, collection }) => {
+          if (this.destroyed || this.activeRun?.run_id !== runId) return;
+          this.wildfireMap.setData(collection, { runId, tick, sourceUrl: url });
+        },
+        onError: (error, artifact) => {
+          if (this.destroyed || this.activeRun?.run_id !== artifact?.runId) return;
+          console.error(
+            "[Digital Twin Demo] Could not display a durable simulation tick.",
+            error,
+          );
+          this.showMessage(
+            `Tick ${artifact?.tick ?? "artifact"} could not be displayed: ${this.errorMessage(error)}`,
+            "warning",
+          );
+        },
+      });
       const [readiness, regionPage, sources] = await Promise.all([
         this.client.ready(abort.signal),
         this.client.listRegions(abort.signal),
@@ -1527,6 +1879,8 @@ class DigitalTwinDemoPanel {
       void readiness;
     } catch (error) {
       if (abort.signal.aborted || this.destroyed) return;
+      this.runArtifactCoordinator?.stop();
+      this.runArtifactCoordinator = null;
       this.client = null;
       this.setConnection("error", "Offline", this.errorMessage(error));
     }
@@ -1997,6 +2351,8 @@ class DigitalTwinDemoPanel {
         region_id: this.region.region_id,
         tick_refs: [],
       };
+      this.runArtifactCoordinator?.begin(accepted.run_id);
+      this.wildfireMap.clear();
       this.renderRunStatus(this.activeRun);
       this.updateRunAvailability();
       this.monitorRun(accepted.run_id);
@@ -2027,6 +2383,7 @@ class DigitalTwinDemoPanel {
 
   monitorRun(runId) {
     this.stopRunMonitoring();
+    this.runArtifactCoordinator?.begin(runId);
     let receivedProgress = false;
     let pollingFallbackStarted = false;
     const startPollingFallback = () => {
@@ -2063,6 +2420,7 @@ class DigitalTwinDemoPanel {
           this.activeRun = mergeRunProgress(this.activeRun, progress);
           this.renderRunStatus(this.activeRun);
           this.updateRunAvailability();
+          void this.runArtifactCoordinator?.update(progress);
           if (TERMINAL_RUN_STATUSES.has(runStatusValue(this.activeRun))) {
             void this.finishRun(runId);
           }
@@ -2095,6 +2453,7 @@ class DigitalTwinDemoPanel {
     const streamedCompletedTicks = this.activeRun?.completed_ticks;
     const streamedTotalTicks = this.activeRun?.total_ticks;
     this.stopRunMonitoring();
+    this.runArtifactCoordinator?.stop();
     this.setSubmitting(false);
     try {
       try {
@@ -2242,7 +2601,15 @@ class DigitalTwinDemoPanel {
         await this.client.getResult(runId, signal),
         "Simulation result",
       );
-      this.app.addGeoJsonLayer(`Wildfire result · ${runId}`, result, this.client.resolveUrl(`/api/v1/simulation-runs/${encodeURIComponent(runId)}/result.geojson`));
+      const sourceUrl = this.client.resolveUrl(
+        `/api/v1/simulation-runs/${encodeURIComponent(runId)}/result.geojson`,
+      );
+      const tick = Number(result.features[0]?.properties?.tick);
+      this.wildfireMap.setData(result, {
+        runId,
+        tick: Number.isInteger(tick) ? tick : null,
+        sourceUrl,
+      });
       const bounds = geoJsonBounds(result);
       if (bounds) this.app.fitBounds?.(bounds);
       const properties = result.features[0]?.properties ?? {};
@@ -2316,7 +2683,10 @@ class DigitalTwinDemoPanel {
     this.weatherRefreshAbort?.abort();
     clearInterval(this.weatherRefreshTimer);
     this.stopRunMonitoring();
+    this.runArtifactCoordinator?.stop();
+    this.runArtifactCoordinator = null;
     clearTimeout(this.toastTimer);
+    this.wildfireMap.destroy();
     this.assetMap.destroy();
     this.container.replaceChildren();
   }

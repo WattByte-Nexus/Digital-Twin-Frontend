@@ -8,12 +8,14 @@ import {
   buildRunRequest,
   buildScenarioRequest,
   createDigitalTwinClient,
+  createRunArtifactCoordinator,
   mergeRunProgress,
   normalizeApiBaseUrl,
   selectDemoAssetRegionIds,
   selectDemoRegions,
   selectedTreeSummary,
   TREE_CIRCLE_RADIUS_PX,
+  WildfireMapController,
 } from "../apps/geolibre-desktop/public/plugins/digital-twin-demo/dist/index.js";
 
 const pluginRoot = new URL(
@@ -402,6 +404,7 @@ describe("digital-twin-demo bundled plugin", () => {
         status: "STARTED",
         completed_ticks: 1,
         total_ticks: 3,
+        artifact_url: "/api/v1/simulation-runs/run%2F1/ticks/1/result.geojson",
       },
       "2-0",
     );
@@ -414,6 +417,7 @@ describe("digital-twin-demo bundled plugin", () => {
         tick: 2,
         completed_ticks: 2,
         total_ticks: 3,
+        artifact_url: "/api/v1/simulation-runs/run%2F1/ticks/2/result.geojson",
       },
       "3-0",
     );
@@ -435,6 +439,228 @@ describe("digital-twin-demo bundled plugin", () => {
       { name: "run_completed", completedTicks: 3, eventId: "4-0" },
     ]);
     assert.equal(source?.closed, true);
+  });
+
+  it("fetches immutable tick artifacts with strong ETag revalidation", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const artifact = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { tick: 4, active_cell_count: 12 },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [-105.2, 39.8],
+                [-105.19, 39.8],
+                [-105.19, 39.81],
+                [-105.2, 39.8],
+              ],
+            ],
+          },
+        },
+      ],
+    };
+    const responses = [
+      new Response(JSON.stringify(artifact), {
+        status: 200,
+        headers: {
+          "content-type": "application/geo+json",
+          etag: '"tick-4"',
+          "cache-control": "public, max-age=31536000, immutable",
+        },
+      }),
+      new Response(null, { status: 304, headers: { etag: '"tick-4"' } }),
+    ];
+    const client = createDigitalTwinClient("http://127.0.0.1:8000/engine", {
+      fetchImpl: async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        return responses.shift()!;
+      },
+    });
+
+    const first = await client.getRunArtifact(
+      "/api/v1/simulation-runs/run-1/ticks/4/result.geojson",
+    );
+    const second = await client.getRunArtifact(
+      "/api/v1/simulation-runs/run-1/ticks/4/result.geojson",
+      { etag: first.etag },
+    );
+
+    assert.deepEqual(first, {
+      notModified: false,
+      data: artifact,
+      etag: '"tick-4"',
+      url: "http://127.0.0.1:8000/engine/api/v1/simulation-runs/run-1/ticks/4/result.geojson",
+    });
+    assert.deepEqual(second, {
+      notModified: true,
+      data: null,
+      etag: '"tick-4"',
+      url: "http://127.0.0.1:8000/engine/api/v1/simulation-runs/run-1/ticks/4/result.geojson",
+    });
+    assert.equal(new Headers(calls[1].init?.headers).get("If-None-Match"), '"tick-4"');
+  });
+
+  it("applies only the newest durable tick when artifact fetches finish out of order", async () => {
+    type PendingArtifact = {
+      signal?: AbortSignal;
+      resolve: (value: {
+        notModified: false;
+        data: object;
+        etag: string;
+        url: string;
+      }) => void;
+    };
+    const pending = new Map<string, PendingArtifact>();
+    const applied: Array<{ tick: number; collection: object }> = [];
+    const client = {
+      resolveUrl: (path: string) => `http://engine.test${path}`,
+      getRunArtifact: (path: string, options: { signal?: AbortSignal } = {}) =>
+        new Promise((resolve) => {
+          pending.set(path, {
+            signal: options.signal,
+            resolve: resolve as PendingArtifact["resolve"],
+          });
+        }),
+    };
+    const coordinator = createRunArtifactCoordinator(client, {
+      onArtifact: (next: { tick: number; collection: object }) => applied.push(next),
+    });
+    const tickOneUrl = "/api/v1/simulation-runs/run-1/ticks/1/result.geojson";
+    const tickTwoUrl = "/api/v1/simulation-runs/run-1/ticks/2/result.geojson";
+
+    const tickOne = coordinator.update({
+      run_id: "run-1",
+      completed_ticks: 1,
+      tick: 1,
+      artifact_url: tickOneUrl,
+    });
+    const tickTwo = coordinator.update({
+      run_id: "run-1",
+      completed_ticks: 2,
+      tick: 2,
+      artifact_url: tickTwoUrl,
+    });
+    assert.equal(pending.get(tickOneUrl)?.signal?.aborted, true);
+    pending.get(tickTwoUrl)?.resolve({
+      notModified: false,
+      data: { type: "FeatureCollection", features: [] },
+      etag: '"tick-2"',
+      url: `http://engine.test${tickTwoUrl}`,
+    });
+    await tickTwo;
+    pending.get(tickOneUrl)?.resolve({
+      notModified: false,
+      data: { type: "FeatureCollection", features: [{ properties: { tick: 1 } }] },
+      etag: '"tick-1"',
+      url: `http://engine.test${tickOneUrl}`,
+    });
+    await tickOne;
+
+    assert.deepEqual(applied, [
+      {
+        runId: "run-1",
+        tick: 2,
+        artifactUrl: tickTwoUrl,
+        url: `http://engine.test${tickTwoUrl}`,
+        collection: { type: "FeatureCollection", features: [] },
+      },
+    ]);
+  });
+
+  it("uses snapshot artifact URLs and deduplicates replayed progress", async () => {
+    const calls: string[] = [];
+    const applied: number[] = [];
+    const client = {
+      resolveUrl: (path: string) => `http://engine.test${path}`,
+      getRunArtifact: async (path: string) => {
+        calls.push(path);
+        return {
+          notModified: false,
+          data: { type: "FeatureCollection", features: [] },
+          etag: '"tick-3"',
+          url: `http://engine.test${path}`,
+        };
+      },
+    };
+    const coordinator = createRunArtifactCoordinator(client, {
+      onArtifact: ({ tick }: { tick: number }) => applied.push(tick),
+    });
+    const snapshot = {
+      run_id: "run-1",
+      completed_ticks: 3,
+      artifact_url: "/api/v1/simulation-runs/run-1/ticks/3/result.geojson",
+    };
+
+    await coordinator.update(snapshot);
+    await coordinator.update(snapshot);
+
+    assert.deepEqual(calls, [snapshot.artifact_url]);
+    assert.deepEqual(applied, [3]);
+  });
+
+  it("replaces one stable wildfire map source as durable ticks grow", () => {
+    const sources = new Map<string, { data: object; setData: (data: object) => void }>();
+    const layers = new Map<string, object>();
+    const registrations: Array<{ id: string }> = [];
+    let addSourceCalls = 0;
+    const map = {
+      isStyleLoaded: () => true,
+      on: () => {},
+      off: () => {},
+      getSource: (id: string) => sources.get(id),
+      addSource: (id: string, source: { data: object }) => {
+        addSourceCalls += 1;
+        const mutable = {
+          data: source.data,
+          setData(data: object) {
+            mutable.data = data;
+          },
+        };
+        sources.set(id, mutable);
+      },
+      removeSource: (id: string) => sources.delete(id),
+      getLayer: (id: string) => layers.get(id),
+      addLayer: (layer: { id: string }) => layers.set(layer.id, layer),
+      removeLayer: (id: string) => layers.delete(id),
+      setLayoutProperty: () => {},
+      setPaintProperty: () => {},
+    };
+    const app = {
+      getMap: () => map,
+      registerExternalNativeLayer: (registration: {
+        id: string;
+      }) => registrations.push(registration),
+      unregisterExternalNativeLayer: () => {},
+      subscribeExternalNativeLayerState: (
+        _id: string,
+        callback: (state: { visible: boolean; opacity: number }) => void,
+      ) => {
+        callback({ visible: true, opacity: 1 });
+        return () => {};
+      },
+    };
+    const first = {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: { tick: 1 }, geometry: null }],
+    };
+    const second = {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: { tick: 2 }, geometry: null }],
+    };
+    const controller = new WildfireMapController(app);
+
+    controller.setData(first, { runId: "run-1", tick: 1, sourceUrl: "http://engine/tick-1" });
+    controller.setData(second, { runId: "run-1", tick: 2, sourceUrl: "http://engine/tick-2" });
+
+    assert.equal(addSourceCalls, 1);
+    assert.equal(layers.size, 2);
+    assert.deepEqual([...sources.values()][0].data, second);
+    assert.deepEqual(registrations.map(({ id }) => id), ["digital-twin-demo-wildfire"]);
+    controller.destroy();
   });
 
   it("merges streamed counts without discarding authoritative run lineage", () => {
