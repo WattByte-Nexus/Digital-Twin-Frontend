@@ -130,6 +130,11 @@ describe("wind particles", () => {
     assert.equal(harness.layerProps.at(-1)?.visible, true);
     assert.equal(harness.layerProps.at(-1)?.opacity, 0.82);
     assert.equal(harness.layerProps.at(-1)?.numParticles, 5_000);
+    assert.equal(
+      harness.layerProps.at(-1)?.speedFactor,
+      1,
+      "the default animation uses the wind field's full vector magnitude",
+    );
 
     useAppStore
       .getState()
@@ -167,6 +172,22 @@ describe("wind particles", () => {
     );
   });
 
+  it("explicitly disables WeatherLayers' zoom cap", async () => {
+    const harness = makeHarness();
+
+    assert.equal(await harness.controller.activate({} as GeoLibreAppAPI), true);
+    const props = harness.layerProps.at(-1);
+
+    assert.ok(props);
+    assert.equal(
+      props.maxZoom,
+      null,
+      "WeatherLayers defaults maxZoom to 15 unless it is explicitly disabled",
+    );
+
+    harness.controller.deactivate();
+  });
+
   it("adopts a restored layer and its saved particle settings without duplicating it", async () => {
     useAppStore.getState().addLayer({
       id: "restored-wind",
@@ -200,6 +221,36 @@ describe("wind particles", () => {
     assert.equal(harness.layerProps.at(-1)?.numParticles, 8_000);
     assert.equal(harness.layerProps.at(-1)?.speedFactor, 0.4);
     assert.equal(harness.layerProps.at(-1)?.opacity, 0.6);
+    harness.controller.deactivate();
+  });
+
+  it("upgrades the legacy default speed while preserving explicit custom speeds", async () => {
+    useAppStore.getState().addLayer({
+      id: "legacy-wind",
+      name: "Wind particles",
+      type: "deckgl-viz",
+      source: { type: "weather-wind" },
+      visible: true,
+      opacity: 0.82,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {
+        windParticleLayer: true,
+        externalDeckLayer: true,
+        windParticleSettings: {
+          animate: true,
+          numParticles: 5_000,
+          speedFactor: 0.55,
+        },
+      },
+    });
+
+    const harness = makeHarness();
+    assert.equal(await harness.controller.activate({} as GeoLibreAppAPI), true);
+    assert.equal(harness.layerProps.at(-1)?.speedFactor, 1);
+    assert.equal(
+      useAppStore.getState().layers[0].metadata.windParticleSettingsVersion,
+      2,
+    );
     harness.controller.deactivate();
   });
 

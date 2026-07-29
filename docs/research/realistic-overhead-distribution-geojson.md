@@ -135,10 +135,11 @@ The OSM pole model provides useful controlled vocabulary for `material`, `struct
 ## Current frontend compatibility
 
 The legacy Distribution Network visualization plugin has been removed. The
-Digital Twin Demo now owns the compact `testpowerlines.geojson` and
-`testtrees.geojson` fixtures used by its Boulder API seeder. The larger topology
-described here remains a generation and engine-testing fixture; it is not loaded
-directly by the frontend.
+Digital Twin Demo now seeds the 327 span features from
+`boulder_13_8kv_feeder_large.geojson` alongside the bundled
+`testtrees.geojson` inventory. The seeder ignores the duplicate full-route
+feature and unsupported pole/vegetation records in the mixed synthetic feeder
+file before posting Engine asset contracts.
 
 The public Engine asset endpoints currently preserve the WGS84 line geometry,
 power-line name, and tree species/height needed by the wildfire demo. Rich pole,

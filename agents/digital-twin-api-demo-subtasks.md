@@ -51,9 +51,9 @@ Frontend:
   uses scenario-backed runs, because direct-time submissions accept one
   `ignition_location`, while scenario-backed submissions accept 1-100 ordered
   GeoJSON ignition points.
-- The legacy Distribution Network Demo is removed. Its compact power-line and
-  tree fixtures are owned by the Digital Twin Demo, while the Engine API asset
-  catalog remains the source of truth for selectable ignition trees.
+- The legacy Distribution Network Demo is removed. Its large synthetic Boulder
+  feeder and tree fixtures are owned by the Digital Twin Demo, while the Engine
+  API asset catalog remains the source of truth for selectable ignition trees.
 - The Engine's existing weather and Earth Engine catalog endpoints are not
   sufficient to render those datasets. They currently return metadata and
   readiness without a COG, tile template, or other browser-readable data URL.

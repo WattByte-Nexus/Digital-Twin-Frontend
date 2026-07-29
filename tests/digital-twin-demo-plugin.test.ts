@@ -8,10 +8,12 @@ import {
   buildRunRequest,
   buildScenarioRequest,
   createDigitalTwinClient,
+  mergeRunProgress,
   normalizeApiBaseUrl,
   selectDemoAssetRegionIds,
   selectDemoRegions,
   selectedTreeSummary,
+  TREE_CIRCLE_RADIUS_PX,
 } from "../apps/geolibre-desktop/public/plugins/digital-twin-demo/dist/index.js";
 
 const pluginRoot = new URL(
@@ -46,6 +48,13 @@ const treeFeature = {
 };
 
 describe("digital-twin-demo bundled plugin", () => {
+  it("keeps green tree circles the same screen size at every zoom level", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.equal(TREE_CIRCLE_RADIUS_PX, 5);
+    assert.match(source, /"circle-radius": TREE_CIRCLE_RADIUS_PX/);
+  });
+
   it("places one pole model at each unique loaded power-line vertex and connects every span", () => {
     const network = buildPowerLineNetwork({
       type: "FeatureCollection",
@@ -89,12 +98,19 @@ describe("digital-twin-demo bundled plugin", () => {
         [-105.1995, 40.0005, 0],
       ],
     );
+    assert.ok(
+      network.poles.every(
+        (pole: { scale: number[] }) =>
+          pole.scale.length === 3 &&
+          pole.scale.every((axisScale) => Math.abs(axisScale - 10.36 / 9.375) < 1e-12),
+      ),
+    );
     assert.equal(network.conductors.length, 4);
     assert.ok(
       network.conductors.every(
         (conductor: { path: number[][] }) =>
           conductor.path.length === 2 &&
-          conductor.path.every((coordinate) => coordinate[2] === 8.2),
+          conductor.path.every((coordinate) => coordinate[2] === 9.5),
       ),
     );
     assert.deepEqual(network.conductors[0].path[1], network.conductors[2].path[0]);
@@ -325,6 +341,131 @@ describe("digital-twin-demo bundled plugin", () => {
     const headers = new Headers(calls[0].init?.headers);
     assert.equal(headers.get("Idempotency-Key"), "run-key");
     assert.equal(headers.get("X-Request-ID"), "request-1");
+  });
+
+  it("streams named durable run progress and closes after terminal delivery", () => {
+    class FakeEventSource {
+      readonly url: string;
+      readyState = 0;
+      closed = false;
+      listeners = new Map<string, Array<(event: MessageEvent) => void>>();
+
+      constructor(url: string) {
+        this.url = url;
+      }
+
+      addEventListener(name: string, listener: (event: MessageEvent) => void) {
+        const listeners = this.listeners.get(name) ?? [];
+        listeners.push(listener);
+        this.listeners.set(name, listeners);
+      }
+
+      emit(name: string, data: object, lastEventId: string) {
+        const event = { type: name, data: JSON.stringify(data), lastEventId } as MessageEvent;
+        for (const listener of this.listeners.get(name) ?? []) listener(event);
+      }
+
+      close() {
+        this.closed = true;
+        this.readyState = 2;
+      }
+    }
+
+    let source: FakeEventSource | undefined;
+    const progress: Array<{ name: string; completedTicks: number; eventId: string }> = [];
+    const client = createDigitalTwinClient("http://127.0.0.1:8000/engine", {
+      eventSourceFactory: (url: string) => {
+        source = new FakeEventSource(url);
+        return source;
+      },
+    });
+
+    client.watchRun("run/1", {
+      onProgress: (payload: { completed_ticks: number }, event: MessageEvent) => {
+        progress.push({
+          name: event.type,
+          completedTicks: payload.completed_ticks,
+          eventId: event.lastEventId,
+        });
+      },
+    });
+
+    assert.equal(
+      source?.url,
+      "http://127.0.0.1:8000/engine/api/v1/simulation-runs/run%2F1/events",
+    );
+    source?.emit(
+      "run_snapshot",
+      {
+        schema_version: 1,
+        run_id: "run/1",
+        status: "STARTED",
+        completed_ticks: 1,
+        total_ticks: 3,
+      },
+      "2-0",
+    );
+    source?.emit(
+      "tick_completed",
+      {
+        schema_version: 1,
+        run_id: "run/1",
+        status: "STARTED",
+        tick: 2,
+        completed_ticks: 2,
+        total_ticks: 3,
+      },
+      "3-0",
+    );
+    source?.emit(
+      "run_completed",
+      {
+        schema_version: 1,
+        run_id: "run/1",
+        status: "COMPLETED",
+        completed_ticks: 3,
+        total_ticks: 3,
+      },
+      "4-0",
+    );
+
+    assert.deepEqual(progress, [
+      { name: "run_snapshot", completedTicks: 1, eventId: "2-0" },
+      { name: "tick_completed", completedTicks: 2, eventId: "3-0" },
+      { name: "run_completed", completedTicks: 3, eventId: "4-0" },
+    ]);
+    assert.equal(source?.closed, true);
+  });
+
+  it("merges streamed counts without discarding authoritative run lineage", () => {
+    assert.deepEqual(
+      mergeRunProgress(
+        {
+          run_id: "run-1",
+          region_id: "front-range",
+          status: "QUEUED",
+          tick_refs: [{ tick: 0, world_state_ref: "state://tick-0" }],
+        },
+        {
+          schema_version: 1,
+          run_id: "run-1",
+          status: "STARTED",
+          completed_ticks: 2,
+          total_ticks: 4,
+          tick: 2,
+        },
+      ),
+      {
+        run_id: "run-1",
+        region_id: "front-range",
+        status: "STARTED",
+        tick_refs: [{ tick: 0, world_state_ref: "state://tick-0" }],
+        schema_version: 1,
+        completed_ticks: 2,
+        total_ticks: 4,
+        tick: 2,
+      },
+    );
   });
 
   it("turns problem-details responses into a safe typed error", async () => {

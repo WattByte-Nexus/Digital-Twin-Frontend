@@ -20,7 +20,9 @@ const WIND_PROJECTION_LOCK = "weather-wind-particles";
 const WIND_DATASET = "gfs/wind_10m_above_ground";
 const WIND_BOUNDS: [number, number, number, number] = [-180, -90, 180, 90];
 const DEFAULT_PARTICLE_COUNT = 5_000;
-const DEFAULT_SPEED_FACTOR = 0.55;
+const DEFAULT_SPEED_FACTOR = 1;
+const LEGACY_DEFAULT_SPEED_FACTOR = 0.55;
+const WIND_PARTICLE_SETTINGS_VERSION = 2;
 const MIN_PARTICLE_COUNT = 1_000;
 const MAX_PARTICLE_COUNT = 12_000;
 const MIN_SPEED_FACTOR = 0.1;
@@ -70,7 +72,7 @@ interface WindParticleLayerProps {
   speedFactor: number;
   width: number;
   color: [number, number, number, number];
-  maxZoom: number;
+  maxZoom: number | null;
   extensions: ClipExtension[];
   clipBounds: [number, number, number, number];
   getPolygonOffset: () => [number, number];
@@ -108,11 +110,19 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function normalizeSettings(value: unknown): WindParticleSettings {
+function normalizeSettings(
+  value: unknown,
+  version?: unknown
+): WindParticleSettings {
   const candidate =
     value && typeof value === "object"
       ? (value as Partial<WindParticleSettings>)
       : {};
+  const candidateSpeed =
+    typeof candidate.speedFactor === "number" &&
+    Number.isFinite(candidate.speedFactor)
+      ? clamp(candidate.speedFactor, MIN_SPEED_FACTOR, MAX_SPEED_FACTOR)
+      : DEFAULT_SETTINGS.speedFactor;
   return {
     animate:
       typeof candidate.animate === "boolean"
@@ -130,10 +140,10 @@ function normalizeSettings(value: unknown): WindParticleSettings {
           )
         : DEFAULT_SETTINGS.numParticles,
     speedFactor:
-      typeof candidate.speedFactor === "number" &&
-      Number.isFinite(candidate.speedFactor)
-        ? clamp(candidate.speedFactor, MIN_SPEED_FACTOR, MAX_SPEED_FACTOR)
-        : DEFAULT_SETTINGS.speedFactor,
+      version !== WIND_PARTICLE_SETTINGS_VERSION &&
+      candidateSpeed === LEGACY_DEFAULT_SPEED_FACTOR
+        ? DEFAULT_SPEED_FACTOR
+        : candidateSpeed,
   };
 }
 
@@ -287,6 +297,7 @@ function createStoreLayer(
       [WIND_LAYER_FLAG]: true,
       bounds: field.bounds,
       windParticleSettings: settings,
+      windParticleSettingsVersion: WIND_PARTICLE_SETTINGS_VERSION,
       windDataKind: field.dataKind,
     },
   };
@@ -382,7 +393,9 @@ export function createWindParticleController(
         speedFactor: settings.speedFactor,
         width: 1.8,
         color: [20, 155, 255, 245],
-        maxZoom: 15,
+        // WeatherLayers defaults this to 15. `null` is required to keep its
+        // particle simulation and drawing active at closer zoom levels.
+        maxZoom: null,
         extensions: [new ClipExtension()],
         clipBounds: [-181, -85.051129, 181, 85.051129],
         getPolygonOffset: () => [0, -1000],
@@ -393,7 +406,10 @@ export function createWindParticleController(
   const persistSettings = (): void => {
     const layer = ownedLayer();
     if (!layer) return;
-    const saved = normalizeSettings(layer.metadata.windParticleSettings);
+    const saved = normalizeSettings(
+      layer.metadata.windParticleSettings,
+      layer.metadata.windParticleSettingsVersion
+    );
     if (
       saved.animate === settings.animate &&
       saved.numParticles === settings.numParticles &&
@@ -405,6 +421,7 @@ export function createWindParticleController(
       metadata: {
         ...layer.metadata,
         windParticleSettings: settings,
+        windParticleSettingsVersion: WIND_PARTICLE_SETTINGS_VERSION,
       },
     });
   };
@@ -466,13 +483,17 @@ export function createWindParticleController(
       );
       if (existing) {
         layerId = existing.id;
-        settings = normalizeSettings(existing.metadata.windParticleSettings);
+        settings = normalizeSettings(
+          existing.metadata.windParticleSettings,
+          existing.metadata.windParticleSettingsVersion
+        );
         const nextMetadata = {
           ...existing.metadata,
           ...loaded.metadata,
           windDataKind: loaded.dataKind,
           bounds: loaded.bounds,
           windParticleSettings: settings,
+          windParticleSettingsVersion: WIND_PARTICLE_SETTINGS_VERSION,
         };
         store.updateLayer(existing.id, { metadata: nextMetadata });
       } else {

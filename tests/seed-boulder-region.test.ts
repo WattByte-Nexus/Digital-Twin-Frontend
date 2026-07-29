@@ -41,21 +41,79 @@ const trees = {
 };
 
 describe("Boulder Digital Twin seed", () => {
-  it("uses the bundled demo files as one feeder and 864 Boulder trees", async () => {
+  it("retains the bundled feeder-aligned vegetation fixture", async () => {
     const [bundledPowerLines, bundledTrees] = await Promise.all(
       [
-        "../apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/testpowerlines.geojson",
-        "../apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/testtrees.geojson",
+        "../apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/boulder_13_8kv_feeder_large.geojson",
+        "../apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/boulder_13_8kv_feeder_large.geojson",
       ].map(async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"))),
     );
 
-    assert.equal(assetCandidates(bundledPowerLines, bundledTrees).length, 865);
-    assert.deepEqual(boundsForGeoJson([bundledPowerLines, bundledTrees]), {
-      west: -105.212285,
-      south: 40.000901,
-      east: -105.178684,
-      north: 40.034475,
-    });
+    const candidates = assetCandidates(bundledPowerLines, bundledTrees);
+    assert.equal(candidates.filter((candidate) => candidate.kind === "power_line").length, 327);
+    const treeCandidates = candidates.filter((candidate) => candidate.kind === "tree");
+    assert.equal(treeCandidates.length, 1297);
+    assert.equal(candidates.length, 1624);
+    assert.ok(treeCandidates.every((candidate) => candidate.species));
+    assert.ok(treeCandidates.every((candidate) => candidate.height_m > 0));
+    const feederBounds = boundsForGeoJson([bundledPowerLines]);
+    for (const candidate of candidates) {
+      const coordinates =
+        candidate.kind === "tree" ? [candidate.location] : candidate.coordinates;
+      for (const coordinate of coordinates) {
+        assert.ok(coordinate.lon >= feederBounds.west);
+        assert.ok(coordinate.lon <= feederBounds.east);
+        assert.ok(coordinate.lat >= feederBounds.south);
+        assert.ok(coordinate.lat <= feederBounds.north);
+      }
+    }
+  });
+
+  it("uses span features from a mixed synthetic feeder without duplicating its full route", () => {
+    const mixedPowerLines = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { asset_type: "power_line_route", name: "Full route" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [-105.21, 40.01],
+              [-105.2, 40.02],
+              [-105.19, 40.03],
+            ],
+          },
+        },
+        {
+          type: "Feature",
+          properties: { asset_type: "power_line_span", name: "Span 1" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [-105.21, 40.01],
+              [-105.2, 40.02],
+            ],
+          },
+        },
+        {
+          type: "Feature",
+          properties: { asset_type: "power_pole" },
+          geometry: { type: "Point", coordinates: [-105.21, 40.01] },
+        },
+      ],
+    };
+
+    assert.deepEqual(assetCandidates(mixedPowerLines, { type: "FeatureCollection", features: [] }), [
+      {
+        kind: "power_line",
+        coordinates: [
+          { lon: -105.21, lat: 40.01 },
+          { lon: -105.2, lat: 40.02 },
+        ],
+        name: "Span 1",
+      },
+    ]);
   });
 
   it("derives padded WGS84 bounds from every demo asset", () => {
@@ -82,12 +140,148 @@ describe("Boulder Digital Twin seed", () => {
         location: { lon: -105.2, lat: 40.02 },
         species: "ponderosa_pine",
         height_m: 8.5,
+        canopy_radius_m: 2.86,
       },
       {
         kind: "tree",
         location: { lon: -105.19, lat: 40.025 },
+        height_m: 9.12,
+        canopy_radius_m: 2.86,
       },
     ]);
+  });
+
+  it("loads the complete public inventory by default and excludes lake-site trees", async () => {
+    const feeder = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { asset_type: "power_line_span", name: "Span 1" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [-105.21, 40.01],
+              [-105.2, 40.02],
+            ],
+          },
+        },
+        {
+          type: "Feature",
+          properties: {
+            asset_type: "vegetation_hazard",
+            species: "Ponderosa pine",
+            height_m: 8.5,
+            canopy_radius_m: 2.4,
+          },
+          geometry: { type: "Point", coordinates: [-105.205, 40.015] },
+        },
+      ],
+    };
+    const calls: Array<{ path: string; body: unknown }> = [];
+    const inventoryOffsets: string[] = [];
+    const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.hostname === "gis.bouldercolorado.gov") {
+        const offset = url.searchParams.get("resultOffset") ?? "";
+        inventoryOffsets.push(offset);
+        const firstPage = offset === "0";
+        return Response.json({
+          type: "FeatureCollection",
+          features: firstPage
+            ? [
+                {
+                  type: "Feature",
+                  properties: {
+                    OBJECTID: 101,
+                    FACILITYID: "TREE101",
+                    COMMONNAME: "Ash, Green",
+                    PROPNAME: "East Boulder Community Park",
+                  },
+                  geometry: { type: "Point", coordinates: [-105.2, 40.02] },
+                },
+                {
+                  type: "Feature",
+                  properties: {
+                    OBJECTID: 102,
+                    FACILITYID: "TREE102",
+                    COMMONNAME: "Willow, Peachleaf",
+                    PROPNAME: "Coot Lake",
+                  },
+                  geometry: { type: "Point", coordinates: [-105.21, 40.085] },
+                },
+              ]
+            : [
+                {
+                  type: "Feature",
+                  properties: {
+                    OBJECTID: 103,
+                    FACILITYID: "TREE103",
+                    COMMONNAME: "Pine, Ponderosa",
+                    PROPNAME: null,
+                  },
+                  geometry: { type: "Point", coordinates: [-105.19, 40.025] },
+                },
+              ],
+          exceededTransferLimit: firstPage,
+        });
+      }
+
+      assert.equal(url.origin, "http://127.0.0.1:8000");
+      const body = init?.body ? JSON.parse(String(init.body)) : null;
+      calls.push({ path: url.pathname, body });
+      if (url.pathname === "/api/v1/regions") {
+        return Response.json({ region_id: "region-boulder" }, { status: 201 });
+      }
+      if (url.pathname.endsWith("/publish")) {
+        return Response.json(
+          { region_id: "region-boulder", status: "published" },
+          { status: 201 },
+        );
+      }
+      return Response.json([{ asset_id: "asset-1" }], { status: 201 });
+    };
+
+    const result = await seedBoulderRegion({
+      powerLineGeoJson: feeder,
+      fetchImpl,
+      concurrency: 1,
+    });
+
+    assert.equal(result.assetCount, 3);
+    assert.deepEqual(inventoryOffsets, ["0", "2000"]);
+    assert.deepEqual(calls[0].body, {
+      name: "Boulder Demo",
+      bounds: {
+        west: -105.211,
+        south: 40.009,
+        east: -105.189,
+        north: 40.026,
+      },
+    });
+    const uploaded = calls[1].body as Array<Record<string, unknown>>;
+    assert.equal(uploaded.length, 3);
+    assert.deepEqual(
+      uploaded.filter((candidate) => candidate.kind === "tree"),
+      [
+        {
+          kind: "tree",
+          location: { lon: -105.2, lat: 40.02 },
+          species: "Ash, Green",
+          height_m: 9.12,
+          canopy_radius_m: 2.86,
+          source_ref: "TREE101",
+        },
+        {
+          kind: "tree",
+          location: { lon: -105.19, lat: 40.025 },
+          species: "Pine, Ponderosa",
+          height_m: 9.12,
+          canopy_radius_m: 2.86,
+          source_ref: "TREE103",
+        },
+      ],
+    );
   });
 
   it("creates, populates, and publishes a Boulder region through the public endpoints", async () => {
@@ -111,7 +305,7 @@ describe("Boulder Digital Twin seed", () => {
             name: "Boulder Demo",
             status: "published",
             published_revision_id: "revision-1",
-            bounds: { west: -105.211, south: 40.009, east: -105.179, north: 40.031 },
+            bounds: boundsForGeoJson([powerLines, trees]),
           },
           { status: 201 },
         );
@@ -134,31 +328,28 @@ describe("Boulder Digital Twin seed", () => {
       calls.map(({ path, method }) => [method, path]),
       [
         ["POST", "/api/v1/regions"],
-        ["POST", "/api/v1/regions/region-boulder/assets"],
-        ["POST", "/api/v1/regions/region-boulder/assets"],
-        ["POST", "/api/v1/regions/region-boulder/assets"],
+        ["POST", "/api/v1/regions/region-boulder/assets:batch"],
         ["POST", "/api/v1/regions/region-boulder/publish"],
       ],
     );
+    assert.equal((calls[1].body as unknown[]).length, 3);
     assert.deepEqual(calls[0].body, {
       name: "Boulder Demo",
-      bounds: { west: -105.211, south: 40.009, east: -105.179, north: 40.031 },
+      bounds: boundsForGeoJson([powerLines, trees]),
     });
   });
 
   it("does not publish a partially populated region", async () => {
-    let assetCalls = 0;
     const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
       const path = new URL(String(input)).pathname;
       if (path === "/api/v1/regions") {
         return Response.json({ region_id: "region-boulder" }, { status: 201 });
       }
-      if (path.endsWith("/assets")) {
-        assetCalls += 1;
-        if (assetCalls === 2) {
-          return Response.json({ detail: "Asset could not be created." }, { status: 400 });
-        }
-        return Response.json({ asset_id: "asset-1" }, { status: 201 });
+      if (path.endsWith("/assets:batch")) {
+        return Response.json(
+          { detail: "Asset batch could not be created." },
+          { status: 400 },
+        );
       }
       assert.fail(`Unexpected request to ${path} with ${init?.method}`);
     };
@@ -172,7 +363,7 @@ describe("Boulder Digital Twin seed", () => {
           fetchImpl,
           concurrency: 1,
         }),
-      /Asset could not be created/,
+      /Asset batch could not be created/,
     );
   });
 });
