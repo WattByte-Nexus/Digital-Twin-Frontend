@@ -844,6 +844,75 @@ function labelledField(label, input) {
   return wrapper;
 }
 
+function labelledControl(label, control, className = "") {
+  const wrapper = el("div", `dt-field${className ? ` ${className}` : ""}`);
+  const labelNode = el("span", "dt-field-label", label);
+  const labelId = `dt-field-${makeId("label")}`;
+  labelNode.id = labelId;
+  control.setAttribute("aria-labelledby", labelId);
+  wrapper.append(labelNode, control);
+  return wrapper;
+}
+
+function createCompassControl(input) {
+  const bearings = [
+    { label: "N", value: 0 },
+    { label: "NE", value: 45 },
+    { label: "E", value: 90 },
+    { label: "SE", value: 135 },
+    { label: "S", value: 180 },
+    { label: "SW", value: 225 },
+    { label: "W", value: 270 },
+    { label: "NW", value: 315 },
+  ];
+  const compass = el("div", "dt-compass");
+  compass.setAttribute("role", "radiogroup");
+  const readout = el("output", "dt-compass-readout");
+  const buttons = bearings.map(({ label, value }) => {
+    const direction = button(label, `dt-compass-point dt-compass-${label.toLowerCase()}`);
+    direction.dataset.bearing = String(value);
+    direction.setAttribute("role", "radio");
+    direction.setAttribute("aria-label", `${label}, ${value} degrees`);
+    direction.addEventListener("click", () => {
+      input.value = String(value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      direction.focus();
+    });
+    compass.append(direction);
+    return direction;
+  });
+  compass.append(readout);
+
+  const sync = () => {
+    const rawValue = Number(input.value);
+    const value = Number.isFinite(rawValue) ? ((rawValue % 360) + 360) % 360 : 0;
+    const selectedIndex = Math.round(value / 45) % bearings.length;
+    buttons.forEach((direction, index) => {
+      const selected = index === selectedIndex;
+      direction.setAttribute("aria-checked", String(selected));
+      direction.tabIndex = selected ? 0 : -1;
+    });
+    readout.value = `${Math.round(value)}° ${bearings[selectedIndex].label}`;
+  };
+  const setDisabled = (disabled) => {
+    compass.classList.toggle("dt-compass-disabled", disabled);
+    buttons.forEach((direction) => {
+      direction.disabled = disabled;
+    });
+  };
+  compass.addEventListener("keydown", (event) => {
+    if (!["ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft"].includes(event.key)) return;
+    event.preventDefault();
+    const step = event.key === "ArrowUp" || event.key === "ArrowRight" ? 45 : -45;
+    input.value = String((Number(input.value || 0) + step + 360) % 360);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    buttons.find((direction) => direction.getAttribute("aria-checked") === "true")?.focus();
+  });
+  input.addEventListener("input", sync);
+  sync();
+  return { element: compass, setDisabled };
+}
+
 function section(title, subtitle, options = {}) {
   const details = el("details", `dt-section${options.step ? " dt-step" : ""}`);
   details.open = options.open ?? true;
@@ -1014,8 +1083,9 @@ class AssetMapController {
     this.layerState = { visible: true, opacity: 1 };
     this.onStyleData = () => this.ensureLayers();
     this.mapContainer = this.map?.getContainer?.() ?? null;
-    this.onMapContainerClick = (event) => {
-      if (!this.map || !this.mapContainer || !this.layerState.visible) return;
+    this.treeCursorActive = false;
+    this.treeNearEvent = (event) => {
+      if (!this.map || !this.mapContainer || !this.layerState.visible) return null;
       const bounds = this.mapContainer.getBoundingClientRect();
       const point = {
         x: event.clientX - bounds.left,
@@ -1034,16 +1104,33 @@ class AssetMapController {
           nearestDistance = distance;
         }
       }
+      return nearest;
+    };
+    this.setTreeCursor = (active) => {
+      if (!this.map || !this.mapContainer || active === this.treeCursorActive) return;
+      const cursor = active ? "pointer" : "";
+      this.map.getCanvas().style.cursor = cursor;
+      this.mapContainer.style.cursor = cursor;
+      this.treeCursorActive = active;
+    };
+    this.onMapContainerClick = (event) => {
+      const nearest = this.treeNearEvent(event);
       if (nearest) this.onTreeClick(nearest);
     };
+    this.onMapContainerMouseMove = (event) => {
+      this.setTreeCursor(Boolean(this.treeNearEvent(event)));
+    };
+    this.onMapContainerMouseLeave = () => this.setTreeCursor(false);
     this.onEnter = () => {
-      if (this.map) this.map.getCanvas().style.cursor = "pointer";
+      this.setTreeCursor(true);
     };
     this.onLeave = () => {
-      if (this.map) this.map.getCanvas().style.cursor = "";
+      this.setTreeCursor(false);
     };
     this.map?.on("styledata", this.onStyleData);
     this.mapContainer?.addEventListener("click", this.onMapContainerClick, true);
+    this.mapContainer?.addEventListener("mousemove", this.onMapContainerMouseMove, true);
+    this.mapContainer?.addEventListener("mouseleave", this.onMapContainerMouseLeave);
     void this.initializePowerLineOverlay();
   }
 
@@ -1297,6 +1384,7 @@ class AssetMapController {
   applyLayerState() {
     const map = this.map;
     if (!map) return;
+    if (!this.layerState.visible) this.setTreeCursor(false);
     const visibility = this.layerState.visible ? "visible" : "none";
     for (const layerId of [POWER_LINE_LAYER_ID, TREE_LAYER_ID]) {
       if (!map.getLayer(layerId)) continue;
@@ -1327,6 +1415,9 @@ class AssetMapController {
     this.stateUnsubscribe = null;
     this.entryUnregister = null;
     this.mapContainer?.removeEventListener("click", this.onMapContainerClick, true);
+    this.mapContainer?.removeEventListener("mousemove", this.onMapContainerMouseMove, true);
+    this.mapContainer?.removeEventListener("mouseleave", this.onMapContainerMouseLeave);
+    this.setTreeCursor(false);
     this.mapContainer = null;
     if (this.overlay) this.app.removeMapControl?.(this.overlay);
     this.overlay = null;
@@ -1704,12 +1795,13 @@ class DigitalTwinDemoPanel {
       option.value = unit;
       this.windUnitSelect.append(option);
     }
-    this.windBearingInput = el("input", "dt-input");
-    this.windBearingInput.type = "number";
+    this.windBearingInput = el("input");
+    this.windBearingInput.type = "hidden";
     this.windBearingInput.min = "0";
     this.windBearingInput.max = "359.99";
     this.windBearingInput.step = "1";
     this.windBearingInput.value = "90";
+    this.windCompass = createCompassControl(this.windBearingInput);
     this.durationInput = el("input", "dt-input");
     this.durationInput.type = "number";
     this.durationInput.min = "0.25";
@@ -1728,7 +1820,7 @@ class DigitalTwinDemoPanel {
     scenarioGrid.append(
       labelledField("Wind speed", this.windSpeedInput),
       labelledField("Unit", this.windUnitSelect),
-      labelledField("Wind travels toward", this.windBearingInput),
+      labelledControl("Wind travels toward", this.windCompass.element, "dt-compass-field"),
       labelledField("Duration (hours)", this.durationInput),
     );
     const conditionsBody = el("div", "dt-drawer-body");
@@ -2379,6 +2471,7 @@ class DigitalTwinDemoPanel {
     ]) {
       input.disabled = submitting;
     }
+    this.windCompass?.setDisabled(submitting);
   }
 
   monitorRun(runId) {

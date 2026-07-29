@@ -211,6 +211,81 @@
   background: var(--dt-soft);
 }
 
+.dt-compass {
+  position: relative;
+  display: grid;
+  width: min(100%, 152px);
+  aspect-ratio: 1;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  align-items: center;
+  justify-items: center;
+  padding: 8px;
+  border: 1px solid var(--dt-input-line);
+  border-radius: 50%;
+  background: var(--dt-bg);
+}
+
+.dt-compass-point {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  color: var(--dt-muted);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.dt-compass-point:hover:not(:disabled) {
+  color: var(--dt-ink);
+  background: var(--dt-soft);
+}
+
+.dt-compass-point[aria-checked="true"] {
+  color: #fff;
+  background: var(--dt-green);
+}
+
+.dt-compass-point:focus-visible {
+  outline: 2px solid var(--dt-green);
+  outline-offset: 2px;
+}
+
+.dt-compass-n { grid-area: 1 / 2; }
+.dt-compass-ne { grid-area: 1 / 3; }
+.dt-compass-e { grid-area: 2 / 3; }
+.dt-compass-se { grid-area: 3 / 3; }
+.dt-compass-s { grid-area: 3 / 2; }
+.dt-compass-sw { grid-area: 3 / 1; }
+.dt-compass-w { grid-area: 2 / 1; }
+.dt-compass-nw { grid-area: 1 / 1; }
+
+.dt-compass-readout {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  grid-area: 2 / 2;
+  place-items: center;
+  color: var(--dt-ink);
+  border: 1px solid var(--dt-line);
+  border-radius: 50%;
+  background: var(--dt-soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dt-compass-disabled {
+  background: var(--dt-soft);
+  opacity: .6;
+}
+
+.dt-compass-point:disabled {
+  cursor: not-allowed;
+}
+
 .dt-inline {
   display: flex;
   align-items: center;

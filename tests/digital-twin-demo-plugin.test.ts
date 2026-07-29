@@ -57,6 +57,27 @@ describe("digital-twin-demo bundled plugin", () => {
     assert.match(source, /"circle-radius": TREE_CIRCLE_RADIUS_PX/);
   });
 
+  it("shows a pointer cursor when the green tree circles are hovered", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.match(source, /addEventListener\("mousemove", this\.onMapContainerMouseMove, true\)/);
+    assert.match(source, /const cursor = active \? "pointer" : ""/);
+    assert.match(source, /this\.mapContainer\.style\.cursor = cursor/);
+  });
+
+  it("uses an accessible compass instead of a numeric wind-bearing spinner", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.match(source, /function createCompassControl\(input\)/);
+    assert.match(source, /compass\.setAttribute\("role", "radiogroup"\)/);
+    assert.match(source, /\{ label: "N", value: 0 \}/);
+    assert.match(source, /\{ label: "E", value: 90 \}/);
+    assert.match(source, /\{ label: "S", value: 180 \}/);
+    assert.match(source, /\{ label: "W", value: 270 \}/);
+    assert.match(source, /this\.windBearingInput\.type = "hidden"/);
+    assert.doesNotMatch(source, /this\.windBearingInput\.type = "number"/);
+  });
+
   it("places one pole model at each unique loaded power-line vertex and connects every span", () => {
     const network = buildPowerLineNetwork({
       type: "FeatureCollection",

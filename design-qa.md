@@ -1,44 +1,48 @@
-# Digital Twin Demo — design QA
+# Layer name compaction design QA
 
-## Result
+**Comparison target**
 
-passed
+- Source visual truth: `/var/folders/kz/srnv47b15_xbs6pz99d2wjxr0000gp/T/codex-clipboard-f7892b4b-297e-4800-a3e5-db655bf17737.png`
+- Browser-rendered implementation: `/Users/luke/Documents/Digital_Twin_Frontend/design-qa-implementation.png`
+- Side-by-side evidence: `/Users/luke/Documents/Digital_Twin_Frontend/design-qa-comparison.png`
+- State: Layers panel with two completed Wildfire result layers above Engine assets and Background.
+- Viewport: 530 × 667 CSS px.
+- Source pixels: 1060 × 1334, normalized from 2× density to 530 × 667.
+- Implementation pixels: 530 × 667 at device scale factor 1.
+- Focused comparison crop: top 530 × 275 px of each normalized image, covering the Layers header and the two generated result cards.
 
-## Source of truth
+**Findings**
 
-- Dark target: `/Users/luke/.codex/generated_images/019fae7e-6a62-79e1-8771-e1df7ecbf5c5/call_7LcqrhlpRv4xnqBpq8qG7JI8.png`
-- Light target: `/Users/luke/.codex/generated_images/019fae7e-6a62-79e1-8771-e1df7ecbf5c5/call_SP9AiyXDRI7gcQgnkpoRv1jV.png`
-- Implementation:
-  - `/Users/luke/.codex/visualizations/2026/07/29/019fae7e-6a62-79e1-8771-e1df7ecbf5c5/digital-twin-demo-console/09-light-selected-final.png`
-  - `/Users/luke/.codex/visualizations/2026/07/29/019fae7e-6a62-79e1-8771-e1df7ecbf5c5/digital-twin-demo-console/10-dark-selected-final.png`
-- Viewport: 1280 × 720
-- State: Boulder Demo connected, three tree ignition points selected, run ready
+- No actionable P0/P1/P2 differences remain in the requested name treatment.
+- The generated identifier no longer controls the visual hierarchy. “Wildfire result” is the primary label and the identifier is retained as a compact secondary `Run 50e77d…2282` badge.
+- Ordinary names, including “Engine assets · Boulder” and “Background,” are unchanged.
+- The complete name remains in the rename input and is available in the label tooltip.
 
-## Comparison inputs
+**Required fidelity surfaces**
 
-- Full frame:
-  - `digital-twin-demo-console/dark-final-full-comparison.png`
-  - `digital-twin-demo-console/light-final-full-comparison.png`
-- Focused plugin panel:
-  - `digital-twin-demo-console/dark-final-panel-comparison.png`
-  - `digital-twin-demo-console/light-final-panel-comparison.png`
+- Fonts and typography: existing panel font, weight, and hierarchy are preserved; the run badge uses the existing monospace UI treatment at the same optical size as other compact metadata.
+- Spacing and layout rhythm: the badge fits on the primary row without increasing card height or crowding the VECTOR type label.
+- Colors and visual tokens: the badge uses existing border, muted background, and muted foreground theme tokens.
+- Image quality and asset fidelity: no image assets were introduced or changed.
+- Copy and content: the friendly name is unchanged; the full run identifier remains accessible and editable.
 
-Each comparison places the matching reference and implementation in one image at the same normalized viewport.
+**Interaction and runtime checks**
 
-## Final assessment
+- Generated two simulation-result layers and confirmed both render with compact labels.
+- Double-clicked the compact label, confirmed the rename input contains the complete original name, then cancelled with Escape.
+- Checked browser console errors in the final state: none.
+- Targeted formatting tests passed.
+- Focused ESLint check passed with no errors; two pre-existing hook warnings remain elsewhere in `LayerPanel.tsx`.
 
-- Typography: clear title, summary, primary task, selected count, conditions, readiness, and CTA hierarchy in both themes.
-- Spacing and layout: continuous panel surface matches the selected tactical-console direction; all primary and secondary actions remain visible without clipping at the tested viewport.
-- Colors and tokens: orange is reserved for ignition state, green for ready/run state, and all neutral surfaces use host theme tokens.
-- Content: labels are concise and operational. Dynamic area, weather, conditions, selection, readiness, and connection states remain readable.
-- States and interactions: verified offline, connected, empty selection, selected/ready, light theme, dark theme, drawer toggles, and the enlarged tree-marker hit target.
-- Accessibility: semantic buttons and details controls remain keyboard reachable; focus indicators, disabled state, and text contrast are preserved.
-- Responsiveness: narrow-panel fallback collapses two-column fields and removes indentation below 360 px.
+**Comparison history**
 
-## Fix history
+- Initial implementation updated the hidden MapLibre control rather than the visible React Layers panel. Browser evidence showed the visible name was unchanged.
+- Moved the formatting to `LayerPanel`, preserved the original name for rename and tooltip behavior, and captured the revised browser state.
+- Increased the badge text from 9 px to 10 px after the focused comparison showed it was optically smaller than adjacent metadata.
+- Final side-by-side evidence shows the revised hierarchy with no remaining P0/P1/P2 issue.
 
-1. P2 layout — selected-tree detail rows pushed conditions and secondary actions below the panel viewport. Resolved by keeping the compact selected count in the primary flow and removing the redundant detail list from the console surface.
-2. P1 behavior — layer-scoped tree clicks intermittently missed visible markers. Resolved with a map-container hit test against projected tree coordinates and a practical 10 px target.
-3. P2 fidelity — the launch area used a translucent blur treatment not present in the target. Resolved with an opaque theme surface and tighter vertical rhythm.
+**Follow-up polish**
 
-No unresolved P1 or P2 findings remain.
+- None required for this change.
+
+final result: passed

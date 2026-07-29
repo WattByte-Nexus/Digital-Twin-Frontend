@@ -137,6 +137,7 @@ import {
   refreshGeoJsonLayer,
   setLayerRefreshConfig,
 } from "../../lib/layer-refresh";
+import { formatLayerDisplayName } from "../../lib/layer-display-name";
 import {
   getLayerWatchConfig,
   isLocalFileLayer,
@@ -2231,6 +2232,7 @@ export function LayerPanel({
             const watchConfig = getLayerWatchConfig(layer);
             const refreshStatus = refreshStatuses[layer.id];
             const isRefreshing = refreshStatus?.type === "refreshing";
+            const displayName = formatLayerDisplayName(layer.name);
             return (
               <Fragment key={layer.id}>
                 {isFirstOfGroup && group && renderGroupHeader(group)}
@@ -2317,20 +2319,25 @@ export function LayerPanel({
                         />
                       ) : (
                         <span
-                          className={`flex-1 truncate text-sm font-medium ${
+                          className={`flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium ${
                             groupHidden ? "text-muted-foreground" : ""
                           }`}
                           title={
                             groupHidden
-                              ? `${t("layers.hiddenByGroup")} — ${t("layers.doubleClickToRename")}`
-                              : t("layers.doubleClickToRename")
+                              ? `${layer.name} — ${t("layers.hiddenByGroup")} — ${t("layers.doubleClickToRename")}`
+                              : `${layer.name} — ${t("layers.doubleClickToRename")}`
                           }
                           onDoubleClick={(e: ReactMouseEvent) => {
                             e.stopPropagation();
                             beginRename(layer);
                           }}
                         >
-                          {layer.name}
+                          <span className="min-w-0 truncate">{displayName.primary}</span>
+                          {displayName.runLabel && (
+                            <span className="shrink-0 rounded-full border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-none text-muted-foreground">
+                              {displayName.runLabel}
+                            </span>
+                          )}
                         </span>
                       )}
                       <span className="text-[10px] uppercase text-muted-foreground">
