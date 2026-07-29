@@ -65,7 +65,7 @@ const map1 = { id: "map1" };
 const { app } = makeApp(map1);
 
 describe("shared-deck-overlay", () => {
-  it("mounts lazily and aggregates sources bottom-to-top with weather above deckviz", async () => {
+  it("mounts lazily and aggregates sources bottom-to-top", async () => {
     FakeMapboxOverlay.instances.length = 0;
     await ensureSharedDeckOverlay(app);
     // No layers yet: the overlay exists but is not mounted (nothing to draw).
@@ -77,22 +77,19 @@ describe("shared-deck-overlay", () => {
     setSharedDeckLayers("deckviz", [layer("d1")] as never);
     assert.deepEqual(overlay?.layerIds(), ["d1"]);
 
-    // Adding raster and google interleaves them UNDER deckviz, while weather
-    // remains above data layers so fine particle trails stay legible.
+    // Adding raster and google interleaves them UNDER deckviz.
     setSharedDeckLayers("raster", [layer("r1")] as never);
     setSharedDeckLayers("google-3d-tiles", [layer("g1")] as never);
-    setSharedDeckLayers("weather-wind", [layer("w1")] as never);
     assert.deepEqual(
       overlay?.layerIds(),
-      ["r1", "g1", "d1", "w1"],
-      "raster drawn first (bottom), weather particles above deckviz",
+      ["r1", "g1", "d1"],
+      "raster drawn first (bottom), deckviz last (top)",
     );
 
     // Cleanup for the next test.
     setSharedDeckLayers("raster", [] as never);
     setSharedDeckLayers("google-3d-tiles", [] as never);
     setSharedDeckLayers("deckviz", [] as never);
-    setSharedDeckLayers("weather-wind", [] as never);
     assert.deepEqual(overlay?.layerIds(), []);
   });
 

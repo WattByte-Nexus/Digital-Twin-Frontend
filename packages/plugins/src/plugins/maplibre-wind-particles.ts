@@ -8,14 +8,15 @@ import type { Layer } from "@deck.gl/core";
 import type { ImageUnscale, TextureData } from "weatherlayers-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
-  ensureSharedDeckOverlay,
-  setSharedDeckLayers,
-} from "./shared-deck-overlay";
+  acquireMercatorProjectionLock,
+  releaseMercatorProjectionLock,
+} from "./map-projection-utils";
 
 export const WIND_PARTICLES_PLUGIN_ID = "weatherlayers-wind-particles";
 
 const WIND_LAYER_FLAG = "windParticleLayer";
 const WIND_SOURCE_KIND = "weather-wind";
+const WIND_PROJECTION_LOCK = "weather-wind-particles";
 const WIND_DATASET = "gfs/wind_10m_above_ground";
 const WIND_BOUNDS: [number, number, number, number] = [-180, -90, 180, 90];
 const DEFAULT_PARTICLE_COUNT = 5_000;
@@ -78,9 +79,13 @@ interface WindParticleLayerProps {
 export interface WindParticleDependencies {
   loadField: () => Promise<WindField>;
   prepareRenderer?: () => Promise<void>;
-  ensureOverlay: (app: GeoLibreAppAPI) => Promise<unknown>;
+  mountOverlay: (app: GeoLibreAppAPI) => Promise<WindParticleOverlay | null>;
   createLayer: (props: WindParticleLayerProps) => Layer;
+}
+
+export interface WindParticleOverlay {
   setLayers: (layers: Layer[]) => void;
+  remove: () => void;
 }
 
 export interface WindParticleController {
@@ -290,13 +295,38 @@ function createStoreLayer(
 let ParticleLayerClass: (new (props: WindParticleLayerProps) => Layer) | null =
   null;
 
+/**
+ * Mount WeatherLayers on its own overlaid Deck canvas.
+ *
+ * MapboxOverlay interleaved instances reuse one Deck instance per map. External
+ * plugins can legitimately own another interleaved overlay, so a wind overlay
+ * joining that shared instance would make the two producers replace each
+ * other's complete layer lists. A non-interleaved overlay owns its renderer
+ * and can animate independently without clobbering engine/3D layers.
+ */
+export async function createWindParticleOverlay(
+  app: GeoLibreAppAPI
+): Promise<WindParticleOverlay | null> {
+  if (!app.getDeckGL) return null;
+  const deckGL = await app.getDeckGL();
+  const overlay = new deckGL.mapbox.MapboxOverlay({
+    interleaved: false,
+    layers: [],
+  });
+  if (!app.addMapControl(overlay, "top-left")) return null;
+  return {
+    setLayers: (layers) => overlay.setProps({ layers }),
+    remove: () => app.removeMapControl(overlay),
+  };
+}
+
 const defaultDependencies: WindParticleDependencies = {
   loadField: loadWindField,
   prepareRenderer: async () => {
     ParticleLayerClass ??= (await import("weatherlayers-gl"))
       .ParticleLayer as unknown as new (props: WindParticleLayerProps) => Layer;
   },
-  ensureOverlay: ensureSharedDeckOverlay,
+  mountOverlay: createWindParticleOverlay,
   createLayer: (props) => {
     if (!ParticleLayerClass) {
       throw new Error(
@@ -305,7 +335,6 @@ const defaultDependencies: WindParticleDependencies = {
     }
     return new ParticleLayerClass(props);
   },
-  setLayers: (layers) => setSharedDeckLayers("weather-wind", layers),
 };
 
 export function createWindParticleController(
@@ -316,6 +345,8 @@ export function createWindParticleController(
   let settings = { ...DEFAULT_SETTINGS };
   let activationGeneration = 0;
   let unsubscribeStore: (() => void) | null = null;
+  let overlay: WindParticleOverlay | null = null;
+  let appRef: GeoLibreAppAPI | null = null;
   const listeners = new Set<() => void>();
 
   const notify = (): void => {
@@ -330,10 +361,10 @@ export function createWindParticleController(
   const render = (): void => {
     const layer = ownedLayer();
     if (!field || !layer) {
-      dependencies.setLayers([]);
+      overlay?.setLayers([]);
       return;
     }
-    dependencies.setLayers([
+    overlay?.setLayers([
       dependencies.createLayer({
         id: `weather-wind-particles-${layer.id}`,
         image: field.image,
@@ -349,8 +380,8 @@ export function createWindParticleController(
         numParticles: settings.numParticles,
         maxAge: 85,
         speedFactor: settings.speedFactor,
-        width: 1.25,
-        color: [205, 241, 255, 220],
+        width: 1.8,
+        color: [20, 155, 255, 245],
         maxZoom: 15,
         extensions: [new ClipExtension()],
         clipBounds: [-181, -85.051129, 181, 85.051129],
@@ -378,10 +409,20 @@ export function createWindParticleController(
     });
   };
 
+  const removeOverlay = (): void => {
+    overlay?.setLayers([]);
+    overlay?.remove();
+    overlay = null;
+    if (appRef) {
+      releaseMercatorProjectionLock(WIND_PROJECTION_LOCK, appRef);
+      appRef = null;
+    }
+  };
+
   const resetRuntime = (): void => {
-    dependencies.setLayers([]);
     unsubscribeStore?.();
     unsubscribeStore = null;
+    removeOverlay();
     layerId = null;
     field = null;
   };
@@ -395,14 +436,30 @@ export function createWindParticleController(
       ]);
       if (generation !== activationGeneration) return false;
 
-      field = loaded;
-      // The host's shared interleaved deck overlay follows a WebMercator
-      // viewport. Keep the persisted projection in sync so the map does not
-      // revert to globe on idle while particles are active.
-      app.setMapProjection?.("mercator");
-      await dependencies.ensureOverlay(app);
-      if (generation !== activationGeneration) return false;
+      appRef = app;
+      acquireMercatorProjectionLock(WIND_PROJECTION_LOCK, app);
+      let mountedOverlay: WindParticleOverlay | null;
+      try {
+        mountedOverlay = await dependencies.mountOverlay(app);
+      } catch (error) {
+        releaseMercatorProjectionLock(WIND_PROJECTION_LOCK, app);
+        appRef = null;
+        throw error;
+      }
+      if (generation !== activationGeneration) {
+        mountedOverlay?.remove();
+        releaseMercatorProjectionLock(WIND_PROJECTION_LOCK, app);
+        appRef = null;
+        return false;
+      }
+      if (!mountedOverlay) {
+        releaseMercatorProjectionLock(WIND_PROJECTION_LOCK, app);
+        appRef = null;
+        return false;
+      }
 
+      overlay = mountedOverlay;
+      field = loaded;
       const store = useAppStore.getState();
       const existing = store.layers.find(
         (layer) => layer.metadata[WIND_LAYER_FLAG] === true
@@ -453,7 +510,7 @@ export function createWindParticleController(
       const id = layerId;
       unsubscribeStore?.();
       unsubscribeStore = null;
-      dependencies.setLayers([]);
+      removeOverlay();
       if (
         id &&
         useAppStore.getState().layers.some((layer) => layer.id === id)

@@ -36,7 +36,6 @@ const SOURCE_DRAW_ORDER = [
   "raster",
   "google-3d-tiles",
   "deckviz",
-  "weather-wind",
   "route-anim",
 ] as const;
 export type SharedDeckSource = (typeof SOURCE_DRAW_ORDER)[number];

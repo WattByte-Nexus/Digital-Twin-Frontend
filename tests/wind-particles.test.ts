@@ -4,6 +4,7 @@ import { DEFAULT_LAYER_STYLE, useAppStore } from "../packages/core/src";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import {
   createIllustrativeWindField,
+  createWindParticleOverlay,
   createWindParticleController,
   type WindField,
   type WindParticleDependencies,
@@ -20,15 +21,17 @@ function makeHarness(loadField: () => Promise<WindField> = async () => field) {
   let ensureCount = 0;
   const dependencies: WindParticleDependencies = {
     loadField,
-    ensureOverlay: async () => {
+    mountOverlay: async () => {
       ensureCount += 1;
-      return {};
+      return {
+        setLayers: (layers) => rendered.push(layers),
+        remove: () => {},
+      };
     },
     createLayer: (props) => {
       layerProps.push(props as unknown as Record<string, unknown>);
       return { id: props.id } as never;
     },
-    setLayers: (layers) => rendered.push(layers),
   };
   return {
     controller: createWindParticleController(dependencies),
@@ -50,6 +53,43 @@ beforeEach(() => {
 });
 
 describe("wind particles", () => {
+  it("uses an independent overlaid Deck canvas so interleaved engine layers are not replaced", async () => {
+    const constructed: Record<string, unknown>[] = [];
+    const added: unknown[] = [];
+    const removed: unknown[] = [];
+    class FakeMapboxOverlay {
+      constructor(props: Record<string, unknown>) {
+        constructed.push(props);
+      }
+      setProps(): void {}
+    }
+    const app = {
+      getDeckGL: async () => ({
+        mapbox: { MapboxOverlay: FakeMapboxOverlay },
+      }),
+      addMapControl: (control: unknown) => {
+        added.push(control);
+        return true;
+      },
+      removeMapControl: (control: unknown) => {
+        removed.push(control);
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    const overlay = await createWindParticleOverlay(app);
+    assert.ok(overlay);
+    assert.equal(constructed.length, 1);
+    assert.equal(
+      constructed[0].interleaved,
+      false,
+      "wind must not share the interleaved Deck instance used by engine assets",
+    );
+    assert.equal(added.length, 1);
+
+    overlay.remove();
+    assert.deepEqual(removed, added);
+  });
+
   it("builds a global RGBA byte vector field with varying flow", () => {
     const generated = createIllustrativeWindField(4, 3);
     assert.equal(generated.image.width, 4);
@@ -73,6 +113,7 @@ describe("wind particles", () => {
     const harness = makeHarness();
     const projections: string[] = [];
     const app = {
+      getMapProjection: () => "globe",
       setMapProjection: (projection: string) => projections.push(projection),
     } as unknown as GeoLibreAppAPI;
 
@@ -119,6 +160,11 @@ describe("wind particles", () => {
       false
     );
     assert.deepEqual(harness.rendered.at(-1), []);
+    assert.deepEqual(
+      projections,
+      ["mercator", "globe"],
+      "the projection is restored after wind releases its renderer",
+    );
   });
 
   it("adopts a restored layer and its saved particle settings without duplicating it", async () => {
@@ -171,6 +217,6 @@ describe("wind particles", () => {
 
     assert.equal(await activating, false);
     assert.equal(useAppStore.getState().layers.length, 0);
-    assert.deepEqual(harness.rendered.at(-1), []);
+    assert.equal(harness.rendered.length, 0, "no overlay renders after early deactivation");
   });
 });
