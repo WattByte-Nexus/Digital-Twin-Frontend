@@ -428,6 +428,24 @@ export {
   subscribePrecipitation,
 } from "./plugins/maplibre-precipitation";
 export {
+  maplibreWindParticlesPlugin,
+  WIND_PARTICLES_PLUGIN_ID,
+  createIllustrativeWindField,
+  createWindParticleController,
+  getWindParticleState,
+  loadWindField,
+  setWindParticleCount,
+  setWindParticlesAnimating,
+  setWindParticleSpeed,
+  subscribeWindParticles,
+  type WindDataKind,
+  type WindField,
+  type WindParticleController,
+  type WindParticleDependencies,
+  type WindParticleSettings,
+  type WindParticleState,
+} from "./plugins/maplibre-wind-particles";
+export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,
   getActiveTimeSliderControl,

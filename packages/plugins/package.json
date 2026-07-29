@@ -12,6 +12,7 @@
     "@carbonplan/zarr-layer": "^0.6.0",
     "@deck.gl/aggregation-layers": "9.3.6",
     "@deck.gl/core": "^9.3.6",
+    "@deck.gl/extensions": "^9.3.6",
     "@deck.gl/geo-layers": "^9.3.6",
     "@deck.gl/layers": "^9.3.6",
     "@deck.gl/mapbox": "^9.3.6",
@@ -59,7 +60,8 @@
     "netcdfjs": "^4.0.0",
     "proj4": "^2.20.9",
     "shpjs": "^6.2.0",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "weatherlayers-gl": "^2026.5.2"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

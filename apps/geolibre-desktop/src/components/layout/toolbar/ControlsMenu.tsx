@@ -4,18 +4,24 @@ import {
   type EffectsSettings,
   getCloudsAnimationState,
   getPrecipitationAnimationState,
+  getWindParticleState,
   HALO_EXTENT_MAX,
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
   HALO_OPACITY_MIN,
   setCloudsFrame,
   setPrecipitationFrame,
+  setWindParticleCount,
+  setWindParticlesAnimating,
+  setWindParticleSpeed,
   subscribeClouds,
   subscribePrecipitation,
+  subscribeWindParticles,
   toggleCloudsPlaying,
   togglePrecipitationPlaying,
   type WeatherAnimationState,
   type WeatherLayerController,
+  type WindParticleState,
 } from "@geolibre/plugins";
 import {
   Button,
@@ -54,6 +60,7 @@ interface ControlsMenuProps {
   graticuleActive: boolean;
   cloudsActive: boolean;
   precipitationActive: boolean;
+  windParticlesActive: boolean;
   onToggleMapControl: (control: ToolbarMapControl) => void;
   onToggleEffects: () => void;
   getEffectsSettings: () => EffectsSettings;
@@ -64,6 +71,7 @@ interface ControlsMenuProps {
   onToggleGraticule: () => void;
   onToggleClouds: () => void;
   onTogglePrecipitation: () => void;
+  onToggleWindParticles: () => void;
   onOpenFieldCollection: () => void;
   onOpenGpsTracking: () => void;
   onOpenRecordTour: () => void;
@@ -81,6 +89,7 @@ export function ControlsMenu({
   graticuleActive,
   cloudsActive,
   precipitationActive,
+  windParticlesActive,
   onToggleMapControl,
   onToggleEffects,
   getEffectsSettings,
@@ -91,6 +100,7 @@ export function ControlsMenu({
   onToggleGraticule,
   onToggleClouds,
   onTogglePrecipitation,
+  onToggleWindParticles,
   onOpenFieldCollection,
   onOpenGpsTracking,
   onOpenRecordTour,
@@ -196,6 +206,8 @@ export function ControlsMenu({
               onToggleClouds={onToggleClouds}
               precipitationActive={precipitationActive}
               onTogglePrecipitation={onTogglePrecipitation}
+              windParticlesActive={windParticlesActive}
+              onToggleWindParticles={onToggleWindParticles}
             />
           )}
           {show("controls.sun") && (
@@ -489,6 +501,8 @@ interface WeatherSubmenuProps {
   onToggleClouds: () => void;
   precipitationActive: boolean;
   onTogglePrecipitation: () => void;
+  windParticlesActive: boolean;
+  onToggleWindParticles: () => void;
 }
 
 /**
@@ -503,6 +517,8 @@ function WeatherSubmenu({
   onToggleClouds,
   precipitationActive,
   onTogglePrecipitation,
+  windParticlesActive,
+  onToggleWindParticles,
 }: WeatherSubmenuProps) {
   const { t } = useTranslation();
   return (
@@ -511,7 +527,7 @@ function WeatherSubmenu({
         {t("toolbar.item.weather")}
         {/* Aggregate indicator so an active overlay shows without opening the
             submenu (parity with the old top-level Clouds entry). */}
-        {cloudsActive || precipitationActive ? " ✓" : ""}
+        {cloudsActive || precipitationActive || windParticlesActive ? " ✓" : ""}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         <WeatherLayerSubmenu
@@ -532,6 +548,88 @@ function WeatherSubmenu({
           onToggle={onTogglePrecipitation}
           controller={PRECIPITATION_CONTROLLER}
         />
+        <WindParticleSubmenu active={windParticlesActive} onToggle={onToggleWindParticles} />
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+/**
+ * Wind is a continuous GPU simulation rather than a sequence of raster frames,
+ * so it gets controls for motion, density, and speed instead of the shared
+ * weather timeline.
+ */
+function WindParticleSubmenu({ active, onToggle }: { active: boolean; onToggle: () => void }) {
+  const { t } = useTranslation();
+  const [state, setState] = useState<WindParticleState>(getWindParticleState);
+
+  useEffect(() => {
+    setState(getWindParticleState());
+    return subscribeWindParticles(() => setState(getWindParticleState()));
+  }, []);
+
+  return (
+    <DropdownMenuSub
+      onOpenChange={(open: boolean) => {
+        if (open) setState(getWindParticleState());
+      }}
+    >
+      <DropdownMenuSubTrigger title={t("toolbar.item.windTooltip")}>
+        {t("toolbar.item.wind")}
+        {active ? " ✓" : ""}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-72">
+        <DropdownMenuItem
+          onSelect={(event: Event) => {
+            event.preventDefault();
+            onToggle();
+          }}
+        >
+          {t("toolbar.item.windShow")}
+          {active ? " ✓" : ""}
+        </DropdownMenuItem>
+        {active && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={(event: Event) => {
+                event.preventDefault();
+                setWindParticlesAnimating(!state.animate);
+              }}
+            >
+              {state.animate ? t("toolbar.item.windPause") : t("toolbar.item.windResume")}
+            </DropdownMenuItem>
+            <div className="space-y-2 px-2 py-1.5" onKeyDown={(event) => event.stopPropagation()}>
+              <SliderRow
+                label={t("toolbar.item.windDensity")}
+                min={1_000}
+                max={12_000}
+                step={500}
+                value={state.numParticles}
+                format={(value) => Math.round(value).toLocaleString()}
+                onPreview={setWindParticleCount}
+                onCommit={() => {}}
+              />
+              <SliderRow
+                label={t("toolbar.item.windSpeed")}
+                min={0.1}
+                max={1}
+                step={0.05}
+                value={state.speedFactor}
+                format={(value) => `${Math.round(value * 100)}%`}
+                onPreview={setWindParticleSpeed}
+                onCommit={() => {}}
+              />
+              <p className="text-[11px] leading-4 text-muted-foreground">
+                {t(
+                  state.dataKind === "live"
+                    ? "toolbar.item.windSourceLive"
+                    : "toolbar.item.windSourceIllustrative",
+                )}
+              </p>
+            </div>
+          </>
+        )}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );

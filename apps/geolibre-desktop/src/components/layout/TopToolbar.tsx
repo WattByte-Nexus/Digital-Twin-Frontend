@@ -32,6 +32,7 @@ import {
   GRATICULE_PLUGIN_ID,
   CLOUDS_PLUGIN_ID,
   PRECIPITATION_PLUGIN_ID,
+  WIND_PARTICLES_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
 } from "@geolibre/plugins";
@@ -1203,6 +1204,7 @@ export function TopToolbar({
           graticuleActive={isActive(GRATICULE_PLUGIN_ID)}
           cloudsActive={isActive(CLOUDS_PLUGIN_ID)}
           precipitationActive={isActive(PRECIPITATION_PLUGIN_ID)}
+          windParticlesActive={isActive(WIND_PARTICLES_PLUGIN_ID)}
           onToggleMapControl={toggleMapControl}
           onToggleEffects={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
           getEffectsSettings={getEffectsSettings}
@@ -1213,6 +1215,7 @@ export function TopToolbar({
           onToggleGraticule={() => toggle(GRATICULE_PLUGIN_ID, appApi)}
           onToggleClouds={() => toggle(CLOUDS_PLUGIN_ID, appApi)}
           onTogglePrecipitation={() => toggle(PRECIPITATION_PLUGIN_ID, appApi)}
+          onToggleWindParticles={() => toggle(WIND_PARTICLES_PLUGIN_ID, appApi)}
           onOpenFieldCollection={() => setFieldCollectionOpen(true)}
           onOpenGpsTracking={() => setGpsTrackingOpen(true)}
           onOpenRecordTour={() => setRecordTourOpen(true)}
