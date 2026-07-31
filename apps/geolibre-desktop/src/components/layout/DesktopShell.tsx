@@ -139,11 +139,17 @@ import { FileNamePromptDialog } from "./FileNamePromptDialog";
 import { ProjectPluginTrustDialog } from "./ProjectPluginTrustDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
-import { DigitalTwinHeader, type DigitalTwinView } from "./DigitalTwinHeader";
+import { DigitalTwinHeader } from "./DigitalTwinHeader";
 import { ExpertWorkspaceHeader } from "./ExpertWorkspaceHeader";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
+import {
+  resolveAuthorizedLocation,
+  type AuthorizedLocationResolution,
+  type DigitalTwinAccessContext,
+  type DigitalTwinView,
+} from "../../product-modes/digital-twin/access";
 
 /**
  * Confirm loading a vector source whose feature count tripped the loader's
@@ -448,8 +454,11 @@ const PythonConsolePanel = lazy(() =>
 );
 
 interface DesktopShellProps {
+  access: DigitalTwinAccessContext;
   layoutOptions: LayoutOptions;
+  navigate: (location: string, options?: { replace?: boolean }) => void;
   projectUrlLoadState?: ProjectUrlLoadState;
+  route: Extract<AuthorizedLocationResolution, { kind: "allowed" }>;
   themeMode: ThemeMode;
   onToggleThemeMode: () => void;
 }
@@ -483,26 +492,6 @@ function openDigitalTwinPanelIfAvailable(): void {
   }
 }
 
-function workspaceModeFromLocation(): "digital-twin" | "expert-gis" {
-  if (typeof window === "undefined") return "digital-twin";
-  if (window.location.pathname.toLowerCase().endsWith("/workspace")) return "expert-gis";
-  const workspace = new URLSearchParams(window.location.search).get("workspace")?.toLowerCase();
-  return workspace === "expert" || workspace === "expert-gis" || workspace === "geolibre"
-    ? "expert-gis"
-    : "digital-twin";
-}
-
-function digitalTwinViewFromLocation(): DigitalTwinView {
-  if (typeof window === "undefined") return "live";
-  const requested = new URLSearchParams(window.location.search).get("dtView")?.toLowerCase();
-  if (requested === "scenarios" || requested === "runs" || requested === "live") {
-    return requested;
-  }
-  const path = window.location.pathname.toLowerCase();
-  if (path.includes("/scenarios")) return "scenarios";
-  if (path.includes("/runs")) return "runs";
-  return "live";
-}
 // The notebook panel hosts a full Jupyter UI, so it needs far more room than
 // the layer/style side panels.
 const DEFAULT_NOTEBOOK_PANEL_WIDTH = 480;
@@ -529,20 +518,19 @@ type ShellStyle = CSSProperties &
   Record<"--layer-panel-width" | "--style-panel-width" | "--notebook-panel-width", string>;
 
 export function DesktopShell({
+  access,
   layoutOptions,
+  navigate,
   projectUrlLoadState,
+  route,
   themeMode,
   onToggleThemeMode,
 }: DesktopShellProps) {
   const { t } = useTranslation();
   const shellRef = useRef<HTMLDivElement>(null);
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
-  const [workspaceMode, setWorkspaceMode] = useState<"digital-twin" | "expert-gis">(() =>
-    workspaceModeFromLocation(),
-  );
-  const [digitalTwinView, setDigitalTwinView] = useState<DigitalTwinView>(() =>
-    digitalTwinViewFromLocation(),
-  );
+  const workspaceMode = route.mode;
+  const digitalTwinView = route.view;
   // Push the translated bookmark labels into the framework-agnostic plugins
   // package (which can't call t() itself). Done here rather than in TopToolbar
   // so it still applies when the toolbar is hidden (e.g. `?maponly`), where the
@@ -756,58 +744,63 @@ export function DesktopShell({
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
-  // Browser history is the first product-navigation seam. The screen bodies
-  // still share the current map workspace, but the URL already carries the
-  // selected product destination so later first-party routes can adopt it
-  // without changing the header contract.
-  useEffect(() => {
-    const syncFromLocation = () => {
-      setWorkspaceMode(workspaceModeFromLocation());
-      setDigitalTwinView(digitalTwinViewFromLocation());
-    };
-    window.addEventListener("popstate", syncFromLocation);
-    return () => window.removeEventListener("popstate", syncFromLocation);
-  }, []);
-
   useEffect(() => {
     if (workspaceMode === "digital-twin" && externalPluginsReady) {
       openDigitalTwinPanelIfAvailable();
     }
   }, [externalPluginsReady, workspaceMode]);
 
-  const updateProductLocation = useCallback(
-    (next: { workspace: "digital-twin" | "expert-gis"; view?: DigitalTwinView }) => {
-      const url = new URL(window.location.href);
-      if (next.workspace === "expert-gis") url.searchParams.set("workspace", "expert");
-      else url.searchParams.delete("workspace");
-      if (next.view) url.searchParams.set("dtView", next.view);
-      const nextLocation = `${url.pathname}${url.search}${url.hash}`;
-      const currentLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      if (nextLocation !== currentLocation) window.history.pushState(null, "", nextLocation);
-    },
-    [],
-  );
-
   const handleDigitalTwinNavigate = useCallback(
     (view: DigitalTwinView) => {
-      setDigitalTwinView(view);
-      setWorkspaceMode("digital-twin");
-      updateProductLocation({ workspace: "digital-twin", view });
+      const regionId =
+        route.regionId ??
+        access.regions.find(
+          (region) => region.id === access.mostRecentlyUsedRegionId
+        )?.id ??
+        access.regions[0]?.id;
+      if (!regionId) return;
+      navigate(`/regions/${encodeURIComponent(regionId)}/${view}`);
       openDigitalTwinPanelIfAvailable();
     },
-    [updateProductLocation],
+    [access.mostRecentlyUsedRegionId, access.regions, navigate, route.regionId]
   );
 
   const handleOpenExpertWorkspace = useCallback(() => {
-    setWorkspaceMode("expert-gis");
-    updateProductLocation({ workspace: "expert-gis", view: digitalTwinView });
-  }, [digitalTwinView, updateProductLocation]);
+    navigate(`/workspace?returnTo=${encodeURIComponent(route.location)}`);
+  }, [navigate, route.location]);
 
   const handleReturnToDigitalTwin = useCallback(() => {
-    setWorkspaceMode("digital-twin");
-    updateProductLocation({ workspace: "digital-twin", view: digitalTwinView });
-    openDigitalTwinPanelIfAvailable();
-  }, [digitalTwinView, updateProductLocation]);
+    const returnTo = new URLSearchParams(window.location.search).get(
+      "returnTo"
+    );
+    if (returnTo) {
+      const resolution = resolveAuthorizedLocation(access, returnTo);
+      if (resolution.kind === "allowed" && resolution.mode !== "expert-gis") {
+        navigate(resolution.location);
+        if (resolution.mode === "digital-twin")
+          openDigitalTwinPanelIfAvailable();
+        return;
+      }
+    }
+    const regionId =
+      access.regions.find(
+        (region) => region.id === access.mostRecentlyUsedRegionId
+      )?.id ?? access.regions[0]?.id;
+    if (access.capabilities.includes("digital-twin") && regionId) {
+      navigate(`/regions/${encodeURIComponent(regionId)}/live`);
+      openDigitalTwinPanelIfAvailable();
+    } else if (access.capabilities.includes("administration")) {
+      navigate("/admin");
+    }
+  }, [access, navigate]);
+
+  const handleRegionChange = useCallback(
+    (regionId: string) => {
+      if (!access.regions.some((region) => region.id === regionId)) return;
+      navigate(`/regions/${encodeURIComponent(regionId)}/${digitalTwinView}`);
+    },
+    [access.regions, digitalTwinView, navigate]
+  );
   // Gate plugin URLs carried inside an opened project behind an explicit trust
   // decision before any of their code is fetched or imported (#1062).
   const projectPluginTrust = useProjectPluginTrust();
@@ -1900,14 +1893,26 @@ export function DesktopShell({
         workspaceMode === "digital-twin" ? (
           <SectionErrorBoundary label="Digital Twin header">
             <DigitalTwinHeader
+              access={access}
               activeView={digitalTwinView}
+              activeRegionId={route.regionId}
               compact={layoutOptions.compact}
               diagnosticsErrorCount={diagnostics.errorCount}
               mapControllerRef={mapControllerRef}
               themeMode={themeMode}
               onNavigate={handleDigitalTwinNavigate}
+              onOpenAdministration={
+                access.capabilities.includes("administration")
+                  ? () => navigate("/admin")
+                  : undefined
+              }
               onOpenDiagnostics={() => setDiagnosticsOpen(true)}
-              onOpenExpertWorkspace={handleOpenExpertWorkspace}
+              onOpenExpertWorkspace={
+                access.capabilities.includes("expert-gis")
+                  ? handleOpenExpertWorkspace
+                  : undefined
+              }
+              onRegionChange={handleRegionChange}
               onToggleThemeMode={onToggleThemeMode}
             />
           </SectionErrorBoundary>

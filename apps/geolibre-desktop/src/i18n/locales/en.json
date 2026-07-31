@@ -18,7 +18,8 @@
       "workspaceMenu": "Workspace menu",
       "gridOperations": "Grid operations",
       "decisionSupportOnly": "Decision support only · no equipment controls",
-      "openExpertWorkspace": "Open Expert GIS workspace"
+      "openExpertWorkspace": "Open Expert GIS workspace",
+      "openAdministration": "Open Administration"
     },
     "commands": {
       "navigationGroup": "Digital Twin",

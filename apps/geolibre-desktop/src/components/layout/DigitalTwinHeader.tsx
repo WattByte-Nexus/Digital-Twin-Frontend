@@ -1,4 +1,3 @@
-import { DEFAULT_PROJECT_NAME, useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   Button,
@@ -9,6 +8,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Select,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -41,22 +41,28 @@ import {
   PALETTE_SHORTCUT,
 } from "../../lib/commands";
 import { MENU_MANAGED_PLUGIN_IDS } from "../../lib/ui-profile";
+import type {
+  DigitalTwinAccessContext,
+  DigitalTwinView,
+} from "../../product-modes/digital-twin/access";
 import { CommandPalette } from "../command/CommandPalette";
 import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
 import { SettingsDialog, openSettingsSection } from "./SettingsDialog";
 
-export type DigitalTwinView = "live" | "scenarios" | "runs";
-
 interface DigitalTwinHeaderProps {
+  access: DigitalTwinAccessContext;
   activeView: DigitalTwinView;
+  activeRegionId: string | null;
   compact?: boolean;
   diagnosticsErrorCount: number;
   mapControllerRef: RefObject<MapController | null>;
   themeMode: ThemeMode;
   onNavigate: (view: DigitalTwinView) => void;
+  onOpenAdministration?: () => void;
   onOpenDiagnostics: () => void;
-  onOpenExpertWorkspace: () => void;
+  onOpenExpertWorkspace?: () => void;
+  onRegionChange: (regionId: string) => void;
   onToggleThemeMode: () => void;
 }
 
@@ -74,31 +80,32 @@ interface NavigationItem {
  * Expert GIS workspace transition.
  */
 export function DigitalTwinHeader({
+  access,
   activeView,
+  activeRegionId,
   compact = false,
   diagnosticsErrorCount,
   mapControllerRef,
   themeMode,
   onNavigate,
+  onOpenAdministration,
   onOpenDiagnostics,
   onOpenExpertWorkspace,
+  onRegionChange,
   onToggleThemeMode,
 }: DigitalTwinHeaderProps) {
   const { t } = useTranslation();
-  const projectName = useAppStore((state) => state.projectName);
   const { plugins } = usePluginRegistry();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const isMac = useMemo(() => isMacPlatform(), []);
+  const canConfigureWorkspace =
+    access.capabilities.includes("expert-gis") ||
+    access.capabilities.includes("administration");
 
-  // Until the public monitoring/region projection is available, the loaded
-  // GeoLibre project is the only truthful region-like label the shell owns.
-  // Avoid presenting the generic project placeholder as an assigned region.
-  const regionLabel =
-    projectName.trim() && projectName !== DEFAULT_PROJECT_NAME
-      ? projectName.trim()
-      : t("digitalTwin.header.regionUnassigned");
+  const activeRegion = access.regions.find((region) => region.id === activeRegionId);
+  const regionLabel = activeRegion?.name ?? t("digitalTwin.header.regionUnassigned");
 
   const navigation = useMemo<NavigationItem[]>(
     () => [
@@ -118,30 +125,32 @@ export function DigitalTwinHeader({
   );
 
   const commands = useMemo<Command[]>(
-    () => [
-      ...navigation.map(({ id, icon, label }) => ({
+    () => {
+      const productCommands: Command[] = navigation.map(({ id, icon, label }) => ({
         id: `digital-twin.navigate.${id}`,
         title: label,
         group: t("digitalTwin.commands.navigationGroup"),
         icon,
         run: () => onNavigate(id),
-      })),
-      {
+      }));
+      productCommands.push({
         id: "digital-twin.diagnostics",
         title: t("digitalTwin.header.openDiagnostics"),
         group: t("digitalTwin.commands.systemGroup"),
         icon: Activity,
         run: onOpenDiagnostics,
-      },
-      {
-        id: "digital-twin.settings",
-        title: t("settings.title"),
-        group: t("digitalTwin.commands.systemGroup"),
-        keywords: "preferences configuration",
-        icon: Settings,
-        run: () => openSettingsSection("interface"),
-      },
-      {
+      });
+      if (canConfigureWorkspace) {
+        productCommands.push({
+          id: "digital-twin.settings",
+          title: t("settings.title"),
+          group: t("digitalTwin.commands.systemGroup"),
+          keywords: "preferences configuration",
+          icon: Settings,
+          run: () => openSettingsSection("interface"),
+        });
+      }
+      productCommands.push({
         id: "digital-twin.toggle-theme",
         title:
           themeMode === "dark"
@@ -150,19 +159,33 @@ export function DigitalTwinHeader({
         group: t("digitalTwin.commands.systemGroup"),
         icon: themeMode === "dark" ? Sun : Moon,
         run: onToggleThemeMode,
-      },
-      {
-        id: "digital-twin.open-expert-workspace",
-        title: t("digitalTwin.header.openExpertWorkspace"),
-        group: t("digitalTwin.commands.workspaceGroup"),
-        keywords: "GeoLibre advanced workspace GIS",
-        icon: Wrench,
-        run: onOpenExpertWorkspace,
-      },
-    ],
+      });
+      if (onOpenExpertWorkspace) {
+        productCommands.push({
+          id: "digital-twin.open-expert-workspace",
+          title: t("digitalTwin.header.openExpertWorkspace"),
+          group: t("digitalTwin.commands.workspaceGroup"),
+          keywords: "GeoLibre advanced workspace GIS",
+          icon: Wrench,
+          run: onOpenExpertWorkspace,
+        });
+      }
+      if (onOpenAdministration) {
+        productCommands.push({
+          id: "digital-twin.open-administration",
+          title: t("digitalTwin.header.openAdministration"),
+          group: t("digitalTwin.commands.systemGroup"),
+          icon: Settings,
+          run: onOpenAdministration,
+        });
+      }
+      return productCommands;
+    },
     [
+      canConfigureWorkspace,
       navigation,
       onNavigate,
+      onOpenAdministration,
       onOpenDiagnostics,
       onOpenExpertWorkspace,
       onToggleThemeMode,
@@ -233,17 +256,36 @@ export function DigitalTwinHeader({
         </nav>
 
         <div className="ms-auto flex min-w-0 items-center gap-0.5">
-          <div
-            aria-label={t("digitalTwin.header.assignedRegion", { region: regionLabel })}
-            className="hidden h-8 min-w-0 max-w-56 items-center gap-2 rounded-md border bg-background px-2.5 text-xs xl:flex"
-            title={regionLabel}
-          >
-            <MapPin aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="shrink-0 text-muted-foreground">
-              {t("digitalTwin.header.region")}
-            </span>
-            <span className="truncate font-medium text-foreground">{regionLabel}</span>
-          </div>
+          {access.regions.length > 1 ? (
+            <label className="hidden min-w-0 items-center gap-2 text-xs xl:flex">
+              <MapPin aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="sr-only">{t("digitalTwin.header.region")}</span>
+              <Select
+                aria-label={t("digitalTwin.header.assignedRegion", { region: regionLabel })}
+                className="max-w-56"
+                onChange={(event) => onRegionChange(event.currentTarget.value)}
+                value={activeRegionId ?? ""}
+              >
+                {access.regions.map((region) => (
+                  <option key={region.id} value={region.id}>
+                    {region.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          ) : (
+            <div
+              aria-label={t("digitalTwin.header.assignedRegion", { region: regionLabel })}
+              className="hidden h-8 min-w-0 max-w-56 items-center gap-2 rounded-md border bg-background px-2.5 text-xs xl:flex"
+              title={regionLabel}
+            >
+              <MapPin aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="shrink-0 text-muted-foreground">
+                {t("digitalTwin.header.region")}
+              </span>
+              <span className="truncate font-medium text-foreground">{regionLabel}</span>
+            </div>
+          )}
 
           <Tooltip>
             <TooltipTrigger asChild>
@@ -323,17 +365,20 @@ export function DigitalTwinHeader({
             <TooltipContent>{themeLabel}</TooltipContent>
           </Tooltip>
 
-          <SettingsDialog
-            buttonClassName="h-8 shrink-0 gap-2 px-2"
-            buttonSize="sm"
-            iconClassName="h-4 w-4"
-            mapControllerRef={mapControllerRef}
-            onOpenManagePlugins={() => setManagePluginsOpen(true)}
-            profilePlugins={profilePlugins}
-            showLabels
-            themeMode={themeMode}
-            onToggleThemeMode={onToggleThemeMode}
-          />
+          {canConfigureWorkspace ? (
+            <SettingsDialog
+              buttonClassName="h-8 shrink-0 gap-2 px-2"
+              buttonSize="sm"
+              iconClassName="h-4 w-4"
+              mapControllerRef={mapControllerRef}
+              onOpenManagePlugins={() => setManagePluginsOpen(true)}
+              profilePlugins={profilePlugins}
+              showLabels
+              themeMode={themeMode}
+              onToggleThemeMode={onToggleThemeMode}
+            />
+          ) : null}
+
 
           <DropdownMenu>
             <Tooltip>
@@ -347,7 +392,7 @@ export function DigitalTwinHeader({
                   >
                     <UserRound aria-hidden="true" className="h-4 w-4" />
                     <span className="hidden text-xs 2xl:inline">
-                      {t("digitalTwin.header.gridOperations")}
+                      {access.displayName}
                     </span>
                   </Button>
                 </DropdownMenuTrigger>
@@ -356,7 +401,10 @@ export function DigitalTwinHeader({
             </Tooltip>
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel>
-                <span className="block text-sm">{t("digitalTwin.header.gridOperations")}</span>
+                <span className="block truncate text-sm">{access.displayName}</span>
+                <span className="block truncate text-xs font-normal text-muted-foreground">
+                  {access.organization.name}
+                </span>
                 <span className="block text-xs font-normal text-muted-foreground">
                   {t("digitalTwin.header.decisionSupportOnly")}
                 </span>
@@ -366,13 +414,22 @@ export function DigitalTwinHeader({
                 <Activity aria-hidden="true" className="me-2 h-4 w-4" />
                 {t("digitalTwin.header.openDiagnostics")}
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onOpenExpertWorkspace}>
-                <Wrench aria-hidden="true" className="me-2 h-4 w-4" />
-                {t("digitalTwin.header.openExpertWorkspace")}
-              </DropdownMenuItem>
+              {onOpenExpertWorkspace ? (
+                <DropdownMenuItem onSelect={onOpenExpertWorkspace}>
+                  <Wrench aria-hidden="true" className="me-2 h-4 w-4" />
+                  {t("digitalTwin.header.openExpertWorkspace")}
+                </DropdownMenuItem>
+              ) : null}
+              {onOpenAdministration ? (
+                <DropdownMenuItem onSelect={onOpenAdministration}>
+                  <Settings aria-hidden="true" className="me-2 h-4 w-4" />
+                  {t("digitalTwin.header.openAdministration")}
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
 
         <CommandPalette
           commands={commands}
@@ -384,11 +441,13 @@ export function DigitalTwinHeader({
           open={shortcutsOpen}
           onOpenChange={setShortcutsOpen}
         />
-        <ManagePluginsDialog
-          mapControllerRef={mapControllerRef}
-          open={managePluginsOpen}
-          onOpenChange={setManagePluginsOpen}
-        />
+        {canConfigureWorkspace ? (
+          <ManagePluginsDialog
+            mapControllerRef={mapControllerRef}
+            open={managePluginsOpen}
+            onOpenChange={setManagePluginsOpen}
+          />
+        ) : null}
       </header>
     </TooltipProvider>
   );
