@@ -1,4 +1,5 @@
 import { DEFAULT_PROJECT_NAME, useAppStore } from "@geolibre/core";
+import type { MapController } from "@geolibre/map";
 import {
   Button,
   cn,
@@ -18,28 +19,32 @@ import {
   CircleHelp,
   FlaskConical,
   History,
-  Map,
   MapPin,
   Moon,
   Radio,
   Search,
+  Settings,
   Sun,
   UserRound,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
+import { usePluginRegistry } from "../../hooks/usePlugins";
 import {
   type Command,
   formatShortcut,
   isMacPlatform,
   PALETTE_SHORTCUT,
 } from "../../lib/commands";
+import { MENU_MANAGED_PLUGIN_IDS } from "../../lib/ui-profile";
 import { CommandPalette } from "../command/CommandPalette";
 import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
+import { ManagePluginsDialog } from "./ManagePluginsDialog";
+import { SettingsDialog, openSettingsSection } from "./SettingsDialog";
 
 export type DigitalTwinView = "live" | "scenarios" | "runs";
 
@@ -47,6 +52,7 @@ interface DigitalTwinHeaderProps {
   activeView: DigitalTwinView;
   compact?: boolean;
   diagnosticsErrorCount: number;
+  mapControllerRef: RefObject<MapController | null>;
   themeMode: ThemeMode;
   onNavigate: (view: DigitalTwinView) => void;
   onOpenDiagnostics: () => void;
@@ -71,6 +77,7 @@ export function DigitalTwinHeader({
   activeView,
   compact = false,
   diagnosticsErrorCount,
+  mapControllerRef,
   themeMode,
   onNavigate,
   onOpenDiagnostics,
@@ -79,7 +86,9 @@ export function DigitalTwinHeader({
 }: DigitalTwinHeaderProps) {
   const { t } = useTranslation();
   const projectName = useAppStore((state) => state.projectName);
+  const { plugins } = usePluginRegistry();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const isMac = useMemo(() => isMacPlatform(), []);
 
@@ -100,6 +109,14 @@ export function DigitalTwinHeader({
     [t],
   );
 
+  const profilePlugins = useMemo(
+    () =>
+      plugins
+        .filter((plugin) => !MENU_MANAGED_PLUGIN_IDS.has(plugin.id))
+        .map((plugin) => ({ id: plugin.id, name: plugin.name })),
+    [plugins],
+  );
+
   const commands = useMemo<Command[]>(
     () => [
       ...navigation.map(({ id, icon, label }) => ({
@@ -115,6 +132,14 @@ export function DigitalTwinHeader({
         group: t("digitalTwin.commands.systemGroup"),
         icon: Activity,
         run: onOpenDiagnostics,
+      },
+      {
+        id: "digital-twin.settings",
+        title: t("settings.title"),
+        group: t("digitalTwin.commands.systemGroup"),
+        keywords: "preferences configuration",
+        icon: Settings,
+        run: () => openSettingsSection("interface"),
       },
       {
         id: "digital-twin.toggle-theme",
@@ -166,10 +191,7 @@ export function DigitalTwinHeader({
         )}
         data-digital-twin-header=""
       >
-        <div className="flex min-w-0 shrink-0 items-center gap-2 pe-1 sm:pe-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Map aria-hidden="true" className="h-4 w-4" />
-          </span>
+        <div className="flex min-w-0 shrink-0 items-center pe-1 sm:pe-2">
           <div className="hidden min-w-0 items-baseline gap-2 sm:flex">
             <span className="hidden text-sm font-semibold text-primary lg:inline">GeoLibre</span>
             <span aria-hidden="true" className="hidden h-4 w-px bg-border lg:block" />
@@ -301,6 +323,18 @@ export function DigitalTwinHeader({
             <TooltipContent>{themeLabel}</TooltipContent>
           </Tooltip>
 
+          <SettingsDialog
+            buttonClassName="h-8 shrink-0 gap-2 px-2"
+            buttonSize="sm"
+            iconClassName="h-4 w-4"
+            mapControllerRef={mapControllerRef}
+            onOpenManagePlugins={() => setManagePluginsOpen(true)}
+            profilePlugins={profilePlugins}
+            showLabels
+            themeMode={themeMode}
+            onToggleThemeMode={onToggleThemeMode}
+          />
+
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -349,6 +383,11 @@ export function DigitalTwinHeader({
           commands={commands}
           open={shortcutsOpen}
           onOpenChange={setShortcutsOpen}
+        />
+        <ManagePluginsDialog
+          mapControllerRef={mapControllerRef}
+          open={managePluginsOpen}
+          onOpenChange={setManagePluginsOpen}
         />
       </header>
     </TooltipProvider>

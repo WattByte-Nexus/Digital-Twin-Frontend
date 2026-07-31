@@ -1903,6 +1903,7 @@ export function DesktopShell({
               activeView={digitalTwinView}
               compact={layoutOptions.compact}
               diagnosticsErrorCount={diagnostics.errorCount}
+              mapControllerRef={mapControllerRef}
               themeMode={themeMode}
               onNavigate={handleDigitalTwinNavigate}
               onOpenDiagnostics={() => setDiagnosticsOpen(true)}
