@@ -1,0 +1,356 @@
+import { DEFAULT_PROJECT_NAME, useAppStore } from "@geolibre/core";
+import {
+  Button,
+  cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@geolibre/ui";
+import {
+  Activity,
+  CircleHelp,
+  FlaskConical,
+  History,
+  Map,
+  MapPin,
+  Moon,
+  Radio,
+  Search,
+  Sun,
+  UserRound,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { ThemeMode } from "../../hooks/useThemeMode";
+import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
+import {
+  type Command,
+  formatShortcut,
+  isMacPlatform,
+  PALETTE_SHORTCUT,
+} from "../../lib/commands";
+import { CommandPalette } from "../command/CommandPalette";
+import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
+
+export type DigitalTwinView = "live" | "scenarios" | "runs";
+
+interface DigitalTwinHeaderProps {
+  activeView: DigitalTwinView;
+  compact?: boolean;
+  diagnosticsErrorCount: number;
+  themeMode: ThemeMode;
+  onNavigate: (view: DigitalTwinView) => void;
+  onOpenDiagnostics: () => void;
+  onOpenExpertWorkspace: () => void;
+  onToggleThemeMode: () => void;
+}
+
+interface NavigationItem {
+  id: DigitalTwinView;
+  icon: LucideIcon;
+  label: string;
+}
+
+/**
+ * The focused, first-party header for the Digital Twin product mode.
+ *
+ * It deliberately owns only product-level navigation and status. General GIS
+ * menus remain in {@link TopToolbar} and are reached through the explicit
+ * Expert GIS workspace transition.
+ */
+export function DigitalTwinHeader({
+  activeView,
+  compact = false,
+  diagnosticsErrorCount,
+  themeMode,
+  onNavigate,
+  onOpenDiagnostics,
+  onOpenExpertWorkspace,
+  onToggleThemeMode,
+}: DigitalTwinHeaderProps) {
+  const { t } = useTranslation();
+  const projectName = useAppStore((state) => state.projectName);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const isMac = useMemo(() => isMacPlatform(), []);
+
+  // Until the public monitoring/region projection is available, the loaded
+  // GeoLibre project is the only truthful region-like label the shell owns.
+  // Avoid presenting the generic project placeholder as an assigned region.
+  const regionLabel =
+    projectName.trim() && projectName !== DEFAULT_PROJECT_NAME
+      ? projectName.trim()
+      : t("digitalTwin.header.regionUnassigned");
+
+  const navigation = useMemo<NavigationItem[]>(
+    () => [
+      { id: "live", icon: Radio, label: t("digitalTwin.nav.live") },
+      { id: "scenarios", icon: FlaskConical, label: t("digitalTwin.nav.scenarios") },
+      { id: "runs", icon: History, label: t("digitalTwin.nav.runs") },
+    ],
+    [t],
+  );
+
+  const commands = useMemo<Command[]>(
+    () => [
+      ...navigation.map(({ id, icon, label }) => ({
+        id: `digital-twin.navigate.${id}`,
+        title: label,
+        group: t("digitalTwin.commands.navigationGroup"),
+        icon,
+        run: () => onNavigate(id),
+      })),
+      {
+        id: "digital-twin.diagnostics",
+        title: t("digitalTwin.header.openDiagnostics"),
+        group: t("digitalTwin.commands.systemGroup"),
+        icon: Activity,
+        run: onOpenDiagnostics,
+      },
+      {
+        id: "digital-twin.toggle-theme",
+        title:
+          themeMode === "dark"
+            ? t("toolbar.command.switchToLight")
+            : t("toolbar.command.switchToDark"),
+        group: t("digitalTwin.commands.systemGroup"),
+        icon: themeMode === "dark" ? Sun : Moon,
+        run: onToggleThemeMode,
+      },
+      {
+        id: "digital-twin.open-expert-workspace",
+        title: t("digitalTwin.header.openExpertWorkspace"),
+        group: t("digitalTwin.commands.workspaceGroup"),
+        keywords: "GeoLibre advanced workspace GIS",
+        icon: Wrench,
+        run: onOpenExpertWorkspace,
+      },
+    ],
+    [
+      navigation,
+      onNavigate,
+      onOpenDiagnostics,
+      onOpenExpertWorkspace,
+      onToggleThemeMode,
+      t,
+      themeMode,
+    ],
+  );
+
+  useGlobalShortcuts({
+    commands,
+    onOpenPalette: () => setCommandPaletteOpen(true),
+    onOpenShortcuts: () => setShortcutsOpen(true),
+  });
+
+  const themeLabel =
+    themeMode === "dark"
+      ? t("toolbar.command.switchToLight")
+      : t("toolbar.command.switchToDark");
+
+  return (
+    <TooltipProvider delayDuration={400}>
+      <header
+        className={cn(
+          "flex h-12 min-w-0 shrink-0 items-center gap-1 border-b bg-card px-2",
+          compact && "h-11 px-1.5",
+        )}
+        data-digital-twin-header=""
+      >
+        <div className="flex min-w-0 shrink-0 items-center gap-2 pe-1 sm:pe-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Map aria-hidden="true" className="h-4 w-4" />
+          </span>
+          <div className="hidden min-w-0 items-baseline gap-2 sm:flex">
+            <span className="hidden text-sm font-semibold text-primary lg:inline">GeoLibre</span>
+            <span aria-hidden="true" className="hidden h-4 w-px bg-border lg:block" />
+            <span className="truncate text-sm font-semibold text-foreground">
+              {t("digitalTwin.productName")}
+            </span>
+          </div>
+        </div>
+
+        <nav
+          aria-label={t("digitalTwin.nav.label")}
+          className="flex min-w-0 items-center gap-0.5"
+        >
+          {navigation.map(({ id, icon: Icon, label }) => {
+            const selected = activeView === id;
+            return (
+              <Tooltip key={id}>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-current={selected ? "page" : undefined}
+                    aria-label={label}
+                    className={cn(
+                      "h-9 gap-1.5 px-2.5 text-muted-foreground",
+                      selected && "bg-accent text-accent-foreground shadow-sm",
+                    )}
+                    data-digital-twin-view={id}
+                    onClick={() => onNavigate(id)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+                    <span className="hidden md:inline">{label}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="md:hidden">{label}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </nav>
+
+        <div className="ms-auto flex min-w-0 items-center gap-0.5">
+          <div
+            aria-label={t("digitalTwin.header.assignedRegion", { region: regionLabel })}
+            className="hidden h-8 min-w-0 max-w-56 items-center gap-2 rounded-md border bg-background px-2.5 text-xs xl:flex"
+            title={regionLabel}
+          >
+            <MapPin aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="shrink-0 text-muted-foreground">
+              {t("digitalTwin.header.region")}
+            </span>
+            <span className="truncate font-medium text-foreground">{regionLabel}</span>
+          </div>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={t("digitalTwin.header.monitoringUnavailable")}
+                className="hidden h-8 gap-2 px-2.5 text-amber-700 hover:text-amber-800 md:inline-flex dark:text-amber-300 dark:hover:text-amber-200"
+                onClick={onOpenDiagnostics}
+                size="sm"
+                variant="ghost"
+              >
+                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-amber-500" />
+                <span className="hidden lg:inline">
+                  {t("digitalTwin.header.monitoringUnavailable")}
+                </span>
+                {diagnosticsErrorCount > 0 ? (
+                  <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
+                    {diagnosticsErrorCount}
+                  </span>
+                ) : null}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("digitalTwin.header.openDiagnostics")}</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={t("digitalTwin.header.searchCommands")}
+                className="h-8 gap-2 px-2 lg:px-2.5"
+                onClick={() => setCommandPaletteOpen(true)}
+                size="sm"
+                variant="ghost"
+              >
+                <Search aria-hidden="true" className="h-4 w-4" />
+                <span className="hidden text-xs lg:inline">
+                  {t("digitalTwin.header.searchCommands")}
+                </span>
+                <kbd className="hidden rounded border bg-muted px-1 py-0.5 font-mono text-[9px] text-muted-foreground 2xl:inline">
+                  {formatShortcut(PALETTE_SHORTCUT, isMac)}
+                </kbd>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("digitalTwin.header.searchCommands")}</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={t("digitalTwin.header.keyboardHelp")}
+                className="h-8 w-8"
+                onClick={() => setShortcutsOpen(true)}
+                size="icon"
+                variant="ghost"
+              >
+                <CircleHelp aria-hidden="true" className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("digitalTwin.header.keyboardHelp")}</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={themeLabel}
+                className="h-8 w-8"
+                onClick={onToggleThemeMode}
+                size="icon"
+                variant="ghost"
+              >
+                {themeMode === "dark" ? (
+                  <Sun aria-hidden="true" className="h-4 w-4" />
+                ) : (
+                  <Moon aria-hidden="true" className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{themeLabel}</TooltipContent>
+          </Tooltip>
+
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    aria-label={t("digitalTwin.header.workspaceMenu")}
+                    className="h-8 gap-2 px-2"
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <UserRound aria-hidden="true" className="h-4 w-4" />
+                    <span className="hidden text-xs 2xl:inline">
+                      {t("digitalTwin.header.gridOperations")}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>{t("digitalTwin.header.workspaceMenu")}</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>
+                <span className="block text-sm">{t("digitalTwin.header.gridOperations")}</span>
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {t("digitalTwin.header.decisionSupportOnly")}
+                </span>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={onOpenDiagnostics}>
+                <Activity aria-hidden="true" className="me-2 h-4 w-4" />
+                {t("digitalTwin.header.openDiagnostics")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onOpenExpertWorkspace}>
+                <Wrench aria-hidden="true" className="me-2 h-4 w-4" />
+                {t("digitalTwin.header.openExpertWorkspace")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <CommandPalette
+          commands={commands}
+          open={commandPaletteOpen}
+          onOpenChange={setCommandPaletteOpen}
+        />
+        <KeyboardShortcutsDialog
+          commands={commands}
+          open={shortcutsOpen}
+          onOpenChange={setShortcutsOpen}
+        />
+      </header>
+    </TooltipProvider>
+  );
+}

@@ -11,6 +11,7 @@ import {
   EFFECTS_PLUGIN_ID,
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
+  openRightPanel,
   openRasterLayerPanel,
   getRightPanel,
   restoreDeckViz,
@@ -138,6 +139,8 @@ import { FileNamePromptDialog } from "./FileNamePromptDialog";
 import { ProjectPluginTrustDialog } from "./ProjectPluginTrustDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
+import { DigitalTwinHeader, type DigitalTwinView } from "./DigitalTwinHeader";
+import { ExpertWorkspaceHeader } from "./ExpertWorkspaceHeader";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
@@ -472,6 +475,34 @@ const MAX_SIDE_PANEL_WIDTH = 560;
 // stays mounted (collapsed) beside the notebook, so its rail still occupies this
 // much of the row when computing the map/notebook 50/50 split.
 const COLLAPSED_PANEL_RAIL_WIDTH = 44;
+const DIGITAL_TWIN_PANEL_ID = "digital-twin-demo-panel";
+
+function openDigitalTwinPanelIfAvailable(): void {
+  if (getRightPanel(DIGITAL_TWIN_PANEL_ID)) {
+    openRightPanel(DIGITAL_TWIN_PANEL_ID);
+  }
+}
+
+function workspaceModeFromLocation(): "digital-twin" | "expert-gis" {
+  if (typeof window === "undefined") return "digital-twin";
+  if (window.location.pathname.toLowerCase().endsWith("/workspace")) return "expert-gis";
+  const workspace = new URLSearchParams(window.location.search).get("workspace")?.toLowerCase();
+  return workspace === "expert" || workspace === "expert-gis" || workspace === "geolibre"
+    ? "expert-gis"
+    : "digital-twin";
+}
+
+function digitalTwinViewFromLocation(): DigitalTwinView {
+  if (typeof window === "undefined") return "live";
+  const requested = new URLSearchParams(window.location.search).get("dtView")?.toLowerCase();
+  if (requested === "scenarios" || requested === "runs" || requested === "live") {
+    return requested;
+  }
+  const path = window.location.pathname.toLowerCase();
+  if (path.includes("/scenarios")) return "scenarios";
+  if (path.includes("/runs")) return "runs";
+  return "live";
+}
 // The notebook panel hosts a full Jupyter UI, so it needs far more room than
 // the layer/style side panels.
 const DEFAULT_NOTEBOOK_PANEL_WIDTH = 480;
@@ -506,6 +537,12 @@ export function DesktopShell({
   const { t } = useTranslation();
   const shellRef = useRef<HTMLDivElement>(null);
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
+  const [workspaceMode, setWorkspaceMode] = useState<"digital-twin" | "expert-gis">(() =>
+    workspaceModeFromLocation(),
+  );
+  const [digitalTwinView, setDigitalTwinView] = useState<DigitalTwinView>(() =>
+    digitalTwinViewFromLocation(),
+  );
   // Push the translated bookmark labels into the framework-agnostic plugins
   // package (which can't call t() itself). Done here rather than in TopToolbar
   // so it still applies when the toolbar is hidden (e.g. `?maponly`), where the
@@ -719,6 +756,58 @@ export function DesktopShell({
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
+  // Browser history is the first product-navigation seam. The screen bodies
+  // still share the current map workspace, but the URL already carries the
+  // selected product destination so later first-party routes can adopt it
+  // without changing the header contract.
+  useEffect(() => {
+    const syncFromLocation = () => {
+      setWorkspaceMode(workspaceModeFromLocation());
+      setDigitalTwinView(digitalTwinViewFromLocation());
+    };
+    window.addEventListener("popstate", syncFromLocation);
+    return () => window.removeEventListener("popstate", syncFromLocation);
+  }, []);
+
+  useEffect(() => {
+    if (workspaceMode === "digital-twin" && externalPluginsReady) {
+      openDigitalTwinPanelIfAvailable();
+    }
+  }, [externalPluginsReady, workspaceMode]);
+
+  const updateProductLocation = useCallback(
+    (next: { workspace: "digital-twin" | "expert-gis"; view?: DigitalTwinView }) => {
+      const url = new URL(window.location.href);
+      if (next.workspace === "expert-gis") url.searchParams.set("workspace", "expert");
+      else url.searchParams.delete("workspace");
+      if (next.view) url.searchParams.set("dtView", next.view);
+      const nextLocation = `${url.pathname}${url.search}${url.hash}`;
+      const currentLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (nextLocation !== currentLocation) window.history.pushState(null, "", nextLocation);
+    },
+    [],
+  );
+
+  const handleDigitalTwinNavigate = useCallback(
+    (view: DigitalTwinView) => {
+      setDigitalTwinView(view);
+      setWorkspaceMode("digital-twin");
+      updateProductLocation({ workspace: "digital-twin", view });
+      openDigitalTwinPanelIfAvailable();
+    },
+    [updateProductLocation],
+  );
+
+  const handleOpenExpertWorkspace = useCallback(() => {
+    setWorkspaceMode("expert-gis");
+    updateProductLocation({ workspace: "expert-gis", view: digitalTwinView });
+  }, [digitalTwinView, updateProductLocation]);
+
+  const handleReturnToDigitalTwin = useCallback(() => {
+    setWorkspaceMode("digital-twin");
+    updateProductLocation({ workspace: "digital-twin", view: digitalTwinView });
+    openDigitalTwinPanelIfAvailable();
+  }, [digitalTwinView, updateProductLocation]);
   // Gate plugin URLs carried inside an opened project behind an explicit trust
   // decision before any of their code is fetched or imported (#1062).
   const projectPluginTrust = useProjectPluginTrust();
@@ -1808,22 +1897,42 @@ export function DesktopShell({
       onDrop={handleDrop}
     >
       {layoutOptions.toolbarVisible ? (
-        <SectionErrorBoundary label="Toolbar">
-          <TopToolbar
-            compact={layoutOptions.compact}
-            diagnosticsErrorCount={diagnostics.errorCount}
-            mapControllerRef={mapControllerRef}
-            mapReadyGeneration={mapReadyGeneration}
-            showLabels={layoutOptions.toolbarLabels}
-            showProjectInfo={layoutOptions.showProjectInfo}
-            themeMode={themeMode}
-            collaboration={collaboration}
-            projectFiles={projectFiles}
-            onOpenDiagnostics={() => setDiagnosticsOpen(true)}
-            onToggleThemeMode={onToggleThemeMode}
-            onOpenBasemapExtract={() => setBasemapExtractOpen(true)}
-          />
-        </SectionErrorBoundary>
+        workspaceMode === "digital-twin" ? (
+          <SectionErrorBoundary label="Digital Twin header">
+            <DigitalTwinHeader
+              activeView={digitalTwinView}
+              compact={layoutOptions.compact}
+              diagnosticsErrorCount={diagnostics.errorCount}
+              themeMode={themeMode}
+              onNavigate={handleDigitalTwinNavigate}
+              onOpenDiagnostics={() => setDiagnosticsOpen(true)}
+              onOpenExpertWorkspace={handleOpenExpertWorkspace}
+              onToggleThemeMode={onToggleThemeMode}
+            />
+          </SectionErrorBoundary>
+        ) : (
+          <>
+            <SectionErrorBoundary label="Expert GIS workspace header">
+              <ExpertWorkspaceHeader onReturnToDigitalTwin={handleReturnToDigitalTwin} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary label="Toolbar">
+              <TopToolbar
+                compact={layoutOptions.compact}
+                diagnosticsErrorCount={diagnostics.errorCount}
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+                showLabels={layoutOptions.toolbarLabels}
+                showProjectInfo={layoutOptions.showProjectInfo}
+                themeMode={themeMode}
+                collaboration={collaboration}
+                projectFiles={projectFiles}
+                onOpenDiagnostics={() => setDiagnosticsOpen(true)}
+                onToggleThemeMode={onToggleThemeMode}
+                onOpenBasemapExtract={() => setBasemapExtractOpen(true)}
+              />
+            </SectionErrorBoundary>
+          </>
+        )
       ) : null}
       <div data-workspace-row="" className="relative flex min-h-0 flex-1 flex-col md:flex-row">
         {/* The Browser panel body is portaled into its dedicated content host

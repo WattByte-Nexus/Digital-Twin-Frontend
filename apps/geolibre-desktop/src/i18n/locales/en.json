@@ -1,4 +1,36 @@
 {
+  "digitalTwin": {
+    "productName": "Digital Twin",
+    "nav": {
+      "label": "Digital Twin navigation",
+      "live": "Live",
+      "scenarios": "Scenarios",
+      "runs": "Runs"
+    },
+    "header": {
+      "region": "Region",
+      "regionUnassigned": "Region not assigned",
+      "assignedRegion": "Assigned region: {{region}}",
+      "monitoringUnavailable": "Monitoring not connected",
+      "openDiagnostics": "Open diagnostics",
+      "searchCommands": "Search commands",
+      "keyboardHelp": "Keyboard shortcuts",
+      "workspaceMenu": "Workspace menu",
+      "gridOperations": "Grid operations",
+      "decisionSupportOnly": "Decision support only · no equipment controls",
+      "openExpertWorkspace": "Open Expert GIS workspace"
+    },
+    "commands": {
+      "navigationGroup": "Digital Twin",
+      "systemGroup": "System",
+      "workspaceGroup": "Workspace"
+    },
+    "expert": {
+      "title": "Expert GIS",
+      "description": "Advanced GeoLibre tools · operational evidence remains read-only",
+      "return": "Return to Digital Twin"
+    }
+  },
   "browser": {
     "title": "Browser",
     "services": "Services",
