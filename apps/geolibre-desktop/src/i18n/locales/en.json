@@ -1506,6 +1506,7 @@
     "saveButton": "Save Settings",
     "section": {
       "map": "Map",
+      "style": "Style",
       "layout": "Layout",
       "appearance": "Appearance",
       "interface": "Interface",
@@ -1562,6 +1563,12 @@
       "scaleUnitNautical": "Nautical (nmi)",
       "scaleUnitHint": "Choose the units shown on the scale bar at the bottom of the map.",
       "errorBoundsUnavailable": "The map bounds are not available yet."
+    },
+    "style": {
+      "title": "Layer style",
+      "description": "Adjust the selected layer. Style changes are applied immediately.",
+      "layer": "Layer",
+      "selectLayer": "Select a layer"
     },
     "layout": {
       "title": "Layout",

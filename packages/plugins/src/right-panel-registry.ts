@@ -12,10 +12,9 @@ import { PanelTitleResolver } from "./panel-title";
  * `@geolibre/plugins` (rather than the app) lets the host API delegate to it
  * without the app and the plugins package depending on each other.
  *
- * Only one plugin panel is active at a time. It docks at one of four positions
- * and the user can step it between them. The built-in panel on the side the
- * panel is docked (Layers on the left, Style on the right) collapses to its
- * rail while the panel is expanded there; the shell handles that. Two further
+ * Only one plugin panel is active at a time. It docks at one of three positions
+ * and the user can step it between them. The built-in Layers panel collapses
+ * while the plugin panel is expanded beside it; the shell handles that. Two further
  * docks, `replace-style` and `replace-layers`, are non-positional shared-rail
  * modes in which the panel shares the Style (right) or Layers (left) sidebar's
  * single rail rather than sitting beside it; they are not part of the steppable
@@ -37,7 +36,6 @@ export type RightPanelDock = GeoLibreRightPanelDock;
 export const RIGHT_PANEL_DOCKS: readonly RightPanelDock[] = Object.freeze([
   "left-of-layers",
   "right-of-layers",
-  "left-of-style",
   "right-of-style",
 ] as const);
 
@@ -49,6 +47,7 @@ export const RIGHT_PANEL_DOCKS: readonly RightPanelDock[] = Object.freeze([
  */
 const ALL_DOCKS: readonly RightPanelDock[] = Object.freeze([
   ...RIGHT_PANEL_DOCKS,
+  "left-of-style",
   "replace-style",
   "replace-layers",
 ] as const);
@@ -56,6 +55,7 @@ const ALL_DOCKS: readonly RightPanelDock[] = Object.freeze([
 const DEFAULT_DOCK: RightPanelDock = "right-of-style";
 
 function normalizeDock(dock: unknown): RightPanelDock {
+  if (dock === "left-of-style") return "right-of-style";
   return ALL_DOCKS.includes(dock as RightPanelDock) ? (dock as RightPanelDock) : DEFAULT_DOCK;
 }
 
@@ -242,10 +242,12 @@ export function closeRightPanel(id: string): void {
  * is unknown, or the panel is already there.
  */
 export function setActiveRightPanelDock(dock: RightPanelDock): void {
-  if (activeId === null || !ALL_DOCKS.includes(dock) || activeDock === dock) {
+  if (activeId === null || !ALL_DOCKS.includes(dock)) {
     return;
   }
-  activeDock = dock;
+  const normalizedDock = normalizeDock(dock);
+  if (activeDock === normalizedDock) return;
+  activeDock = normalizedDock;
   emit();
 }
 

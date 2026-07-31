@@ -55,7 +55,6 @@ import {
   Moon,
   Palette,
   PanelLeft,
-  PanelRight,
   Plus,
   RotateCcw,
   Settings,
@@ -116,9 +115,11 @@ import {
   PROVIDER_FIELDS,
   type ProviderField,
 } from "../../lib/assistant/provider-fields";
+import { StylePanel } from "../panels/StylePanel";
 
 export type SettingsSection =
   | "map"
+  | "style"
   | "layout"
   | "appearance"
   | "interface"
@@ -177,6 +178,7 @@ const SECTION_ITEMS: Array<{
   icon: typeof MapPinned;
 }> = [
   { id: "map", labelKey: "settings.section.map", icon: MapPinned },
+  { id: "style", labelKey: "settings.section.style", icon: Palette },
   { id: "layout", labelKey: "settings.section.layout", icon: LayoutPanelTop },
   {
     id: "appearance",
@@ -372,6 +374,9 @@ export function SettingsDialog({
   const { language, options: languageOptions, setLanguage } = useLanguage();
   const preferences = useAppStore((s) => s.preferences);
   const setPreferences = useAppStore((s) => s.setPreferences);
+  const layers = useAppStore((s) => s.layers);
+  const selectedLayerId = useAppStore((s) => s.selectedLayerId);
+  const selectLayer = useAppStore((s) => s.selectLayer);
   const desktopSettings = useDesktopSettingsStore((s) => s.desktopSettings);
   const setDesktopSettings = useDesktopSettingsStore((s) => s.setDesktopSettings);
   // Visibility of the Settings dropdown items under the active UI profile. The
@@ -1211,17 +1216,6 @@ export function SettingsDialog({
                 {t("settings.layout.showLayersPanel")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.stylePanelVisible}
-                onCheckedChange={(checked: boolean) =>
-                  updateSavedLayoutSettings({
-                    stylePanelVisible: checked === true,
-                  })
-                }
-                onSelect={(event: Event) => event.preventDefault()}
-              >
-                {t("settings.layout.showStylePanel")}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
                 checked={browserPanelOpen}
                 onCheckedChange={(checked: boolean) => toggleBrowserPanel(checked === true)}
                 onSelect={(event: Event) => event.preventDefault()}
@@ -1243,6 +1237,21 @@ export function SettingsDialog({
               </DropdownMenuLabel>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+          <DropdownMenuItem
+            onSelect={() => {
+              setSection("style");
+              setOpen(true);
+            }}
+          >
+            <Palette className="me-2 h-3.5 w-3.5" />
+            {t("settings.section.style")}
+          </DropdownMenuItem>
+          {showSettingsItem("settings.styleManager") && (
+            <DropdownMenuItem onSelect={() => useAppStore.getState().setStyleManagerOpen(true)}>
+              <Palette className="me-2 h-3.5 w-3.5" />
+              {t("settings.menu.styleManager")}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <Palette className="h-3.5 w-3.5" />
@@ -1401,12 +1410,6 @@ export function SettingsDialog({
             <DropdownMenuItem onSelect={() => onOpenManagePlugins()}>
               <Puzzle className="me-2 h-3.5 w-3.5" />
               {t("settings.menu.managePlugins")}
-            </DropdownMenuItem>
-          )}
-          {showSettingsItem("settings.styleManager") && (
-            <DropdownMenuItem onSelect={() => useAppStore.getState().setStyleManagerOpen(true)}>
-              <Palette className="me-2 h-3.5 w-3.5" />
-              {t("settings.menu.styleManager")}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -1678,20 +1681,6 @@ export function SettingsDialog({
                       <input
                         className="h-4 w-4"
                         type="checkbox"
-                        checked={draftDesktopSettings.layout.stylePanelVisible}
-                        onChange={(event) =>
-                          updateDraftLayoutSettings({
-                            stylePanelVisible: event.target.checked,
-                          })
-                        }
-                      />
-                      <PanelRight className="h-4 w-4 text-muted-foreground" />
-                      <span>{t("settings.layout.showStylePanel")}</span>
-                    </label>
-                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
-                      <input
-                        className="h-4 w-4"
-                        type="checkbox"
                         checked={browserPanelOpen}
                         onChange={(event) => toggleBrowserPanel(event.target.checked)}
                       />
@@ -1704,6 +1693,34 @@ export function SettingsDialog({
                       {t("settings.layout.urlParamsNote")}
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+              {effectiveSection === "style" ? (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">{t("settings.style.title")}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.style.description")}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-style-layer">{t("settings.style.layer")}</Label>
+                    <Select
+                      id="settings-style-layer"
+                      value={selectedLayerId ?? ""}
+                      onChange={(event) => selectLayer(event.target.value || null)}
+                    >
+                      <option value="">{t("settings.style.selectLayer")}</option>
+                      {layers.map((layer) => (
+                        <option key={layer.id} value={layer.id}>
+                          {layer.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="overflow-hidden rounded-md border">
+                    <StylePanel mapControllerRef={mapControllerRef} />
+                  </div>
                 </div>
               ) : null}
               {effectiveSection === "appearance" ? (

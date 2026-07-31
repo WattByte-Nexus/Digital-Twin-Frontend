@@ -8,7 +8,6 @@ export interface LayoutOptions {
   layerPanelVisible: boolean;
   showProjectInfo: boolean;
   statusBarVisible: boolean;
-  stylePanelVisible: boolean;
   toolbarLabels: boolean;
   toolbarVisible: boolean;
 }
@@ -58,7 +57,6 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     !compact && !ICON_TOOLBAR_VALUES.has(toolbar) ? layoutSettings.toolbarLabels : false;
   const showProjectInfo = compact ? false : layoutSettings.showProjectInfo;
   const layerPanelVisible = panelsHidden ? false : layoutSettings.layerPanelVisible;
-  const stylePanelVisible = panelsHidden ? false : layoutSettings.stylePanelVisible;
   // The attribute table is hidden by default and opened on demand from a
   // vector layer's context menu, so it has no persisted settings toggle; it
   // only needs to be unmounted when the embed chrome is hidden.
@@ -70,7 +68,6 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     layerPanelVisible,
     showProjectInfo,
     statusBarVisible: !mapOnly,
-    stylePanelVisible,
     toolbarLabels,
     toolbarVisible: !mapOnly,
   };

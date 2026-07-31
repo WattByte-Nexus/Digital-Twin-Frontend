@@ -21,7 +21,6 @@ import {
   createQuantileBreaks,
   geojsonHasZCoordinates,
   interpolateRampColors,
-  isStyleLibraryTargetLayer,
   parseJsonExpression,
   removeTrailingJsonCommas,
   styleValue,
@@ -60,16 +59,11 @@ import {
   ChevronUp,
   CornerDownRight,
   Info,
-  Palette,
-  PanelRightClose,
-  PanelRightOpen,
   Plus,
-  SlidersHorizontal,
   SquareFunction,
   Trash2,
 } from "lucide-react";
 import {
-  type PointerEvent as ReactPointerEvent,
   type RefObject,
   useCallback,
   useEffect,
@@ -77,7 +71,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { clamp } from "../../lib/clamp";
 import {
   getAttributePropertyNames,
@@ -150,29 +143,6 @@ function labelOverrideInvalid(
 
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
-  onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  /**
-   * When this flips to `true` the panel collapses to its thin rail (it is not
-   * unmounted). Used to clear room when the notebook opens beside the map; the
-   * user can still expand it again.
-   */
-  autoCollapse?: boolean;
-  /**
-   * Controlled collapse state for the shared right-sidebar (`replace-style`)
-   * mode. When defined, the panel's own collapse state is ignored and the
-   * parent fully owns expand/collapse: the collapse/expand buttons call
-   * {@link onCollapsedChange} instead of toggling internal state, and
-   * `autoCollapse` no longer applies. Leave undefined for the standalone panel.
-   */
-  collapsed?: boolean;
-  /** Notify the parent of a collapse/expand request in controlled mode. */
-  onCollapsedChange?: (collapsed: boolean) => void;
-  /**
-   * In the shared right-sidebar mode, suppress the panel's own collapsed rail:
-   * when collapsed the panel renders nothing because a single shared rail (owned
-   * by the host) lists the Style entry instead of two adjacent rails.
-   */
-  hideOwnRail?: boolean;
 }
 
 function isRasterPaintLayer(type: LayerType): boolean {
@@ -830,11 +800,6 @@ function validateExpressionJson(value: string, label: string, t: TFunction): str
   }
 }
 
-// Shared shell classes for every expanded StylePanel return branch. On phones
-// (max-md) it overlays the map as a bottom sheet instead of squeezing it.
-const STYLE_PANEL_ASIDE_CLASS =
-  "relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--style-panel-width)] md:border-s md:border-t-0";
-
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
 
@@ -1095,59 +1060,15 @@ function RasterStyleSlider({
   );
 }
 
-export function StylePanel({
-  mapControllerRef,
-  onResizeStart,
-  autoCollapse = false,
-  collapsed: controlledCollapsed,
-  onCollapsedChange,
-  hideOwnRail = false,
-}: StylePanelProps) {
+export function StylePanel({ mapControllerRef }: StylePanelProps) {
   const { t } = useTranslation();
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const layers = useAppStore((s) => s.layers);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
-  const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const projectName = useAppStore((s) => s.projectName);
-  const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
-  // In the shared right-sidebar mode the parent owns collapse (controlled);
-  // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
-  // owner applies so every existing call site keeps working.
-  const isControlled = controlledCollapsed !== undefined;
-  const isCollapsed = isControlled ? controlledCollapsed : internalCollapsed;
-  const setIsCollapsed = useCallback(
-    (value: boolean) => {
-      if (isControlled) onCollapsedChange?.(value);
-      else setInternalCollapsed(value);
-    },
-    [isControlled, onCollapsedChange],
-  );
-  // Collapse to the rail when `autoCollapse` flips on (e.g. the notebook opens),
-  // and restore the prior expand/collapse state when it flips back off (notebook
-  // closes). Both act only on the transition so the user can still toggle the
-  // panel manually while `autoCollapse` stays on. `isCollapsed` is in the deps
-  // only to keep the captured value fresh; the guards make pure `isCollapsed`
-  // changes a no-op while `autoCollapse` is stable. The ref starts as null (not
-  // `autoCollapse`) so a mount with `autoCollapse` already true reads as a
-  // null→true transition and still collapses. Skipped entirely in controlled
-  // mode, where the parent (shared rail) owns collapse and never passes
-  // `autoCollapse`.
-  const prevAutoCollapse = useRef<boolean | null>(null);
-  const collapsedBeforeAuto = useRef(isCollapsed);
-  useEffect(() => {
-    if (isControlled) return;
-    const wasAuto = prevAutoCollapse.current;
-    prevAutoCollapse.current = autoCollapse;
-    if (autoCollapse && !wasAuto) {
-      collapsedBeforeAuto.current = internalCollapsed;
-      setInternalCollapsed(true);
-    } else if (!autoCollapse && wasAuto) {
-      setInternalCollapsed(collapsedBeforeAuto.current);
-    }
-  }, [autoCollapse, internalCollapsed, isControlled]);
   const [draftBeforeId, setDraftBeforeId] = useState("");
   const [showBasemapStyleLayers, setShowBasemapStyleLayers] = useState(false);
   const [draftColorExpression, setDraftColorExpression] = useState("");
@@ -1422,62 +1343,13 @@ export function StylePanel({
     [layer?.type, layer?.geojson],
   );
 
-  const resizeHandle = (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label={t("style.resizePanel")}
-      className="absolute -start-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-s border-transparent hover:border-primary md:block"
-      onPointerDown={onResizeStart}
-    />
-  );
-
-  if (isCollapsed) {
-    // In the shared right-sidebar mode the host renders a single rail listing
-    // Style alongside the plugin panel, so the panel shows nothing of its own
-    // when collapsed (avoids two adjacent rails).
-    if (hideOwnRail) return null;
-    return (
-      <aside
-        aria-label={t("style.panelLabelCollapsed")}
-        className="flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-s md:border-t-0 md:py-2"
-      >
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          title={t("style.expand")}
-          aria-label={t("style.expand")}
-          onClick={() => setIsCollapsed(false)}
-        >
-          <PanelRightOpen className="h-4 w-4" />
-        </Button>
-        <div className="flex items-center gap-2 text-muted-foreground md:mt-3 md:flex-col">
-          <SlidersHorizontal className="h-4 w-4" />
-          <span className="text-[10px] font-semibold uppercase tracking-wide md:[writing-mode:vertical-rl] md:rotate-180">
-            {t("sharedRail.style")}
-          </span>
-        </div>
-      </aside>
-    );
-  }
+  const panelClassName = "flex h-[min(64vh,36rem)] min-h-0 w-full flex-col bg-card";
 
   if (!layer) {
     return (
-      <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
-        {resizeHandle}
-        <div className="flex items-center justify-between border-b px-3 py-1.5">
+      <aside aria-label={t("style.panelLabel")} className={panelClassName}>
+        <div className="border-b px-3 py-1.5">
           <span className="text-sm font-semibold">{t("style.heading")}</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            title={t("style.collapse")}
-            aria-label={t("style.collapse")}
-            onClick={() => setIsCollapsed(true)}
-          >
-            <PanelRightClose className="h-4 w-4" />
-          </Button>
         </div>
         <p className="p-4 text-xs text-muted-foreground">{t("style.selectLayerHint")}</p>
       </aside>
@@ -3932,22 +3804,11 @@ export function StylePanel({
 
   if (hasRasterPaintControls) {
     return (
-      <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
-        {resizeHandle}
-        <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+      <aside aria-label={t("style.panelLabel")} className={panelClassName}>
+        <div className="border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
             {t("style.headingWithLayer", { name: layer.name })}
           </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            title={t("style.collapse")}
-            aria-label={t("style.collapse")}
-            onClick={() => setIsCollapsed(true)}
-          >
-            <PanelRightClose className="h-4 w-4" />
-          </Button>
         </div>
         <ScrollArea className="flex-1">
           {/* Padding on the inner content with extra right clearance so the
@@ -4063,22 +3924,11 @@ export function StylePanel({
 
   if (!hasVectorPaintControls) {
     return (
-      <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
-        {resizeHandle}
-        <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+      <aside aria-label={t("style.panelLabel")} className={panelClassName}>
+        <div className="border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
             {t("style.headingWithLayer", { name: layer.name })}
           </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            title={t("style.collapse")}
-            aria-label={t("style.collapse")}
-            onClick={() => setIsCollapsed(true)}
-          >
-            <PanelRightClose className="h-4 w-4" />
-          </Button>
         </div>
         <div className="space-y-4 p-3">{beforeIdControl}</div>
         <p className="p-4 text-xs text-muted-foreground">{t("style.noControls")}</p>
@@ -4091,39 +3941,11 @@ export function StylePanel({
   }
 
   return (
-    <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
-      {resizeHandle}
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+    <aside aria-label={t("style.panelLabel")} className={panelClassName}>
+      <div className="border-b px-3 py-1.5">
         <span className="truncate text-sm font-semibold">
           {t("style.headingWithLayer", { name: layer.name })}
         </span>
-        <div className="flex shrink-0 items-center gap-1">
-          {/* Only the layer types the Style Manager can apply to; this vector
-              panel also serves mbtiles/plugin/deck layers, where the dialog
-              would open with Apply/Save disabled. */}
-          {isStyleLibraryTargetLayer(layer.type) && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              title={t("style.openStyleManager")}
-              aria-label={t("style.openStyleManager")}
-              onClick={() => setStyleManagerOpen(true)}
-            >
-              <Palette className="h-4 w-4" />
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            title={t("style.collapse")}
-            aria-label={t("style.collapse")}
-            onClick={() => setIsCollapsed(true)}
-          >
-            <PanelRightClose className="h-4 w-4" />
-          </Button>
-        </div>
       </div>
       <ScrollArea className="flex-1">
         {/* Padding lives on the inner content (not the ScrollArea root) with

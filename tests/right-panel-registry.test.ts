@@ -123,17 +123,16 @@ describe("right-panel registry", () => {
     assert.equal(getActiveRightPanelDock(), "right-of-style");
 
     setActiveRightPanelDock("left-of-style");
-    assert.equal(getActiveRightPanelDock(), "left-of-style");
-    assert.equal(getRightPanelSnapshot().dock, "left-of-style");
+    assert.equal(getActiveRightPanelDock(), "right-of-style");
+    assert.equal(getRightPanelSnapshot().dock, "right-of-style");
 
-    // Stepping left/right walks the four ordered positions, stopping at the ends.
+    // Stepping left/right walks the three ordered positions, stopping at the ends.
     moveActiveRightPanelDock("left");
     assert.equal(getActiveRightPanelDock(), "right-of-layers");
     moveActiveRightPanelDock("left");
     assert.equal(getActiveRightPanelDock(), "left-of-layers");
     moveActiveRightPanelDock("left");
     assert.equal(getActiveRightPanelDock(), "left-of-layers");
-    moveActiveRightPanelDock("right");
     moveActiveRightPanelDock("right");
     moveActiveRightPanelDock("right");
     assert.equal(getActiveRightPanelDock(), "right-of-style");
@@ -167,7 +166,7 @@ describe("right-panel registry", () => {
     setActiveRightPanelDock("right-of-style");
     assert.equal(getActiveRightPanelDock(), "right-of-style");
     moveActiveRightPanelDock("left");
-    assert.equal(getActiveRightPanelDock(), "left-of-style");
+    assert.equal(getActiveRightPanelDock(), "right-of-layers");
 
     // ...and can merge it back into the shared rail at runtime.
     setActiveRightPanelDock("replace-style");

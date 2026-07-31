@@ -553,12 +553,11 @@ export interface GeoLibreFloatingPanelRegistration {
 }
 
 /**
- * Where a plugin panel docks. Four are positional, left to right: `left-of-layers`
+ * Where a plugin panel docks. Three are positional, left to right: `left-of-layers`
  * (the far-left edge), `right-of-layers` (between the Layers panel and the map),
- * `left-of-style` (between the map and the Style panel), or `right-of-style` (the
- * far-right edge). The built-in panel on the docked side (Layers on the left,
- * Style on the right) collapses to its rail while the plugin panel is expanded
- * next to it.
+ * or `right-of-style` (the far-right edge). `left-of-style` remains accepted as
+ * a compatibility alias for `right-of-style`. The built-in Layers panel collapses
+ * to its rail while a plugin panel is expanded next to it.
  *
  * `replace-style` and `replace-layers` are non-positional **shared-rail** modes:
  * the panel shares the Style (right) or Layers (left) panel's sidebar surface
@@ -604,12 +603,12 @@ export interface GeoLibreRightPanelRegistration {
    */
   title: string | (() => string);
   /**
-   * Where the panel docks initially: one of the four positional docks
-   * (`left-of-layers`, `right-of-layers`, `left-of-style`, or `right-of-style`,
-   * the default), or a shared-rail mode (`replace-style` / `replace-layers`).
-   * With a positional dock the built-in panel on the docked side (Layers on the
-   * left, Style on the right) collapses to its rail while the plugin panel is
-   * expanded next to it, and the user can move the panel between positions at
+   * Where the panel docks initially: one of the three positional docks
+   * (`left-of-layers`, `right-of-layers`, or `right-of-style`, the default), the
+   * legacy `left-of-style` alias, or a shared-rail mode (`replace-style` /
+   * `replace-layers`). With a positional Layers-side dock the built-in Layers
+   * panel collapses to its rail while the plugin panel is expanded, and the user
+   * can move the panel between positions at
    * runtime with the move buttons in its header (or a plugin via
    * {@link GeoLibreAppAPI.setActiveRightPanelDock}). With a shared-rail mode the
    * panel shares the Style or Layers sidebar's single rail instead and is not

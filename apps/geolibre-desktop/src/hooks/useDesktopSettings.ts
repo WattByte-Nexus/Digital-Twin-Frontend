@@ -98,7 +98,6 @@ export interface UpdateSettings {
 export interface DesktopLayoutSettings {
   layerPanelVisible: boolean;
   showProjectInfo: boolean;
-  stylePanelVisible: boolean;
   toolbarLabels: boolean;
 }
 
@@ -145,7 +144,6 @@ interface DesktopSettingsState {
 export const DEFAULT_DESKTOP_LAYOUT_SETTINGS: DesktopLayoutSettings = {
   layerPanelVisible: true,
   showProjectInfo: true,
-  stylePanelVisible: true,
   toolbarLabels: true,
 };
 
@@ -324,10 +322,6 @@ function normalizeDesktopLayoutSettings(layout: unknown): DesktopLayoutSettings 
       typeof candidate.showProjectInfo === "boolean"
         ? candidate.showProjectInfo
         : DEFAULT_DESKTOP_LAYOUT_SETTINGS.showProjectInfo,
-    stylePanelVisible:
-      typeof candidate.stylePanelVisible === "boolean"
-        ? candidate.stylePanelVisible
-        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.stylePanelVisible,
     toolbarLabels:
       typeof candidate.toolbarLabels === "boolean"
         ? candidate.toolbarLabels

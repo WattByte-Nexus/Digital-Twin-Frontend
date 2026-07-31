@@ -67,11 +67,11 @@ interface PluginRightPanelProps {
  * instance's `dock` position.
  *
  * One instance is mounted per dock position (`left-of-layers`, `right-of-layers`,
- * `left-of-style`, `right-of-style`); each renders only when the active panel is
+ * `right-of-style`); each renders only when the active panel is
  * docked there, so a user can step the panel between positions with the header's
- * move buttons (issue #712). The built-in panel on the docked side (Layers or
- * Style) collapses while the plugin panel is expanded next to it (the shell
- * handles that). The panel content is owned by the plugin via `render(container)`
+ * move buttons (issue #712). The built-in Layers panel collapses while a plugin
+ * panel is expanded next to it (the shell handles that). The panel content is
+ * owned by the plugin via `render(container)`
  * (plain DOM); the host provides the dock chrome (header, collapse rail, resize
  * handle, move/collapse/close buttons). Renders nothing when no plugin panel is
  * docked here.

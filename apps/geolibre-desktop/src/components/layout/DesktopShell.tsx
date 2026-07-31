@@ -128,9 +128,8 @@ import {
   PLUGIN_PANEL_DEFAULT_WIDTH,
   clampPluginPanelWidth,
 } from "../panels/PluginRightPanel";
-import { StylePanel } from "../panels/StylePanel";
 import { SharedSidebar } from "../panels/SharedSidebar";
-import { Layers, SlidersHorizontal } from "lucide-react";
+import { Layers } from "lucide-react";
 import { StoryMapComposeBar } from "../storymap/StoryMapComposeBar";
 import { StoryMapPanel } from "../storymap/StoryMapPanel";
 import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
@@ -480,10 +479,6 @@ type ImportedVectorLayer = Awaited<ReturnType<typeof loadDroppedVectorFiles>>[nu
 const DEFAULT_SIDE_PANEL_WIDTH = 320;
 const MIN_SIDE_PANEL_WIDTH = 180;
 const MAX_SIDE_PANEL_WIDTH = 560;
-// Width of a side panel's collapsed rail (`md:w-11` = 2.75rem). The Style panel
-// stays mounted (collapsed) beside the notebook, so its rail still occupies this
-// much of the row when computing the map/notebook 50/50 split.
-const COLLAPSED_PANEL_RAIL_WIDTH = 44;
 const DIGITAL_TWIN_PANEL_ID = "digital-twin-demo-panel";
 
 function openDigitalTwinPanelIfAvailable(): void {
@@ -502,12 +497,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-// Seed width for the Layers/Style side panels. The full default would let two
-// open panels crowd out the map on narrow desktop windows (two 320px panels
-// leave only 128px at the 768px `md` breakpoint), so cap the initial width at
-// ~30% of the viewport. The cap only lowers the width below ~1067px (where 30%
-// of the viewport drops under the default); wider windows get the full default.
-// Users can still drag up to MAX_SIDE_PANEL_WIDTH either way.
+// Seed width for the Layers side panel. The cap keeps the map usable near the
+// desktop breakpoint while still allowing the panel to be resized wider.
 function initialSidePanelWidth(): number {
   if (typeof window === "undefined") return DEFAULT_SIDE_PANEL_WIDTH;
   const cap = Math.round(window.innerWidth * 0.3);
@@ -515,7 +506,7 @@ function initialSidePanelWidth(): number {
 }
 
 type ShellStyle = CSSProperties &
-  Record<"--layer-panel-width" | "--style-panel-width" | "--notebook-panel-width", string>;
+  Record<"--layer-panel-width" | "--notebook-panel-width", string>;
 
 export function DesktopShell({
   access,
@@ -832,14 +823,11 @@ export function DesktopShell({
   // COG layers (read band values on click). Inert until a COG is identified.
   useRasterIdentify();
   const [layerPanelWidth, setLayerPanelWidth] = useState(initialSidePanelWidth);
-  const [stylePanelWidth, setStylePanelWidth] = useState(initialSidePanelWidth);
   const [notebookPanelWidth, setNotebookPanelWidth] = useState(DEFAULT_NOTEBOOK_PANEL_WIDTH);
   // Opening the notebook (Processing → Jupyter Notebook) splits the workspace
   // 50/50 between the map and the notebook: we size the notebook to half of the
-  // space it shares with the map (the row width minus the layer panel and the
-  // Style panel's collapsed rail, when shown), while the Style panel collapses
-  // to that rail (see `autoCollapse` below). Fire only on the closed→open
-  // transition so a later manual resize is preserved.
+  // space it shares with the map (the row width minus the layer panel). Fire
+  // only on the closed→open transition so a later manual resize is preserved.
   const notebookWasOpenRef = useRef(notebookOpen);
   useEffect(() => {
     const wasOpen = notebookWasOpenRef.current;
@@ -848,8 +836,7 @@ export function DesktopShell({
     const shellWidth = shellRef.current?.getBoundingClientRect().width ?? 0;
     if (shellWidth <= 0) return;
     const layerWidth = layoutOptions.layerPanelVisible ? layerPanelWidth : 0;
-    const styleRailWidth = layoutOptions.stylePanelVisible ? COLLAPSED_PANEL_RAIL_WIDTH : 0;
-    const half = Math.round((shellWidth - layerWidth - styleRailWidth) / 2);
+    const half = Math.round((shellWidth - layerWidth) / 2);
     // Honor the same min/max bounds as the drag-resize handler so the auto-size
     // and manual-resize paths cannot diverge (an ultrawide shell would otherwise
     // initialize past MAX, a width the user could never drag back to).
@@ -857,13 +844,11 @@ export function DesktopShell({
   }, [
     notebookOpen,
     layoutOptions.layerPanelVisible,
-    layoutOptions.stylePanelVisible,
     layerPanelWidth,
   ]);
   const deferPanelResize = isTauri();
   const shellStyle: ShellStyle = {
     "--layer-panel-width": `${layerPanelWidth}px`,
-    "--style-panel-width": `${stylePanelWidth}px`,
     "--notebook-panel-width": `${notebookPanelWidth}px`,
   };
 
@@ -1742,78 +1727,8 @@ export function DesktopShell({
     [deferPanelResize, layerPanelWidth],
   );
 
-  const startStylePanelResize = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      // Route all pointer events for this drag to the handle, so a touch that
-      // slides off it (or off-screen) still reaches the listeners below.
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-
-      const startX = event.clientX;
-      const startWidth = stylePanelWidth;
-      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
-      const panelRect = event.currentTarget.parentElement?.getBoundingClientRect();
-      let nextWidth = startWidth;
-      let resizeFrame: number | null = null;
-      const previousCursor = document.body.style.cursor;
-      const previousUserSelect = document.body.style.userSelect;
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
-
-      const onPointerMove = (moveEvent: PointerEvent) => {
-        nextWidth = clamp(
-          startWidth + dirSign * (startX - moveEvent.clientX),
-          MIN_SIDE_PANEL_WIDTH,
-          MAX_SIDE_PANEL_WIDTH,
-        );
-        if (resizeFrame !== null) return;
-        resizeFrame = window.requestAnimationFrame(() => {
-          resizeFrame = null;
-          if (deferPanelResize) {
-            if (verticalResizeGuideRef.current && panelRect) {
-              verticalResizeGuideRef.current.style.left = `${
-                dirSign === 1 ? panelRect.right - nextWidth : panelRect.left + nextWidth
-              }px`;
-              verticalResizeGuideRef.current.classList.remove("hidden");
-            }
-            return;
-          }
-          shellRef.current?.style.setProperty("--style-panel-width", `${nextWidth}px`);
-        });
-      };
-
-      const onPointerUp = () => {
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-        window.removeEventListener("pointercancel", onPointerUp);
-        activeResizeCleanupRef.current = null;
-        if (resizeFrame !== null) {
-          window.cancelAnimationFrame(resizeFrame);
-          resizeFrame = null;
-        }
-        shellRef.current?.style.setProperty("--style-panel-width", `${nextWidth}px`);
-        verticalResizeGuideRef.current?.classList.add("hidden");
-        setStylePanelWidth(nextWidth);
-        window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
-        document.body.style.cursor = previousCursor;
-        document.body.style.userSelect = previousUserSelect;
-      };
-
-      // pointercancel fires when the gesture is interrupted (OS scroll, app
-      // backgrounded); run the same teardown so styles/listeners don't stick.
-      activeResizeCleanupRef.current = onPointerUp;
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
-      window.addEventListener("pointercancel", onPointerUp);
-    },
-    [deferPanelResize, stylePanelWidth],
-  );
-
-  // The notebook panel is docked on the same side as the Style panel, so its
-  // map-side handle widens the panel as the pointer moves toward the map
-  // (mirrors startStylePanelResize, with the notebook's own constants/CSS var).
+  // The notebook's map-side handle widens the panel as the pointer moves toward
+  // the map, mirroring the other docked-panel resize behavior.
   const startNotebookPanelResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -2141,73 +2056,33 @@ export function DesktopShell({
           )}
         </main>
         {replaceStylePanelId ? (
-          // Shared-rail mode (issue #765): the plugin panel shares the Style
-          // sidebar surface, so a single rail lists both the workbench and Style
-          // instead of the two positional plugin slots flanking the Style panel.
+          // Keep replace-style plugins on their established right-side dock,
+          // but do not recreate the built-in Style rail now that layer styling
+          // lives in Settings.
           <SectionErrorBoundary label="Shared right sidebar">
             <SharedSidebar
-              // Key by the active panel id so switching between two replace-style
-              // plugins remounts the sidebar, resetting its per-panel local state
-              // (the Style opt-in) rather than carrying the previous plugin over.
               key={replaceStylePanelId}
               side="style"
               pluginId={replaceStylePanelId}
               pluginContentEl={dockContentEl}
               pluginWidth={pluginPanelWidth}
               onPluginWidthChange={setPluginPanelWidth}
-              builtinVisible={layoutOptions.stylePanelVisible}
+              builtinVisible={false}
               builtinTitle={t("sharedRail.style")}
-              builtinIcon={<SlidersHorizontal className="h-4 w-4" />}
-              // Mirror the standalone Style panel's autoCollapse triggers so the
-              // notebook / story-map presentation collapses Style here too.
-              // `autoCollapsedPanel` is omitted because it is always null in a
-              // shared-rail mode (the panel is the sole active one).
-              forceBuiltinCollapsed={notebookOpen || storymapPresenting}
-              renderBuiltin={({ collapsed, onCollapsedChange }) => (
-                <StylePanel
-                  mapControllerRef={mapControllerRef}
-                  onResizeStart={startStylePanelResize}
-                  collapsed={collapsed}
-                  onCollapsedChange={onCollapsedChange}
-                  hideOwnRail
-                />
-              )}
+              builtinIcon={null}
+              forceBuiltinCollapsed={false}
+              renderBuiltin={() => null}
             />
           </SectionErrorBoundary>
         ) : (
-          <>
-            <SectionErrorBoundary label="Plugin panel (left of Style)">
-              <PluginRightPanel
-                dock="left-of-style"
-                contentEl={dockContentEl}
-                width={pluginPanelWidth}
-                onWidthChange={setPluginPanelWidth}
-              />
-            </SectionErrorBoundary>
-            {/* The notebook claims the workspace's right half, so the Style panel
-                collapses to its rail while the notebook is open (Processing →
-                Jupyter Notebook) rather than unmounting; the user can re-expand it.
-                A story map presentation collapses it for the same reason. */}
-            {layoutOptions.stylePanelVisible ? (
-              <SectionErrorBoundary label="Style panel">
-                <StylePanel
-                  mapControllerRef={mapControllerRef}
-                  onResizeStart={startStylePanelResize}
-                  autoCollapse={
-                    notebookOpen || storymapPresenting || autoCollapsedPanel === "style"
-                  }
-                />
-              </SectionErrorBoundary>
-            ) : null}
-            <SectionErrorBoundary label="Plugin panel (right of Style)">
-              <PluginRightPanel
-                dock="right-of-style"
-                contentEl={dockContentEl}
-                width={pluginPanelWidth}
-                onWidthChange={setPluginPanelWidth}
-              />
-            </SectionErrorBoundary>
-          </>
+          <SectionErrorBoundary label="Plugin panel (right)">
+            <PluginRightPanel
+              dock="right-of-style"
+              contentEl={dockContentEl}
+              width={pluginPanelWidth}
+              onWidthChange={setPluginPanelWidth}
+            />
+          </SectionErrorBoundary>
         )}
         {notebookOpen ? (
           <SectionErrorBoundary label="Notebook">
