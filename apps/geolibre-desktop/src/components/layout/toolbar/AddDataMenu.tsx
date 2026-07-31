@@ -13,11 +13,11 @@ import type { ToolbarChrome } from "./constants";
 
 interface AddDataMenuProps {
   chrome: ToolbarChrome;
-  onOpenEarthEngine: () => void;
+  onOpenEarthEngineData: () => void;
 }
 
-/** The Add Data menu, intentionally focused on the Earth Engine overlay workflow. */
-export function AddDataMenu({ chrome, onOpenEarthEngine }: AddDataMenuProps) {
+/** The Add Data menu, intentionally focused on API-published Earth Engine data. */
+export function AddDataMenu({ chrome, onOpenEarthEngineData }: AddDataMenuProps) {
   const { t } = useTranslation();
 
   return (
@@ -36,9 +36,7 @@ export function AddDataMenu({ chrome, onOpenEarthEngine }: AddDataMenuProps) {
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>{t("toolbar.menu.addData")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onOpenEarthEngine}>
-          {t("toolbar.command.earthEngine")}
-        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onOpenEarthEngineData}>Earth Engine data</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

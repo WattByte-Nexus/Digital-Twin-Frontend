@@ -11,12 +11,12 @@ const source = readFileSync(
 );
 
 describe("Add Data menu", () => {
-  it("exposes only the Earth Engine workflow", () => {
+  it("exposes only the API-backed Earth Engine workflow", () => {
     const items = source.match(/<DropdownMenuItem\b/g) ?? [];
 
     assert.equal(items.length, 1);
-    assert.match(source, /onSelect=\{onOpenEarthEngine\}/);
-    assert.match(source, /toolbar\.command\.earthEngine/);
+    assert.match(source, /onSelect=\{onOpenEarthEngineData\}/);
+    assert.match(source, />Earth Engine data<\/DropdownMenuItem>/);
     assert.doesNotMatch(source, /DATA_SOURCE_CATALOG|addLayer\.|onSetAddDataKind/);
   });
 });

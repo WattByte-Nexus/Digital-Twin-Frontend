@@ -10,7 +10,6 @@ import {
   closeVectorLayerPanel,
   openFlatGeobufAddVectorLayerPanel,
   openDuckDBLayerPanel,
-  openEarthEnginePanel,
   openLidarLayerPanel,
   openPlanetaryComputerPanel,
   openPMTilesLayerPanel,
@@ -97,6 +96,7 @@ import {
   type OpenAddDataPostgres,
 } from "./add-data/open-add-data";
 import { AddNetcdfDialog } from "./AddNetcdfDialog";
+import { AddEarthEngineDataDialog } from "./AddEarthEngineDataDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
@@ -476,6 +476,7 @@ export function TopToolbar({
   // jumps straight to the scenegraph layer type).
   const [addDataDeckVizKind, setAddDataDeckVizKind] = useState<string | undefined>(undefined);
   const [netcdfDialogOpen, setNetcdfDialogOpen] = useState(false);
+  const [earthEngineDataDialogOpen, setEarthEngineDataDialogOpen] = useState(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -1175,7 +1176,7 @@ export function TopToolbar({
       {isMenuVisible(uiProfile, "addData") && (
         <AddDataMenu
           chrome={chrome}
-          onOpenEarthEngine={() => openEarthEnginePanel(appApi)}
+          onOpenEarthEngineData={() => setEarthEngineDataDialogOpen(true)}
         />
       )}
       {isMenuVisible(uiProfile, "processing") && (
@@ -1340,6 +1341,11 @@ export function TopToolbar({
             setAddDataPostgres(undefined);
           }
         }}
+      />
+      <AddEarthEngineDataDialog
+        open={earthEngineDataDialogOpen}
+        appApi={appApi}
+        onOpenChange={setEarthEngineDataDialogOpen}
       />
       <AddNetcdfDialog open={netcdfDialogOpen} appApi={appApi} onOpenChange={setNetcdfDialogOpen} />
       <ProjectFileDialogs projectFiles={projectFiles} />
