@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   fetchDigitalTwinEarthEngineCatalog,
+  groupDigitalTwinEarthEngineLayers,
   normalizeDigitalTwinApiUrl,
 } from "../apps/geolibre-desktop/src/lib/digital-twin-earth-engine";
 
@@ -51,6 +52,13 @@ describe("Digital Twin Earth Engine catalog", () => {
             format: "cog",
             tile_url: "https://cdn.example.com/golden-evc.tif",
           },
+          {
+            layer_id: "evt",
+            name: "Existing vegetation type",
+            format: "cog",
+            band: "evt",
+            tile_url: "https://cdn.example.com/golden-evt.tif",
+          },
         ],
       });
     };
@@ -59,7 +67,7 @@ describe("Digital Twin Earth Engine catalog", () => {
       fetchImpl: fetchImpl as typeof fetch,
     });
 
-    assert.equal(catalog.layers.length, 2);
+    assert.equal(catalog.layers.length, 3);
     assert.deepEqual(
       catalog.layers.map((layer) => [layer.name, layer.regionName, layer.url]),
       [
@@ -69,10 +77,25 @@ describe("Digital Twin Earth Engine catalog", () => {
           "Boulder",
           "https://engine.example.com/api/v1/regions/boulder-co/earth-engine/evt.cog.tif",
         ],
+        ["Existing vegetation type", "Golden", "https://cdn.example.com/golden-evt.tif"],
       ],
     );
     assert.equal(catalog.layers[1]?.style.colormap, "terrain");
     assert.equal(calls.length, 3);
+
+    const datasets = groupDigitalTwinEarthEngineLayers(catalog.layers);
+    assert.equal(datasets.length, 2);
+    assert.deepEqual(
+      datasets.map((dataset) => [
+        dataset.id,
+        dataset.name,
+        dataset.layers.map((layer) => layer.regionName),
+      ]),
+      [
+        ["evc", "Existing vegetation cover", ["Golden"]],
+        ["evt", "Existing vegetation type", ["Boulder", "Golden"]],
+      ],
+    );
   });
 
   it("keeps healthy region catalogs when one region endpoint is unavailable", async () => {

@@ -14,6 +14,7 @@ export interface DigitalTwinEarthEngineStyle {
 
 export interface DigitalTwinEarthEngineLayer {
   id: string;
+  layerId: string;
   name: string;
   band?: string;
   units?: string;
@@ -21,6 +22,14 @@ export interface DigitalTwinEarthEngineLayer {
   regionId: string;
   regionName: string;
   style: DigitalTwinEarthEngineStyle;
+}
+
+export interface DigitalTwinEarthEngineDataset {
+  id: string;
+  name: string;
+  band?: string;
+  units?: string;
+  layers: DigitalTwinEarthEngineLayer[];
 }
 
 export interface DigitalTwinEarthEngineCatalog {
@@ -116,6 +125,7 @@ function parseLayer(
   const defaultStyle = isRecord(value.default_style) ? value.default_style : {};
   return {
     id: `${regionId}:${layerId}`,
+    layerId,
     name: nonEmptyString(value.name) ?? layerId,
     band: nonEmptyString(value.band),
     units: nonEmptyString(value.units),
@@ -129,6 +139,45 @@ function parseLayer(
       opacity: finiteNumber(defaultStyle.opacity),
     },
   };
+}
+
+export function groupDigitalTwinEarthEngineLayers(
+  layers: DigitalTwinEarthEngineLayer[],
+): DigitalTwinEarthEngineDataset[] {
+  const groups = new Map<
+    string,
+    { dataset: DigitalTwinEarthEngineDataset; layerIds: Set<string> }
+  >();
+
+  for (const layer of layers) {
+    const existing = groups.get(layer.layerId);
+    if (existing) {
+      if (!existing.layerIds.has(layer.id)) {
+        existing.dataset.layers.push(layer);
+        existing.layerIds.add(layer.id);
+      }
+      continue;
+    }
+    groups.set(layer.layerId, {
+      dataset: {
+        id: layer.layerId,
+        name: layer.name,
+        band: layer.band,
+        units: layer.units,
+        layers: [layer],
+      },
+      layerIds: new Set([layer.id]),
+    });
+  }
+
+  return [...groups.values()]
+    .map(({ dataset }) => ({
+      ...dataset,
+      layers: dataset.layers.sort((left, right) =>
+        left.regionName.localeCompare(right.regionName),
+      ),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export async function fetchDigitalTwinEarthEngineCatalog(

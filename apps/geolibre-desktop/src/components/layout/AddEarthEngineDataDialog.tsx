@@ -10,11 +10,13 @@ import {
   Label,
 } from "@geolibre/ui";
 import { Database, Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   defaultDigitalTwinApiUrl,
   fetchDigitalTwinEarthEngineCatalog,
+  groupDigitalTwinEarthEngineLayers,
   rememberDigitalTwinApiUrl,
+  type DigitalTwinEarthEngineDataset,
   type DigitalTwinEarthEngineLayer,
 } from "../../lib/digital-twin-earth-engine";
 
@@ -41,6 +43,7 @@ export function AddEarthEngineDataDialog({
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const datasets = useMemo(() => groupDigitalTwinEarthEngineLayers(layers), [layers]);
 
   useEffect(
     () => () => {
@@ -77,18 +80,21 @@ export function AddEarthEngineDataDialog({
     }
   };
 
-  const addLayer = async (layer: DigitalTwinEarthEngineLayer) => {
+  const addDataset = async (dataset: DigitalTwinEarthEngineDataset) => {
     if (!appApi.addCogLayer || addingId) return;
-    setAddingId(layer.id);
+    setAddingId(dataset.id);
     setError(null);
     try {
-      await appApi.addCogLayer(`${layer.name} · ${layer.regionName}`, layer.url, {
-        colormap: layer.style.colormap,
-        rescaleMin: layer.style.rescaleMin,
-        rescaleMax: layer.style.rescaleMax,
-        opacity: layer.style.opacity ?? 0.65,
-      });
-      setAddedIds((current) => new Set(current).add(layer.id));
+      for (const layer of dataset.layers) {
+        if (addedIds.has(layer.id)) continue;
+        await appApi.addCogLayer(`${layer.name} · ${layer.regionName}`, layer.url, {
+          colormap: layer.style.colormap,
+          rescaleMin: layer.style.rescaleMin,
+          rescaleMax: layer.style.rescaleMax,
+          opacity: layer.style.opacity ?? 0.65,
+        });
+        setAddedIds((current) => new Set(current).add(layer.id));
+      }
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -160,20 +166,24 @@ export function AddEarthEngineDataDialog({
             </p>
           ) : null}
 
-          {layers.length > 0 ? (
+          {datasets.length > 0 ? (
             <div className="max-h-80 space-y-2 overflow-y-auto pe-1">
-              {layers.map((layer) => {
-                const added = addedIds.has(layer.id);
-                const adding = addingId === layer.id;
+              {datasets.map((dataset) => {
+                const added = dataset.layers.every((layer) => addedIds.has(layer.id));
+                const adding = addingId === dataset.id;
+                const regionLabel =
+                  dataset.layers.length === 1
+                    ? dataset.layers[0]?.regionName
+                    : `${dataset.layers.length} regions`;
                 return (
                   <div
-                    key={layer.id}
+                    key={dataset.id}
                     className="flex items-center justify-between gap-3 rounded-md border p-3"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{layer.name}</p>
+                      <p className="truncate text-sm font-medium">{dataset.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {[layer.regionName, layer.band, layer.units, "COG"]
+                        {[regionLabel, dataset.band, dataset.units, "COG"]
                           .filter(Boolean)
                           .join(" · ")}
                       </p>
@@ -181,7 +191,7 @@ export function AddEarthEngineDataDialog({
                     <Button
                       type="button"
                       size="sm"
-                      onClick={() => void addLayer(layer)}
+                      onClick={() => void addDataset(dataset)}
                       disabled={added || addingId !== null || !appApi.addCogLayer}
                     >
                       {adding ? <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" /> : null}
