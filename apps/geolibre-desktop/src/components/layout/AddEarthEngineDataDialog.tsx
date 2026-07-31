@@ -15,6 +15,7 @@ import {
   defaultDigitalTwinApiUrl,
   fetchDigitalTwinEarthEngineCatalog,
   groupDigitalTwinEarthEngineLayers,
+  prepareDigitalTwinEarthEngineCog,
   rememberDigitalTwinApiUrl,
   type DigitalTwinEarthEngineDataset,
   type DigitalTwinEarthEngineLayer,
@@ -39,15 +40,20 @@ export function AddEarthEngineDataDialog({
   const [layers, setLayers] = useState<DigitalTwinEarthEngineLayer[]>([]);
   const [unavailableRegions, setUnavailableRegions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [addingId, setAddingId] = useState<string | null>(null);
+  const [operation, setOperation] = useState<{
+    id: string;
+    phase: "preparing" | "adding";
+  } | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const operationAbortRef = useRef<AbortController | null>(null);
   const datasets = useMemo(() => groupDigitalTwinEarthEngineLayers(layers), [layers]);
 
   useEffect(
     () => () => {
       abortRef.current?.abort();
+      operationAbortRef.current?.abort();
     },
     [],
   );
@@ -81,24 +87,31 @@ export function AddEarthEngineDataDialog({
   };
 
   const addDataset = async (dataset: DigitalTwinEarthEngineDataset) => {
-    if (!appApi.addCogLayer || addingId) return;
-    setAddingId(dataset.id);
+    if (!appApi.addCogLayer || operation) return;
+    const controller = new AbortController();
+    operationAbortRef.current = controller;
+    const layer = dataset.primaryLayer;
+    setOperation({ id: dataset.id, phase: layer.artifactReady ? "adding" : "preparing" });
     setError(null);
     try {
-      for (const layer of dataset.layers) {
-        if (addedIds.has(layer.id)) continue;
-        await appApi.addCogLayer(`${layer.name} · ${layer.regionName}`, layer.url, {
-          colormap: layer.style.colormap,
-          rescaleMin: layer.style.rescaleMin,
-          rescaleMax: layer.style.rescaleMax,
-          opacity: layer.style.opacity ?? 0.65,
-        });
-        setAddedIds((current) => new Set(current).add(layer.id));
-      }
+      await prepareDigitalTwinEarthEngineCog(layer, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setOperation({ id: dataset.id, phase: "adding" });
+      await appApi.addCogLayer(dataset.name, layer.url, {
+        colormap: layer.style.colormap,
+        rescaleMin: layer.style.rescaleMin,
+        rescaleMax: layer.style.rescaleMax,
+        opacity: layer.style.opacity ?? 0.65,
+      });
+      setAddedIds((current) => new Set(current).add(dataset.id));
     } catch (caught) {
+      if (controller.signal.aborted) return;
       setError(errorMessage(caught));
     } finally {
-      setAddingId(null);
+      if (operationAbortRef.current === controller) {
+        operationAbortRef.current = null;
+        setOperation(null);
+      }
     }
   };
 
@@ -109,8 +122,10 @@ export function AddEarthEngineDataDialog({
         if (!next) {
           abortRef.current?.abort();
           abortRef.current = null;
+          operationAbortRef.current?.abort();
+          operationAbortRef.current = null;
           setLoading(false);
-          setAddingId(null);
+          setOperation(null);
           setError(null);
         }
         onOpenChange(next);
@@ -169,8 +184,9 @@ export function AddEarthEngineDataDialog({
           {datasets.length > 0 ? (
             <div className="max-h-80 space-y-2 overflow-y-auto pe-1">
               {datasets.map((dataset) => {
-                const added = dataset.layers.every((layer) => addedIds.has(layer.id));
-                const adding = addingId === dataset.id;
+                const added = addedIds.has(dataset.id);
+                const preparing = operation?.id === dataset.id && operation.phase === "preparing";
+                const adding = operation?.id === dataset.id && operation.phase === "adding";
                 const regionLabel =
                   dataset.layers.length === 1
                     ? dataset.layers[0]?.regionName
@@ -192,10 +208,18 @@ export function AddEarthEngineDataDialog({
                       type="button"
                       size="sm"
                       onClick={() => void addDataset(dataset)}
-                      disabled={added || addingId !== null || !appApi.addCogLayer}
+                      disabled={added || operation !== null || !appApi.addCogLayer}
                     >
-                      {adding ? <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" /> : null}
-                      {added ? "Added" : adding ? "Adding…" : "Add"}
+                      {preparing || adding ? (
+                        <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
+                      ) : null}
+                      {added
+                        ? "Added"
+                        : preparing
+                          ? "Preparing…"
+                          : adding
+                            ? "Adding…"
+                            : "Add"}
                     </Button>
                   </div>
                 );

@@ -21,6 +21,8 @@ export interface DigitalTwinEarthEngineLayer {
   url: string;
   regionId: string;
   regionName: string;
+  sourceReady: boolean;
+  artifactReady: boolean;
   style: DigitalTwinEarthEngineStyle;
 }
 
@@ -30,6 +32,7 @@ export interface DigitalTwinEarthEngineDataset {
   band?: string;
   units?: string;
   layers: DigitalTwinEarthEngineLayer[];
+  primaryLayer: DigitalTwinEarthEngineLayer;
 }
 
 export interface DigitalTwinEarthEngineCatalog {
@@ -39,6 +42,8 @@ export interface DigitalTwinEarthEngineCatalog {
 }
 
 type FetchLike = typeof fetch;
+
+const DEFAULT_COG_PREPARATION_TIMEOUT_MS = 90_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -132,6 +137,8 @@ function parseLayer(
     url: resolveApiUrl(apiUrl, sourceUrl),
     regionId,
     regionName,
+    sourceReady: value.source_ready === true,
+    artifactReady: value.artifact_ready === true,
     style: {
       colormap: nonEmptyString(defaultStyle.colormap),
       rescaleMin: finiteNumber(defaultStyle.rescale_min),
@@ -139,6 +146,29 @@ function parseLayer(
       opacity: finiteNumber(defaultStyle.opacity),
     },
   };
+}
+
+function semanticDatasetId(layer: DigitalTwinEarthEngineLayer): string {
+  const band = layer.band?.trim().toLocaleLowerCase();
+  if (band) return band;
+  return [layer.name, layer.units]
+    .filter(Boolean)
+    .join(":")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function comparePrimaryLayers(
+  left: DigitalTwinEarthEngineLayer,
+  right: DigitalTwinEarthEngineLayer,
+): number {
+  return (
+    Number(right.artifactReady) - Number(left.artifactReady) ||
+    Number(right.sourceReady) - Number(left.sourceReady) ||
+    left.regionName.localeCompare(right.regionName)
+  );
 }
 
 export function groupDigitalTwinEarthEngineLayers(
@@ -150,7 +180,8 @@ export function groupDigitalTwinEarthEngineLayers(
   >();
 
   for (const layer of layers) {
-    const existing = groups.get(layer.layerId);
+    const datasetId = semanticDatasetId(layer);
+    const existing = groups.get(datasetId);
     if (existing) {
       if (!existing.layerIds.has(layer.id)) {
         existing.dataset.layers.push(layer);
@@ -158,26 +189,88 @@ export function groupDigitalTwinEarthEngineLayers(
       }
       continue;
     }
-    groups.set(layer.layerId, {
+    groups.set(datasetId, {
       dataset: {
-        id: layer.layerId,
+        id: datasetId,
         name: layer.name,
         band: layer.band,
         units: layer.units,
         layers: [layer],
+        primaryLayer: layer,
       },
       layerIds: new Set([layer.id]),
     });
   }
 
   return [...groups.values()]
-    .map(({ dataset }) => ({
-      ...dataset,
-      layers: dataset.layers.sort((left, right) =>
-        left.regionName.localeCompare(right.regionName),
-      ),
-    }))
+    .map(({ dataset }) => {
+      const groupedLayers = [...dataset.layers].sort(comparePrimaryLayers);
+      const primaryLayer = groupedLayers[0] ?? dataset.primaryLayer;
+      return {
+        ...dataset,
+        layers: [...groupedLayers].sort((left, right) =>
+          left.regionName.localeCompare(right.regionName),
+        ),
+        primaryLayer,
+      };
+    })
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export async function prepareDigitalTwinEarthEngineCog(
+  layer: DigitalTwinEarthEngineLayer,
+  options: { fetchImpl?: FetchLike; signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<void> {
+  if (layer.artifactReady) return;
+  if (!layer.sourceReady) {
+    throw new Error(`${layer.name} is listed by the API, but its source data is not ready.`);
+  }
+
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
+  if (!fetchImpl) throw new Error("This environment cannot prepare the Earth Engine COG.");
+  const timeoutMs = options.timeoutMs ?? DEFAULT_COG_PREPARATION_TIMEOUT_MS;
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) abortFromCaller();
+  else options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const response = await fetchImpl(layer.url, {
+      method: "HEAD",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(
+        `The Digital Twin API could not prepare ${layer.name} (${response.status}).`,
+      );
+    }
+    const contentType = response.headers.get("content-type");
+    if (contentType && !contentType.toLocaleLowerCase().includes("tiff")) {
+      throw new Error(`The Digital Twin API did not return a GeoTIFF for ${layer.name}.`);
+    }
+    const acceptRanges = response.headers.get("accept-ranges");
+    if (acceptRanges && !acceptRanges.toLocaleLowerCase().includes("bytes")) {
+      throw new Error(`The Digital Twin API COG endpoint does not support byte ranges.`);
+    }
+  } catch (error) {
+    if (timedOut) {
+      const timeoutLabel =
+        timeoutMs < 1_000 ? `${timeoutMs} ms` : `${Math.ceil(timeoutMs / 1_000)} seconds`;
+      throw new Error(
+        `The Digital Twin API did not prepare this COG within ${timeoutLabel}. Check the API logs, then retry.`,
+        { cause: error },
+      );
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abortFromCaller);
+  }
 }
 
 export async function fetchDigitalTwinEarthEngineCatalog(
