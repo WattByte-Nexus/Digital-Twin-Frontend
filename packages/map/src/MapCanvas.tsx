@@ -21,6 +21,7 @@ import {
   vectorTileStyleLayerIds,
 } from "./layer-sync";
 import { createMapController, type MapController } from "./map-controller";
+import { resolveThemeBasemapStyle, type MapThemeMode } from "./theme-basemap";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
@@ -40,6 +41,8 @@ export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   onControllerReady?: () => void;
+  /** App theme used to select the matching built-in basemap style. */
+  themeMode?: MapThemeMode;
 }
 
 export interface MapDiagnosticEvent {
@@ -892,6 +895,7 @@ export const MapCanvas = memo(function MapCanvas({
   controllerRef,
   onMapDiagnosticEvent,
   onControllerReady,
+  themeMode = "light",
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -905,6 +909,7 @@ export const MapCanvas = memo(function MapCanvas({
   onMapDiagnosticEventRef.current = onMapDiagnosticEvent;
 
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
+  const themedBasemapStyleUrl = resolveThemeBasemapStyle(basemapStyleUrl, themeMode);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
   const mapPreferences = useAppStore((s) => s.preferences.map);
@@ -929,7 +934,7 @@ export const MapCanvas = memo(function MapCanvas({
 
     const mc = createMapController();
     const map = mc.init(containerRef.current, {
-      styleUrl: basemapStyleUrl,
+      styleUrl: themedBasemapStyleUrl,
       mapView,
       mapPreferences,
     });
@@ -1046,11 +1051,11 @@ export const MapCanvas = memo(function MapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const prevBasemap = useRef(basemapStyleUrl);
+  const prevBasemap = useRef(themedBasemapStyleUrl);
   useEffect(() => {
     const map = controller.current?.getMap();
-    if (!map || prevBasemap.current === basemapStyleUrl) return;
-    prevBasemap.current = basemapStyleUrl;
+    if (!map || prevBasemap.current === themedBasemapStyleUrl) return;
+    prevBasemap.current = themedBasemapStyleUrl;
     map.once("style.load", () => {
       const state = useAppStore.getState();
       controller.current?.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
@@ -1062,8 +1067,8 @@ export const MapCanvas = memo(function MapCanvas({
       );
       onControllerReadyRef.current?.();
     });
-    controller.current?.setStyle(basemapStyleUrl);
-  }, [basemapStyleUrl]);
+    controller.current?.setStyle(themedBasemapStyleUrl);
+  }, [themedBasemapStyleUrl]);
 
   useEffect(() => {
     controller.current?.setBasemapVisible(basemapVisible);
@@ -1373,5 +1378,13 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current?.applyView(mapView);
   }, [mapView.center[0], mapView.center[1], mapView.zoom, mapView.bearing, mapView.pitch]);
 
-  return <div ref={containerRef} className="h-full w-full" data-testid="map-canvas" />;
+  return (
+    <div
+      ref={containerRef}
+      className="h-full w-full"
+      data-testid="map-canvas"
+      data-map-theme={themeMode}
+      data-basemap-style={themedBasemapStyleUrl}
+    />
+  );
 });

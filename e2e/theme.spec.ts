@@ -3,6 +3,22 @@ import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
 const FIXTURE_TEXT = readFixture("smoke.geojson");
 const FIXTURE_FEATURE_COUNT = (JSON.parse(FIXTURE_TEXT) as { features: unknown[] }).features.length;
+const LIBERTY_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+const DARK_STYLE = "https://tiles.openfreemap.org/styles/dark";
+
+test("switches the built-in basemap with the app theme", async ({ page }) => {
+  await waitForMap(page, "/?theme=light");
+  const map = page.getByTestId("map-canvas");
+  await expect(map).toHaveAttribute("data-basemap-style", LIBERTY_STYLE);
+
+  await page.getByRole("button", { name: "Switch to Dark Mode" }).click();
+  await expect(map).toHaveAttribute("data-map-theme", "dark");
+  await expect(map).toHaveAttribute("data-basemap-style", DARK_STYLE);
+
+  await page.getByRole("button", { name: "Switch to Light Mode" }).click();
+  await expect(map).toHaveAttribute("data-map-theme", "light");
+  await expect(map).toHaveAttribute("data-basemap-style", LIBERTY_STYLE);
+});
 
 /**
  * Dark theme is the app's most theme-sensitive surface and ships changes
@@ -18,6 +34,7 @@ test("loads a layer and opens the attribute table in dark theme", async ({ page 
   // The theme applies as `class="dark"` on <html> with a matching color-scheme.
   await expect(page.locator("html")).toHaveClass(/(^|\s)dark(\s|$)/);
   await expect(page.locator("html")).toHaveAttribute("style", /dark/);
+  await expect(page.getByTestId("map-canvas")).toHaveAttribute("data-map-theme", "dark");
 
   // Core data path must work unchanged under the dark theme.
   await dropGeoJson(page, "smoke", FIXTURE_TEXT);

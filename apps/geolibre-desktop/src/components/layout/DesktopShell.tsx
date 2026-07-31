@@ -2043,11 +2043,12 @@ export function DesktopShell({
               is not flagged as content outside a landmark. */}
           <h1 className="sr-only">GeoLibre map workspace</h1>
           <SectionErrorBoundary label="Map" fallbackClassName="h-full w-full">
-            <MapGrid>
+            <MapGrid themeMode={themeMode}>
               <MapCanvas
                 controllerRef={mapControllerRef}
                 onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 onControllerReady={handleMapControllerReady}
+                themeMode={themeMode}
               />
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
               <MapContextMenu

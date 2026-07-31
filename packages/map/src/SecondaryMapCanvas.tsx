@@ -6,11 +6,14 @@ import {
 } from "@geolibre/core";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { createMapController, type MapController } from "./map-controller";
+import { resolveThemeBasemapStyle, type MapThemeMode } from "./theme-basemap";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export interface SecondaryMapCanvasProps {
   /** Id of the `secondaryMapViews` entry this pane renders. */
   viewId: string;
+  /** App theme used to select the matching built-in basemap style. */
+  themeMode?: MapThemeMode;
 }
 
 /**
@@ -32,6 +35,7 @@ export interface SecondaryMapCanvasProps {
  */
 export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   viewId,
+  themeMode = "light",
 }: SecondaryMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -48,6 +52,7 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
 
   // The basemap is shared with the primary map (the global store fields).
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
+  const themedBasemapStyleUrl = resolveThemeBasemapStyle(basemapStyleUrl, themeMode);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
 
@@ -67,6 +72,10 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
         : { ...layer, visible: override };
     });
   }, [layers, layerVisibility]);
+  const paneLayersRef = useRef(paneLayers);
+  paneLayersRef.current = paneLayers;
+  const layerGroupsRef = useRef(layerGroups);
+  layerGroupsRef.current = layerGroups;
 
   // Create the map exactly once. The deps are intentionally empty; everything
   // it reads is captured from the latest store state at mount time.
@@ -80,7 +89,7 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
 
     const mc = createMapController();
     const map = mc.init(containerRef.current, {
-      styleUrl: state.basemapStyleUrl,
+      styleUrl: resolveThemeBasemapStyle(state.basemapStyleUrl, themeMode),
       mapView: initialView,
       mapPreferences: state.preferences.map,
       // No layer control: the shared layers/basemap are owned by the primary
@@ -152,13 +161,22 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   }, [paneLayers, layerGroups]);
 
   // Basemap is shared with the primary map; follow the global store fields.
-  const prevBasemap = useRef(basemapStyleUrl);
+  const prevBasemap = useRef(themedBasemapStyleUrl);
   useEffect(() => {
-    if (prevBasemap.current !== basemapStyleUrl) {
-      prevBasemap.current = basemapStyleUrl;
-      controller.current?.setStyle(basemapStyleUrl);
+    if (prevBasemap.current !== themedBasemapStyleUrl) {
+      prevBasemap.current = themedBasemapStyleUrl;
+      const mc = controller.current;
+      const map = mc?.getMap();
+      if (!mc || !map) return;
+      map.once("style.load", () => {
+        const live = useAppStore.getState();
+        mc.waitAndSyncLayers(applyGroupEffects(paneLayersRef.current, layerGroupsRef.current));
+        mc.setBasemapVisible(live.basemapVisible);
+        mc.setBasemapOpacity(live.basemapOpacity);
+      });
+      mc.setStyle(themedBasemapStyleUrl);
     }
-  }, [basemapStyleUrl]);
+  }, [themedBasemapStyleUrl]);
   useEffect(() => {
     controller.current?.setBasemapVisible(basemapVisible);
   }, [basemapVisible]);

@@ -66,6 +66,8 @@ function PaneLabel({
 interface MapGridProps {
   /** The primary map pane (MapCanvas plus its overlays), rendered in cell 0. */
   children: ReactNode;
+  /** App theme forwarded to secondary MapLibre panes. */
+  themeMode: "light" | "dark";
 }
 
 /**
@@ -80,7 +82,7 @@ interface MapGridProps {
  * sync between panes is handled inside the canvases (via the shared global
  * `mapView`); this component only owns layout and chrome.
  */
-export function MapGrid({ children }: MapGridProps) {
+export function MapGrid({ children, themeMode }: MapGridProps) {
   const { t } = useTranslation();
   const rows = useAppStore((s) => s.mapLayout.rows);
   const cols = useAppStore((s) => s.mapLayout.cols);
@@ -111,7 +113,13 @@ export function MapGrid({ children }: MapGridProps) {
         />
       </div>
       {secondaryMapViews.map((pane, index) => (
-        <SecondaryMapPane key={pane.id} viewId={pane.id} index={index} cesiumToken={cesiumToken} />
+        <SecondaryMapPane
+          key={pane.id}
+          viewId={pane.id}
+          index={index}
+          cesiumToken={cesiumToken}
+          themeMode={themeMode}
+        />
       ))}
     </div>
   );
@@ -123,9 +131,10 @@ interface SecondaryMapPaneProps {
   index: number;
   /** Current Cesium Ion token; when absent the 3D-globe view is not offered. */
   cesiumToken?: string;
+  themeMode: "light" | "dark";
 }
 
-function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps) {
+function SecondaryMapPane({ viewId, index, cesiumToken, themeMode }: SecondaryMapPaneProps) {
   const { t } = useTranslation();
   const cesiumAvailable = Boolean(cesiumToken);
   const removeSecondaryMapView = useAppStore((s) => s.removeSecondaryMapView);
@@ -149,7 +158,7 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
         // never take effect on an already-mounted pane.
         <CesiumCanvas key={cesiumToken} viewId={viewId} ionToken={cesiumToken} />
       ) : (
-        <SecondaryMapCanvas viewId={viewId} />
+        <SecondaryMapCanvas viewId={viewId} themeMode={themeMode} />
       )}
       <PaneLabel
         value={label}
