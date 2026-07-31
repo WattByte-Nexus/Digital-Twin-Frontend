@@ -131,7 +131,7 @@ describe("digital-twin-demo bundled plugin", () => {
       network.poles.every(
         (pole: { scale: number[] }) =>
           pole.scale.length === 3 &&
-          pole.scale.every((axisScale) => Math.abs(axisScale - 10.36 / 9.375) < 1e-12),
+          pole.scale.every((axisScale) => Math.abs(axisScale - 8.5 / 9.375) < 1e-12),
       ),
     );
     assert.equal(network.conductors.length, 4);
@@ -139,7 +139,7 @@ describe("digital-twin-demo bundled plugin", () => {
       network.conductors.every(
         (conductor: { path: number[][] }) =>
           conductor.path.length === 2 &&
-          conductor.path.every((coordinate) => coordinate[2] === 9.5),
+          conductor.path.every((coordinate) => coordinate[2] === 7.9),
       ),
     );
     assert.deepEqual(network.conductors[0].path[1], network.conductors[2].path[0]);

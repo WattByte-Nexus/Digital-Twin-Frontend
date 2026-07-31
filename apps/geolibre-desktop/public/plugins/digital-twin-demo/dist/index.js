@@ -12,12 +12,14 @@ const POWER_LINE_LAYER_ID = "digital-twin-demo-power-lines";
 const POWER_LINE_POLE_LAYER_ID = "digital-twin-demo-power-line-poles";
 const POWER_LINE_CONDUCTOR_LAYER_ID = "digital-twin-demo-power-line-conductors";
 const POWER_LINE_MODEL_PATH = "assets/13.8kv_power_pole.glb";
-// The GLB is 9.375 m tall in its authored coordinate system. A typical 40 ft
-// distribution pole has 6 ft embedded, leaving 10.36 m visible above ground.
+// The GLB is 9.375 m tall in its authored coordinate system. Render it as a
+// compact neighborhood distribution pole: 8.5 m (about 28 ft) above ground.
+// This remains realistic while keeping the poles in proportion with nearby
+// one- and two-story buildings in the demo basemap.
 const POWER_POLE_MODEL_HEIGHT_METERS = 9.375;
-const POWER_POLE_HEIGHT_AGL_METERS = 10.36;
+const POWER_POLE_HEIGHT_AGL_METERS = 8.5;
 const POWER_POLE_MODEL_SCALE = POWER_POLE_HEIGHT_AGL_METERS / POWER_POLE_MODEL_HEIGHT_METERS;
-const CONDUCTOR_HEIGHT_METERS = 9.5;
+const CONDUCTOR_HEIGHT_METERS = POWER_POLE_HEIGHT_AGL_METERS - 0.6;
 const CONDUCTOR_OFFSETS_METERS = [-1.5, 1.5];
 const SELECTION_SOURCE_ID = "digital-twin-demo-selection-source";
 const SELECTION_HALO_LAYER_ID = "digital-twin-demo-selection-halo";
