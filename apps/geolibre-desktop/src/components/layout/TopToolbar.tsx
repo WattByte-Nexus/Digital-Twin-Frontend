@@ -10,6 +10,7 @@ import {
   closeVectorLayerPanel,
   openFlatGeobufAddVectorLayerPanel,
   openDuckDBLayerPanel,
+  openEarthEnginePanel,
   openLidarLayerPanel,
   openPlanetaryComputerPanel,
   openPMTilesLayerPanel,
@@ -1174,14 +1175,7 @@ export function TopToolbar({
       {isMenuVisible(uiProfile, "addData") && (
         <AddDataMenu
           chrome={chrome}
-          addLayer={addLayer}
-          osmPbfBusy={osmPbf.busy}
-          onSetAddDataKind={setAddDataKind}
-          onAddGltfModel={() => {
-            setAddDataDeckVizKind("scenegraph");
-            setAddDataKind("deckgl-viz");
-          }}
-          onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
+          onOpenEarthEngine={() => openEarthEnginePanel(appApi)}
         />
       )}
       {isMenuVisible(uiProfile, "processing") && (
