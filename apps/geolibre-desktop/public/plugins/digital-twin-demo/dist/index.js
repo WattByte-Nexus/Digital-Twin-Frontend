@@ -1595,8 +1595,8 @@ class AssetMapController {
           id: POWER_LINE_CONDUCTOR_LAYER_ID,
           data: network.conductors,
           getPath: (conductor) => conductor.path,
-          getColor: [15, 15, 15, Math.round(255 * opacity)],
-          getWidth: 2,
+          getColor: [25, 158, 214, Math.round(255 * opacity)],
+          getWidth: 3,
           widthUnits: "pixels",
           widthMinPixels: 1,
           visible,
@@ -1828,7 +1828,8 @@ class AssetMapController {
       map.setPaintProperty(POWER_LINE_LAYER_ID, "line-opacity", 0.9 * this.layerState.opacity);
     }
     if (map.getLayer(TREE_LAYER_ID)) {
-      map.setPaintProperty(TREE_LAYER_ID, "circle-opacity", 0.9 * this.layerState.opacity);
+      map.setPaintProperty(TREE_LAYER_ID, "circle-radius", 3);
+      map.setPaintProperty(TREE_LAYER_ID, "circle-opacity", 0.72 * this.layerState.opacity);
       map.setPaintProperty(
         TREE_LAYER_ID,
         "circle-stroke-opacity",

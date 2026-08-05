@@ -1,0 +1,1031 @@
+.dt-settings-view {
+  --dt-settings-text: var(--dt-nexus-text, #0b0c0b);
+  --dt-settings-muted: var(--dt-nexus-muted, #686d68);
+  --dt-settings-border: var(--dt-nexus-border, rgb(216 219 215 / 82%));
+  --dt-settings-stroke: var(--dt-nexus-stroke, rgb(255 255 255 / 78%));
+  --dt-settings-glass: var(--dt-nexus-glass, rgb(232 245 255 / 62%));
+  --dt-settings-glass-strong: var(
+    --dt-nexus-glass-strong,
+    rgb(242 247 255 / 76%)
+  );
+  --dt-settings-shadow: var(
+    --dt-nexus-shadow,
+    0 14px 34px -20px rgb(31 46 77 / 34%)
+  );
+  --dt-settings-high: #e63d23;
+  --dt-settings-medium: #f59b18;
+  --dt-settings-low: #3fa374;
+  --dt-settings-accent: #0c7f8a;
+
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns:
+    clamp(216px, var(--dt-settings-nav-width), 360px)
+    minmax(440px, 1fr)
+    clamp(320px, var(--dt-settings-help-width), 520px);
+  grid-template-rows: 82px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--dt-settings-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.dt-settings-view *,
+.dt-settings-view *::before,
+.dt-settings-view *::after {
+  box-sizing: border-box;
+}
+
+.dt-settings-view .dt-settings-glass-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--dt-settings-stroke);
+  background: linear-gradient(145deg, rgb(255 255 255 / 12%), transparent 42%),
+    var(--dt-settings-glass-strong);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 24%), var(--dt-settings-shadow);
+  -webkit-backdrop-filter: blur(18px) saturate(138%);
+  backdrop-filter: blur(18px) saturate(138%);
+}
+
+.dt-settings-view .dt-settings-page-header {
+  z-index: 2;
+  grid-column: 1 / 3;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 24px 0 27px;
+  overflow: hidden;
+}
+
+.dt-settings-view .dt-settings-page-header::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(100deg, rgb(255 255 255 / 16%), transparent 58%);
+  content: "";
+  pointer-events: none;
+}
+
+.dt-settings-view .dt-settings-page-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.dt-settings-view .dt-settings-page-header p {
+  margin: 5px 0 0;
+  color: var(--dt-settings-muted);
+  font-size: 12px;
+}
+
+.dt-settings-view .dt-settings-page-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.dt-settings-view .dt-settings-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  color: var(--dt-settings-muted);
+  border: 1px solid var(--dt-settings-stroke);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 15%);
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.dt-settings-view .dt-settings-real-settings-slot {
+  display: flex;
+  align-items: center;
+}
+
+.dt-settings-view .dt-settings-navigation {
+  z-index: 1;
+  grid-column: 1;
+  grid-row: 2;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 22px 7px 28px;
+  scrollbar-color: rgb(104 109 104 / 28%) transparent;
+  scrollbar-width: thin;
+}
+
+.dt-settings-view .dt-settings-nav-group {
+  margin: 0 0 33px;
+}
+
+.dt-settings-view .dt-settings-nav-group:last-child {
+  margin-bottom: 0;
+}
+
+.dt-settings-view .dt-settings-nav-group h2 {
+  margin: 0 16px 9px;
+  color: var(--dt-settings-muted);
+  font-size: 10px;
+  font-weight: 560;
+  letter-spacing: 0.045em;
+  line-height: 18px;
+  text-transform: uppercase;
+}
+
+.dt-settings-view .dt-settings-nav-items {
+  display: grid;
+}
+
+.dt-settings-view .dt-settings-nav-item {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  height: 42px;
+  align-items: center;
+  padding: 0 16px;
+  overflow: hidden;
+  border-radius: 5px;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dt-settings-view .dt-settings-nav-item[data-current="true"] {
+  padding-inline-start: 20px;
+  background: linear-gradient(90deg, rgb(255 255 255 / 20%), transparent),
+    var(--dt-settings-glass);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%);
+  font-weight: 640;
+}
+
+.dt-settings-view .dt-settings-nav-item[data-current="true"]::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 1px;
+  background: var(--dt-settings-text);
+  content: "";
+}
+
+.dt-settings-view .dt-settings-form {
+  z-index: 1;
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 79px;
+  overflow: hidden;
+}
+
+.dt-settings-view .dt-settings-form-scroll {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: rgb(104 109 104 / 28%) transparent;
+  scrollbar-width: thin;
+}
+
+.dt-settings-view .dt-settings-form-intro {
+  display: flex;
+  min-height: 100px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 38px 11px 34px;
+  border-bottom: 1px solid var(--dt-settings-border);
+}
+
+.dt-settings-view .dt-settings-form-intro h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.dt-settings-view .dt-settings-form-intro p {
+  margin: 4px 0 7px;
+  color: var(--dt-settings-muted);
+  font-size: 11px;
+}
+
+.dt-settings-view .dt-settings-enabled-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.dt-settings-view .dt-settings-enabled-status i,
+.dt-settings-view .dt-settings-change-status i,
+.dt-settings-view .dt-settings-severity-legend i,
+.dt-settings-view .dt-settings-live-strip i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--dt-settings-low);
+}
+
+.dt-settings-view .dt-settings-enabled-status[data-enabled="false"] i {
+  background: var(--dt-settings-muted);
+}
+
+.dt-settings-view .dt-settings-toggle {
+  position: relative;
+  display: inline-flex;
+  width: 42px;
+  height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dt-settings-border);
+  box-shadow: inset 0 1px 2px rgb(31 46 77 / 10%);
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.dt-settings-view .dt-settings-toggle[data-checked="true"] {
+  background: var(--dt-settings-low);
+}
+
+.dt-settings-view .dt-settings-toggle > span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: hsl(var(--background, 0 0% 100%));
+  box-shadow: 0 1px 3px rgb(31 46 77 / 25%);
+  transform: translateX(0);
+  transition: transform 140ms ease;
+}
+
+.dt-settings-view .dt-settings-toggle[data-checked="true"] > span {
+  transform: translateX(20px);
+}
+
+.dt-settings-view .dt-settings-form-section {
+  padding: 12px 34px 11px;
+  border-bottom: 1px solid var(--dt-settings-border);
+}
+
+.dt-settings-view .dt-settings-section-heading {
+  margin-bottom: 6px;
+}
+
+.dt-settings-view .dt-settings-section-heading h3,
+.dt-settings-view .dt-settings-form-split h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 670;
+  line-height: 18px;
+}
+
+.dt-settings-view .dt-settings-section-heading p {
+  margin: 0;
+  color: var(--dt-settings-muted);
+  font-size: 10px;
+  line-height: 18px;
+}
+
+.dt-settings-view .dt-settings-field-row,
+.dt-settings-view .dt-settings-toggle-row,
+.dt-settings-view .dt-settings-inline-select-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 43%);
+  min-height: 32px;
+  align-items: center;
+  column-gap: 20px;
+  font-size: 10.5px;
+}
+
+.dt-settings-view .dt-settings-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.dt-settings-view .dt-settings-toggle-row > span {
+  min-width: 0;
+}
+
+.dt-settings-view .dt-settings-select {
+  width: 100%;
+}
+
+.dt-settings-view .dt-settings-select select {
+  width: 100%;
+  height: 32px;
+  min-height: 32px;
+  padding-block: 0;
+  padding-inline: 10px 30px;
+  color: var(--dt-settings-text);
+  border: 1px solid var(--dt-settings-stroke);
+  border-radius: 6px;
+  outline: none;
+  background: linear-gradient(145deg, rgb(255 255 255 / 14%), transparent),
+    var(--dt-settings-glass);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 24%),
+    0 4px 12px -10px rgb(31 46 77 / 35%);
+  font: inherit;
+  font-size: 10.5px;
+}
+
+.dt-settings-view .dt-settings-select svg {
+  inset-inline-end: 9px;
+  width: 13px;
+  height: 13px;
+  color: var(--dt-settings-muted);
+  opacity: 0.8;
+}
+
+.dt-settings-view .dt-settings-segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 30px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--dt-settings-stroke);
+  border-radius: 5px;
+  background: var(--dt-settings-glass);
+}
+
+.dt-settings-view .dt-settings-segmented button {
+  min-width: 0;
+  padding: 0 12px;
+  color: var(--dt-settings-text);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.dt-settings-view .dt-settings-segmented button[data-selected="true"] {
+  color: hsl(var(--background, 0 0% 100%));
+  border-radius: 4px;
+  background: var(--dt-settings-text);
+  box-shadow: 0 5px 14px -8px rgb(11 12 11 / 70%);
+}
+
+.dt-settings-view .dt-settings-form-section + .dt-settings-form-section {
+  padding-top: 9px;
+  padding-bottom: 13px;
+}
+
+.dt-settings-view .dt-settings-routing-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.dt-settings-view .dt-settings-routing-table {
+  width: 100%;
+  min-width: 610px;
+  table-layout: fixed;
+  border-spacing: 0 2px;
+  border-collapse: separate;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.dt-settings-view .dt-settings-routing-table .dt-settings-severity-column {
+  width: 12%;
+}
+
+.dt-settings-view .dt-settings-routing-table .dt-settings-channel-column {
+  width: 8.5%;
+}
+
+.dt-settings-view .dt-settings-routing-table .dt-settings-escalation-column {
+  width: 18%;
+}
+
+.dt-settings-view .dt-settings-routing-table thead th {
+  height: 22px;
+  padding: 0 6px;
+  color: var(--dt-settings-muted);
+  font-size: 9.5px;
+  font-weight: 500;
+  text-align: start;
+}
+
+.dt-settings-view .dt-settings-routing-table thead th:not(:first-child) {
+  text-align: center;
+}
+
+.dt-settings-view .dt-settings-routing-table tbody tr {
+  background: hsl(var(--card, 0 0% 100% / 46%));
+  box-shadow: inset 0 0 0 1px var(--dt-settings-border);
+}
+
+.dt-settings-view .dt-settings-routing-table tbody tr[data-severity="high"] {
+  background: linear-gradient(90deg, rgb(230 61 35 / 7%), transparent),
+    hsl(var(--card, 0 0% 100% / 43%));
+  box-shadow: inset 0 0 0 1px rgb(230 61 35 / 20%);
+}
+
+.dt-settings-view .dt-settings-routing-table tbody th,
+.dt-settings-view .dt-settings-routing-table tbody td {
+  height: 34px;
+  padding: 0 6px;
+  border: 0;
+}
+
+.dt-settings-view .dt-settings-routing-table tbody th {
+  border-radius: 4px 0 0 4px;
+  font-weight: 600;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.dt-settings-view .dt-settings-routing-table tbody td {
+  text-align: center;
+}
+
+.dt-settings-view .dt-settings-routing-table tbody td:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.dt-settings-view .dt-settings-routing-table tbody th i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-inline-end: 9px;
+  border-radius: 999px;
+  background: var(--dt-settings-low);
+  vertical-align: -1px;
+}
+
+.dt-settings-view
+  .dt-settings-routing-table
+  tbody
+  tr[data-severity="high"]
+  th
+  i {
+  background: var(--dt-settings-high);
+}
+
+.dt-settings-view
+  .dt-settings-routing-table
+  tbody
+  tr[data-severity="medium"]
+  th
+  i {
+  background: var(--dt-settings-medium);
+}
+
+.dt-settings-view .dt-settings-routing-table .dt-settings-select select {
+  height: 30px;
+  min-height: 30px;
+  padding-inline-start: 8px;
+  font-size: 9.5px;
+}
+
+.dt-settings-view .dt-settings-channel-checkbox {
+  position: relative;
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  cursor: pointer;
+}
+
+.dt-settings-view .dt-settings-channel-checkbox input {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  appearance: none;
+  border: 1px solid var(--dt-settings-text);
+  border-radius: 1px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dt-settings-view .dt-settings-channel-checkbox input:checked {
+  background: var(--dt-settings-text);
+}
+
+.dt-settings-view .dt-settings-channel-checkbox input:checked::after {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  width: 4px;
+  height: 6px;
+  border: solid hsl(var(--background, 0 0% 100%));
+  border-width: 0 1.5px 1.5px 0;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.dt-settings-view .dt-settings-form-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 194px;
+  padding: 10px 34px 12px;
+}
+
+.dt-settings-view .dt-settings-form-split > section {
+  min-width: 0;
+  padding-inline-end: 28px;
+}
+
+.dt-settings-view .dt-settings-form-split > section + section {
+  padding-inline: 32px 0;
+  border-inline-start: 1px solid var(--dt-settings-border);
+}
+
+.dt-settings-view .dt-settings-form-split h3 {
+  margin-bottom: 7px;
+}
+
+.dt-settings-view .dt-settings-form-split .dt-settings-toggle-row {
+  min-height: 32px;
+  font-size: 10px;
+}
+
+.dt-settings-view .dt-settings-form-split .dt-settings-toggle {
+  width: 38px;
+  height: 21px;
+}
+
+.dt-settings-view .dt-settings-form-split .dt-settings-toggle > span {
+  width: 17px;
+  height: 17px;
+}
+
+.dt-settings-view
+  .dt-settings-form-split
+  .dt-settings-toggle[data-checked="true"]
+  > span {
+  transform: translateX(17px);
+}
+
+.dt-settings-view .dt-settings-inline-select-row {
+  grid-template-columns: minmax(112px, 1fr) minmax(160px, 58%);
+  font-size: 10px;
+}
+
+.dt-settings-view .dt-settings-inline-select-row--filter {
+  grid-template-columns: minmax(90px, 1fr) minmax(134px, 53%);
+}
+
+.dt-settings-view .dt-settings-warning {
+  margin: 10px 0 0;
+  font-size: 9.5px;
+}
+
+.dt-settings-view .dt-settings-action-bar {
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 38px;
+  border-top: 1px solid var(--dt-settings-stroke);
+  background: linear-gradient(100deg, rgb(255 255 255 / 13%), transparent),
+    var(--dt-settings-glass);
+  box-shadow: 0 -8px 22px -17px rgb(31 46 77 / 36%);
+  -webkit-backdrop-filter: blur(14px) saturate(132%);
+  backdrop-filter: blur(14px) saturate(132%);
+}
+
+.dt-settings-view .dt-settings-change-status {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.dt-settings-view .dt-settings-change-status i {
+  width: 10px;
+  height: 10px;
+  background: var(--dt-settings-low);
+}
+
+.dt-settings-view .dt-settings-change-status[data-dirty="true"] i {
+  background: var(--dt-settings-medium);
+}
+
+.dt-settings-view .dt-settings-action-bar > div {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 14px;
+}
+
+.dt-settings-view .dt-settings-button {
+  min-width: 120px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+
+.dt-settings-view .dt-settings-button--primary {
+  min-width: 142px;
+  color: hsl(var(--background, 0 0% 100%));
+  border: 1px solid rgb(11 12 11 / 88%);
+  background: var(--dt-settings-text);
+  box-shadow: 0 8px 18px -12px rgb(11 12 11 / 72%);
+}
+
+.dt-settings-view .dt-settings-button--secondary {
+  color: var(--dt-settings-text);
+  border: 1px solid var(--dt-settings-stroke);
+  background: var(--dt-settings-glass);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%);
+}
+
+.dt-settings-view .dt-settings-button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.dt-settings-view .dt-settings-button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.dt-settings-view .dt-settings-help {
+  z-index: 1;
+  grid-column: 3;
+  grid-row: 1 / 3;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 53px;
+  overflow: hidden;
+}
+
+.dt-settings-view .dt-settings-help-scroll {
+  min-height: 0;
+  padding: 25px 28px 28px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: rgb(104 109 104 / 28%) transparent;
+  scrollbar-width: thin;
+}
+
+.dt-settings-view .dt-settings-help h2,
+.dt-settings-view .dt-settings-help h3,
+.dt-settings-view .dt-settings-help p {
+  margin-top: 0;
+}
+
+.dt-settings-view .dt-settings-help h2 {
+  margin-bottom: 11px;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.dt-settings-view .dt-settings-help-intro > p {
+  max-width: 330px;
+  margin-bottom: 0;
+  color: var(--dt-settings-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.dt-settings-view .dt-settings-severity-legend {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  margin-top: 28px;
+  font-size: 10px;
+}
+
+.dt-settings-view .dt-settings-severity-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.dt-settings-view .dt-settings-severity-legend i {
+  width: 7px;
+  height: 7px;
+}
+
+.dt-settings-view .dt-settings-severity-legend [data-severity="high"] i {
+  background: var(--dt-settings-high);
+}
+
+.dt-settings-view .dt-settings-severity-legend [data-severity="medium"] i {
+  background: var(--dt-settings-medium);
+}
+
+.dt-settings-view .dt-settings-help-preview {
+  margin-top: 33px;
+}
+
+.dt-settings-view .dt-settings-help h3 {
+  margin-bottom: 14px;
+  font-size: 12px;
+  font-weight: 670;
+}
+
+.dt-settings-view .dt-settings-alert-preview {
+  position: relative;
+  height: 100px;
+  padding: 16px 16px 13px 18px;
+  overflow: hidden;
+  color: var(--dt-settings-text);
+  border: 1px solid var(--dt-settings-border);
+  border-radius: 8px;
+  background: hsl(var(--card, 0 0% 100% / 70%));
+  box-shadow: 0 8px 20px -18px rgb(31 46 77 / 48%);
+}
+
+.dt-settings-view .dt-settings-alert-preview::before {
+  position: absolute;
+  inset-block: -1px;
+  inset-inline-start: -1px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--dt-settings-high);
+  content: "";
+}
+
+.dt-settings-view .dt-settings-alert-preview strong {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.dt-settings-view .dt-settings-alert-preview p {
+  margin-bottom: 9px;
+  color: var(--dt-settings-muted);
+  font-size: 10.5px;
+}
+
+.dt-settings-view .dt-settings-alert-preview div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dt-settings-view .dt-settings-alert-preview div span {
+  color: var(--dt-settings-high);
+  font-size: 10.5px;
+  font-weight: 580;
+}
+
+.dt-settings-view .dt-settings-alert-preview time {
+  color: var(--dt-settings-muted);
+  font-size: 9.5px;
+}
+
+.dt-settings-view .dt-settings-preview-route,
+.dt-settings-view .dt-settings-preview-escalation {
+  margin-bottom: 0;
+  font-size: 10.5px;
+}
+
+.dt-settings-view .dt-settings-preview-route {
+  margin-top: 17px;
+}
+
+.dt-settings-view .dt-settings-preview-escalation {
+  margin-top: 13px;
+}
+
+.dt-settings-view .dt-settings-help-audit {
+  margin-top: 25px;
+  padding-top: 22px;
+  border-top: 1px solid var(--dt-settings-border);
+}
+
+.dt-settings-view .dt-settings-help-audit h3 {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.dt-settings-view .dt-settings-help-audit > p {
+  max-width: 310px;
+  margin-bottom: 13px;
+  color: var(--dt-settings-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.dt-settings-view .dt-settings-help-audit .dt-settings-help-hint {
+  color: var(--dt-settings-accent);
+  font-weight: 550;
+}
+
+.dt-settings-view .dt-settings-text-action {
+  padding: 0;
+  color: var(--dt-settings-accent);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dt-settings-view .dt-settings-help-docs {
+  margin-top: 69px;
+  padding-top: 22px;
+  color: var(--dt-settings-accent);
+  border-top: 1px solid var(--dt-settings-border);
+  font-size: 11px;
+  font-weight: 590;
+}
+
+.dt-settings-view .dt-settings-live-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 24px;
+  border-top: 1px solid var(--dt-settings-stroke);
+  background: var(--dt-settings-glass);
+  font-size: 10.5px;
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  backdrop-filter: blur(12px) saturate(130%);
+}
+
+.dt-settings-view .dt-settings-live-strip > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.dt-settings-view .dt-settings-live-strip i {
+  width: 7px;
+  height: 7px;
+  background: var(--dt-settings-high);
+}
+
+.dt-settings-view .dt-settings-live-strip strong {
+  color: var(--dt-settings-high);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dt-settings-view .dt-settings-resizer {
+  position: absolute;
+  z-index: 8;
+  width: 10px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.dt-settings-view .dt-settings-resizer--inline-start {
+  inset-block: 82px 0;
+  inset-inline-start: calc(var(--dt-settings-nav-width) - 5px);
+}
+
+.dt-settings-view .dt-settings-resizer--inline-end {
+  inset-block: 0;
+  inset-inline-end: calc(var(--dt-settings-help-width) - 5px);
+}
+
+.dt-settings-view .dt-settings-resizer::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 4px;
+  width: 2px;
+  background: transparent;
+  content: "";
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.dt-settings-view .dt-settings-resizer:hover::before,
+.dt-settings-view .dt-settings-resizer:focus-visible::before {
+  background: rgb(12 127 138 / 62%);
+  box-shadow: 0 0 0 3px rgb(12 127 138 / 10%);
+}
+
+.dt-settings-view .dt-settings-toggle:focus-visible,
+.dt-settings-view .dt-settings-segmented button:focus-visible,
+.dt-settings-view .dt-settings-channel-checkbox input:focus-visible,
+.dt-settings-view .dt-settings-text-action:focus-visible,
+.dt-settings-view .dt-settings-button:focus-visible,
+.dt-settings-view .dt-settings-select select:focus-visible {
+  outline: 2px solid rgb(12 127 138 / 78%);
+  outline-offset: 2px;
+}
+
+.dt-settings-view .dt-settings-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 1180px) {
+  .dt-settings-view {
+    grid-template-columns: clamp(216px, var(--dt-settings-nav-width), 320px) minmax(
+        0,
+        1fr
+      );
+  }
+
+  .dt-settings-view .dt-settings-help,
+  .dt-settings-view .dt-settings-resizer--inline-end {
+    display: none;
+  }
+
+  .dt-settings-view .dt-settings-page-header {
+    grid-column: 1 / 3;
+  }
+}
+
+@media (max-width: 820px) {
+  .dt-settings-view {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dt-settings-view .dt-settings-navigation,
+  .dt-settings-view .dt-settings-resizer--inline-start {
+    display: none;
+  }
+
+  .dt-settings-view .dt-settings-page-header,
+  .dt-settings-view .dt-settings-form {
+    grid-column: 1;
+  }
+
+  .dt-settings-view .dt-settings-form-intro,
+  .dt-settings-view .dt-settings-form-section,
+  .dt-settings-view .dt-settings-form-split {
+    padding-inline: 24px;
+  }
+}
+
+@media (max-width: 680px) {
+  .dt-settings-view .dt-settings-page-header {
+    padding-inline: 20px;
+  }
+
+  .dt-settings-view .dt-settings-page-header p,
+  .dt-settings-view .dt-settings-preview-badge {
+    display: none;
+  }
+
+  .dt-settings-view .dt-settings-form-split {
+    grid-template-columns: 1fr;
+  }
+
+  .dt-settings-view .dt-settings-form-split > section {
+    padding-inline: 0;
+  }
+
+  .dt-settings-view .dt-settings-form-split > section + section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--dt-settings-border);
+    border-inline-start: 0;
+  }
+
+  .dt-settings-view .dt-settings-action-bar {
+    padding-inline: 22px;
+  }
+
+  .dt-settings-view .dt-settings-change-status {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-settings-view .dt-settings-toggle,
+  .dt-settings-view .dt-settings-toggle > span,
+  .dt-settings-view .dt-settings-button,
+  .dt-settings-view .dt-settings-resizer::before {
+    transition: none;
+  }
+}

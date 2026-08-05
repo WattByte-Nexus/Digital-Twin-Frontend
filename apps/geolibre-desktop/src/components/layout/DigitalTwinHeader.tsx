@@ -16,30 +16,30 @@ import {
 } from "@geolibre/ui";
 import {
   Activity,
+  Archive,
+  Bell,
   CircleHelp,
+  CloudSun,
   FlaskConical,
   History,
   MapPin,
   Moon,
+  Play,
   Radio,
   Search,
   Settings,
   Sun,
   UserRound,
   Wrench,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState, type RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
 import { usePluginRegistry } from "../../hooks/usePlugins";
-import {
-  type Command,
-  formatShortcut,
-  isMacPlatform,
-  PALETTE_SHORTCUT,
-} from "../../lib/commands";
+import { type Command } from "../../lib/commands";
 import { MENU_MANAGED_PLUGIN_IDS } from "../../lib/ui-profile";
 import type {
   DigitalTwinAccessContext,
@@ -48,17 +48,18 @@ import type {
 import { CommandPalette } from "../command/CommandPalette";
 import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
-import { SettingsDialog, openSettingsSection } from "./SettingsDialog";
+import { SettingsDialog } from "./SettingsDialog";
 
 interface DigitalTwinHeaderProps {
   access: DigitalTwinAccessContext;
   activeView: DigitalTwinView;
+  settingsActive?: boolean;
   activeRegionId: string | null;
   compact?: boolean;
-  diagnosticsErrorCount: number;
   mapControllerRef: RefObject<MapController | null>;
   themeMode: ThemeMode;
   onNavigate: (view: DigitalTwinView) => void;
+  onOpenSettingsView?: () => void;
   onOpenAdministration?: () => void;
   onOpenDiagnostics: () => void;
   onOpenExpertWorkspace?: () => void;
@@ -72,6 +73,17 @@ interface NavigationItem {
   label: string;
 }
 
+function operatorInitials(displayName: string): string {
+  return (
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "WB"
+  );
+}
+
 /**
  * The focused, first-party header for the Digital Twin product mode.
  *
@@ -82,12 +94,13 @@ interface NavigationItem {
 export function DigitalTwinHeader({
   access,
   activeView,
+  settingsActive = false,
   activeRegionId,
   compact = false,
-  diagnosticsErrorCount,
   mapControllerRef,
   themeMode,
   onNavigate,
+  onOpenSettingsView,
   onOpenAdministration,
   onOpenDiagnostics,
   onOpenExpertWorkspace,
@@ -99,100 +112,111 @@ export function DigitalTwinHeader({
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const isMac = useMemo(() => isMacPlatform(), []);
+  const [now, setNow] = useState(() => new Date());
   const canConfigureWorkspace =
     access.capabilities.includes("expert-gis") ||
     access.capabilities.includes("administration");
 
-  const activeRegion = access.regions.find((region) => region.id === activeRegionId);
-  const regionLabel = activeRegion?.name ?? t("digitalTwin.header.regionUnassigned");
+  const activeRegion = access.regions.find(
+    (region) => region.id === activeRegionId
+  );
+  const regionLabel =
+    activeRegion?.name ?? t("digitalTwin.header.regionUnassigned");
 
   const navigation = useMemo<NavigationItem[]>(
     () => [
       { id: "live", icon: Radio, label: t("digitalTwin.nav.live") },
-      { id: "scenarios", icon: FlaskConical, label: t("digitalTwin.nav.scenarios") },
+      {
+        id: "scenarios",
+        icon: FlaskConical,
+        label: t("digitalTwin.nav.scenarios"),
+      },
       { id: "runs", icon: History, label: t("digitalTwin.nav.runs") },
     ],
-    [t],
+    [t]
   );
+  const activeNavigationLabel = settingsActive
+    ? t("settings.title")
+    : navigation.find((item) => item.id === activeView)?.label ?? activeView;
+  const initials = operatorInitials(access.displayName);
 
   const profilePlugins = useMemo(
     () =>
       plugins
         .filter((plugin) => !MENU_MANAGED_PLUGIN_IDS.has(plugin.id))
         .map((plugin) => ({ id: plugin.id, name: plugin.name })),
-    [plugins],
+    [plugins]
   );
 
-  const commands = useMemo<Command[]>(
-    () => {
-      const productCommands: Command[] = navigation.map(({ id, icon, label }) => ({
+  const commands = useMemo<Command[]>(() => {
+    const productCommands: Command[] = navigation.map(
+      ({ id, icon, label }) => ({
         id: `digital-twin.navigate.${id}`,
         title: label,
         group: t("digitalTwin.commands.navigationGroup"),
         icon,
         run: () => onNavigate(id),
-      }));
+      })
+    );
+    productCommands.push({
+      id: "digital-twin.diagnostics",
+      title: t("digitalTwin.header.openDiagnostics"),
+      group: t("digitalTwin.commands.systemGroup"),
+      icon: Activity,
+      run: onOpenDiagnostics,
+    });
+    if (canConfigureWorkspace) {
       productCommands.push({
-        id: "digital-twin.diagnostics",
-        title: t("digitalTwin.header.openDiagnostics"),
+        id: "digital-twin.settings",
+        title: t("settings.title"),
         group: t("digitalTwin.commands.systemGroup"),
-        icon: Activity,
-        run: onOpenDiagnostics,
+        keywords: "preferences configuration",
+        icon: Settings,
+        run: () => onOpenSettingsView?.(),
       });
-      if (canConfigureWorkspace) {
-        productCommands.push({
-          id: "digital-twin.settings",
-          title: t("settings.title"),
-          group: t("digitalTwin.commands.systemGroup"),
-          keywords: "preferences configuration",
-          icon: Settings,
-          run: () => openSettingsSection("interface"),
-        });
-      }
+    }
+    productCommands.push({
+      id: "digital-twin.toggle-theme",
+      title:
+        themeMode === "dark"
+          ? t("toolbar.command.switchToLight")
+          : t("toolbar.command.switchToDark"),
+      group: t("digitalTwin.commands.systemGroup"),
+      icon: themeMode === "dark" ? Sun : Moon,
+      run: onToggleThemeMode,
+    });
+    if (onOpenExpertWorkspace) {
       productCommands.push({
-        id: "digital-twin.toggle-theme",
-        title:
-          themeMode === "dark"
-            ? t("toolbar.command.switchToLight")
-            : t("toolbar.command.switchToDark"),
-        group: t("digitalTwin.commands.systemGroup"),
-        icon: themeMode === "dark" ? Sun : Moon,
-        run: onToggleThemeMode,
+        id: "digital-twin.open-expert-workspace",
+        title: t("digitalTwin.header.openExpertWorkspace"),
+        group: t("digitalTwin.commands.workspaceGroup"),
+        keywords: "GeoLibre advanced workspace GIS",
+        icon: Wrench,
+        run: onOpenExpertWorkspace,
       });
-      if (onOpenExpertWorkspace) {
-        productCommands.push({
-          id: "digital-twin.open-expert-workspace",
-          title: t("digitalTwin.header.openExpertWorkspace"),
-          group: t("digitalTwin.commands.workspaceGroup"),
-          keywords: "GeoLibre advanced workspace GIS",
-          icon: Wrench,
-          run: onOpenExpertWorkspace,
-        });
-      }
-      if (onOpenAdministration) {
-        productCommands.push({
-          id: "digital-twin.open-administration",
-          title: t("digitalTwin.header.openAdministration"),
-          group: t("digitalTwin.commands.systemGroup"),
-          icon: Settings,
-          run: onOpenAdministration,
-        });
-      }
-      return productCommands;
-    },
-    [
-      canConfigureWorkspace,
-      navigation,
-      onNavigate,
-      onOpenAdministration,
-      onOpenDiagnostics,
-      onOpenExpertWorkspace,
-      onToggleThemeMode,
-      t,
-      themeMode,
-    ],
-  );
+    }
+    if (onOpenAdministration) {
+      productCommands.push({
+        id: "digital-twin.open-administration",
+        title: t("digitalTwin.header.openAdministration"),
+        group: t("digitalTwin.commands.systemGroup"),
+        icon: Settings,
+        run: onOpenAdministration,
+      });
+    }
+    return productCommands;
+  }, [
+    canConfigureWorkspace,
+    navigation,
+    onNavigate,
+    onOpenAdministration,
+    onOpenDiagnostics,
+    onOpenExpertWorkspace,
+    onOpenSettingsView,
+    onToggleThemeMode,
+    t,
+    themeMode,
+  ]);
 
   useGlobalShortcuts({
     commands,
@@ -205,231 +229,276 @@ export function DigitalTwinHeader({
       ? t("toolbar.command.switchToLight")
       : t("toolbar.command.switchToDark");
 
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("geolibre:digital-twin-view", {
+        detail: { view: activeView },
+      })
+    );
+  }, [activeView]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const currentTimeLabel = new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(now);
+
   return (
     <TooltipProvider delayDuration={400}>
-      <header
-        className={cn(
-          "flex h-12 min-w-0 shrink-0 items-center gap-1 border-b bg-card px-2",
-          compact && "h-11 px-1.5",
-        )}
-        data-digital-twin-header=""
-      >
-        <div className="flex min-w-0 shrink-0 items-center pe-1 sm:pe-2">
-          <div className="hidden min-w-0 items-baseline gap-2 sm:flex">
-            <span className="hidden text-sm font-semibold text-primary lg:inline">GeoLibre</span>
-            <span aria-hidden="true" className="hidden h-4 w-px bg-border lg:block" />
-            <span className="truncate text-sm font-semibold text-foreground">
-              {t("digitalTwin.productName")}
-            </span>
-          </div>
+      <aside className="dt-nexus-rail" aria-label={t("digitalTwin.nav.label")}>
+        <div className="dt-nexus-brand" aria-label="WattByte Nexus">
+          <Zap aria-hidden="true" />
+          <span>WattByte</span>
         </div>
 
-        <nav
-          aria-label={t("digitalTwin.nav.label")}
-          className="flex min-w-0 items-center gap-0.5"
-        >
+        <nav className="dt-nexus-primary-nav">
           {navigation.map(({ id, icon: Icon, label }) => {
-            const selected = activeView === id;
+            const selected = !settingsActive && activeView === id;
             return (
               <Tooltip key={id}>
                 <TooltipTrigger asChild>
                   <Button
                     aria-current={selected ? "page" : undefined}
                     aria-label={label}
-                    className={cn(
-                      "h-9 gap-1.5 px-2.5 text-muted-foreground",
-                      selected && "bg-accent text-accent-foreground shadow-sm",
-                    )}
+                    className="dt-nexus-rail-item"
+                    data-active={selected ? "true" : "false"}
                     data-digital-twin-view={id}
                     onClick={() => onNavigate(id)}
                     size="sm"
                     variant="ghost"
                   >
-                    <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
-                    <span className="hidden md:inline">{label}</span>
+                    <Icon aria-hidden="true" />
+                    <span>{label}</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="md:hidden">{label}</TooltipContent>
+                <TooltipContent side="right">{label}</TooltipContent>
               </Tooltip>
             );
           })}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label="Assets"
+                className="dt-nexus-rail-item"
+                disabled
+                size="sm"
+                variant="ghost"
+              >
+                <Archive aria-hidden="true" />
+                <span>Assets</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              Assets are not available in this release.
+            </TooltipContent>
+          </Tooltip>
         </nav>
 
-        <div className="ms-auto flex min-w-0 items-center gap-0.5">
-          {access.regions.length > 1 ? (
-            <label className="hidden min-w-0 items-center gap-2 text-xs xl:flex">
-              <MapPin aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="sr-only">{t("digitalTwin.header.region")}</span>
-              <Select
-                aria-label={t("digitalTwin.header.assignedRegion", { region: regionLabel })}
-                className="max-w-56"
-                onChange={(event) => onRegionChange(event.currentTarget.value)}
-                value={activeRegionId ?? ""}
-              >
-                {access.regions.map((region) => (
-                  <option key={region.id} value={region.id}>
-                    {region.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          ) : (
-            <div
-              aria-label={t("digitalTwin.header.assignedRegion", { region: regionLabel })}
-              className="hidden h-8 min-w-0 max-w-56 items-center gap-2 rounded-md border bg-background px-2.5 text-xs xl:flex"
-              title={regionLabel}
-            >
-              <MapPin aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="shrink-0 text-muted-foreground">
-                {t("digitalTwin.header.region")}
-              </span>
-              <span className="truncate font-medium text-foreground">{regionLabel}</span>
-            </div>
-          )}
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label={t("digitalTwin.header.monitoringUnavailable")}
-                className="hidden h-8 gap-2 px-2.5 text-amber-700 hover:text-amber-800 md:inline-flex dark:text-amber-300 dark:hover:text-amber-200"
-                onClick={onOpenDiagnostics}
-                size="sm"
-                variant="ghost"
-              >
-                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-amber-500" />
-                <span className="hidden lg:inline">
-                  {t("digitalTwin.header.monitoringUnavailable")}
-                </span>
-                {diagnosticsErrorCount > 0 ? (
-                  <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
-                    {diagnosticsErrorCount}
-                  </span>
-                ) : null}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t("digitalTwin.header.openDiagnostics")}</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label={t("digitalTwin.header.searchCommands")}
-                className="h-8 gap-2 px-2 lg:px-2.5"
-                onClick={() => setCommandPaletteOpen(true)}
-                size="sm"
-                variant="ghost"
-              >
-                <Search aria-hidden="true" className="h-4 w-4" />
-                <span className="hidden text-xs lg:inline">
-                  {t("digitalTwin.header.searchCommands")}
-                </span>
-                <kbd className="hidden rounded border bg-muted px-1 py-0.5 font-mono text-[9px] text-muted-foreground 2xl:inline">
-                  {formatShortcut(PALETTE_SHORTCUT, isMac)}
-                </kbd>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t("digitalTwin.header.searchCommands")}</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label={t("digitalTwin.header.keyboardHelp")}
-                className="h-8 w-8"
-                onClick={() => setShortcutsOpen(true)}
-                size="icon"
-                variant="ghost"
-              >
-                <CircleHelp aria-hidden="true" className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t("digitalTwin.header.keyboardHelp")}</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label={themeLabel}
-                className="h-8 w-8"
-                onClick={onToggleThemeMode}
-                size="icon"
-                variant="ghost"
-              >
-                {themeMode === "dark" ? (
-                  <Sun aria-hidden="true" className="h-4 w-4" />
-                ) : (
-                  <Moon aria-hidden="true" className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{themeLabel}</TooltipContent>
-          </Tooltip>
-
+        <div className="dt-nexus-rail-footer">
+          <Button
+            aria-label={t("digitalTwin.header.keyboardHelp")}
+            className="dt-nexus-rail-action"
+            onClick={() => setShortcutsOpen(true)}
+            size="sm"
+            variant="ghost"
+          >
+            <CircleHelp aria-hidden="true" />
+            <span>Support</span>
+          </Button>
           {canConfigureWorkspace ? (
-            <SettingsDialog
-              buttonClassName="h-8 shrink-0 gap-2 px-2"
-              buttonSize="sm"
-              iconClassName="h-4 w-4"
-              mapControllerRef={mapControllerRef}
-              onOpenManagePlugins={() => setManagePluginsOpen(true)}
-              profilePlugins={profilePlugins}
-              showLabels
-              themeMode={themeMode}
-              onToggleThemeMode={onToggleThemeMode}
-            />
+            <Button
+              aria-current={settingsActive ? "page" : undefined}
+              aria-label={t("settings.title")}
+              className="dt-nexus-rail-action"
+              data-active={settingsActive ? "true" : "false"}
+              onClick={onOpenSettingsView}
+              size="sm"
+              variant="ghost"
+            >
+              <Settings aria-hidden="true" />
+              <span>{t("settings.title")}</span>
+            </Button>
           ) : null}
+          <span className="dt-nexus-rail-avatar" title={access.displayName}>
+            {initials}
+          </span>
+        </div>
+      </aside>
 
+      <header className="dt-nexus-header" data-digital-twin-header="">
+        <div
+          className={cn(
+            "dt-nexus-header-main",
+            compact && "dt-nexus-header-main--compact"
+          )}
+        >
+          <div className="dt-nexus-breadcrumb" aria-label="Current workspace">
+            <span>{t("digitalTwin.productName")}</span>
+            <span aria-hidden="true">/</span>
+            <span>{settingsActive ? t("settings.title") : regionLabel}</span>
+            <span aria-hidden="true">/</span>
+            <strong>
+              {settingsActive ? "Alert routing" : activeNavigationLabel}
+            </strong>
+          </div>
 
-          <DropdownMenu>
+          <div className="dt-nexus-header-actions">
+            {access.regions.length > 1 ? (
+              <label className="hidden min-w-0 items-center gap-2 text-xs xl:flex">
+                <MapPin
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                />
+                <span className="sr-only">
+                  {t("digitalTwin.header.region")}
+                </span>
+                <Select
+                  aria-label={t("digitalTwin.header.assignedRegion", {
+                    region: regionLabel,
+                  })}
+                  className="max-w-56"
+                  onChange={(event) =>
+                    onRegionChange(event.currentTarget.value)
+                  }
+                  value={activeRegionId ?? ""}
+                >
+                  {access.regions.map((region) => (
+                    <option key={region.id} value={region.id}>
+                      {region.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            ) : null}
+
+            <span className="dt-nexus-status dt-nexus-status--live">
+              <span aria-hidden="true" />
+              Live
+            </span>
+            <time className="dt-nexus-time" dateTime={now.toISOString()}>
+              {currentTimeLabel}
+            </time>
+            <span className="dt-nexus-status">
+              <CloudSun aria-hidden="true" />
+              Weather 6 min
+            </span>
+            <Button
+              aria-label="Open runs"
+              className="dt-nexus-header-stat"
+              onClick={() => onNavigate("runs")}
+              size="sm"
+              variant="ghost"
+            >
+              <Play aria-hidden="true" />
+              <span>Runs 3</span>
+            </Button>
+            <Button
+              aria-label="Open alerts"
+              className="dt-nexus-header-stat"
+              onClick={() => onNavigate("live")}
+              size="sm"
+              variant="ghost"
+            >
+              <Bell aria-hidden="true" />
+              <span>Alerts 7</span>
+            </Button>
+
             <Tooltip>
               <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    aria-label={t("digitalTwin.header.workspaceMenu")}
-                    className="h-8 gap-2 px-2"
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <UserRound aria-hidden="true" className="h-4 w-4" />
-                    <span className="hidden text-xs 2xl:inline">
-                      {access.displayName}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
+                <Button
+                  aria-label={t("digitalTwin.header.searchCommands")}
+                  className="dt-nexus-header-icon"
+                  onClick={() => setCommandPaletteOpen(true)}
+                  size="icon"
+                  variant="ghost"
+                >
+                  <Search aria-hidden="true" className="h-4 w-4" />
+                </Button>
               </TooltipTrigger>
-              <TooltipContent>{t("digitalTwin.header.workspaceMenu")}</TooltipContent>
+              <TooltipContent>
+                {t("digitalTwin.header.searchCommands")}
+              </TooltipContent>
             </Tooltip>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>
-                <span className="block truncate text-sm">{access.displayName}</span>
-                <span className="block truncate text-xs font-normal text-muted-foreground">
-                  {access.organization.name}
-                </span>
-                <span className="block text-xs font-normal text-muted-foreground">
-                  {t("digitalTwin.header.decisionSupportOnly")}
-                </span>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={onOpenDiagnostics}>
-                <Activity aria-hidden="true" className="me-2 h-4 w-4" />
-                {t("digitalTwin.header.openDiagnostics")}
-              </DropdownMenuItem>
-              {onOpenExpertWorkspace ? (
-                <DropdownMenuItem onSelect={onOpenExpertWorkspace}>
-                  <Wrench aria-hidden="true" className="me-2 h-4 w-4" />
-                  {t("digitalTwin.header.openExpertWorkspace")}
-                </DropdownMenuItem>
-              ) : null}
-              {onOpenAdministration ? (
-                <DropdownMenuItem onSelect={onOpenAdministration}>
-                  <Settings aria-hidden="true" className="me-2 h-4 w-4" />
-                  {t("digitalTwin.header.openAdministration")}
-                </DropdownMenuItem>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
 
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label="Notifications"
+                  className="dt-nexus-header-icon"
+                  onClick={() => onNavigate("live")}
+                  size="icon"
+                  variant="ghost"
+                >
+                  <Bell aria-hidden="true" className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Notifications</TooltipContent>
+            </Tooltip>
+
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      aria-label={t("digitalTwin.header.workspaceMenu")}
+                      className="h-8 gap-2 px-2"
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <UserRound aria-hidden="true" className="h-4 w-4" />
+                      <span className="dt-nexus-top-avatar">{initials}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {t("digitalTwin.header.workspaceMenu")}
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>
+                  <span className="block truncate text-sm">
+                    {access.displayName}
+                  </span>
+                  <span className="block truncate text-xs font-normal text-muted-foreground">
+                    {access.organization.name}
+                  </span>
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {t("digitalTwin.header.decisionSupportOnly")}
+                  </span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={onOpenDiagnostics}>
+                  <Activity aria-hidden="true" className="me-2 h-4 w-4" />
+                  {t("digitalTwin.header.openDiagnostics")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onToggleThemeMode}>
+                  {themeMode === "dark" ? (
+                    <Sun aria-hidden="true" className="me-2 h-4 w-4" />
+                  ) : (
+                    <Moon aria-hidden="true" className="me-2 h-4 w-4" />
+                  )}
+                  {themeLabel}
+                </DropdownMenuItem>
+                {onOpenExpertWorkspace ? (
+                  <DropdownMenuItem onSelect={onOpenExpertWorkspace}>
+                    <Wrench aria-hidden="true" className="me-2 h-4 w-4" />
+                    {t("digitalTwin.header.openExpertWorkspace")}
+                  </DropdownMenuItem>
+                ) : null}
+                {onOpenAdministration ? (
+                  <DropdownMenuItem onSelect={onOpenAdministration}>
+                    <Settings aria-hidden="true" className="me-2 h-4 w-4" />
+                    {t("digitalTwin.header.openAdministration")}
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
 
         <CommandPalette
           commands={commands}
@@ -442,11 +511,24 @@ export function DigitalTwinHeader({
           onOpenChange={setShortcutsOpen}
         />
         {canConfigureWorkspace ? (
-          <ManagePluginsDialog
-            mapControllerRef={mapControllerRef}
-            open={managePluginsOpen}
-            onOpenChange={setManagePluginsOpen}
-          />
+          <>
+            <SettingsDialog
+              buttonClassName="dt-settings-dialog-host"
+              buttonSize="sm"
+              iconClassName=""
+              mapControllerRef={mapControllerRef}
+              onOpenManagePlugins={() => setManagePluginsOpen(true)}
+              profilePlugins={profilePlugins}
+              showLabels={false}
+              themeMode={themeMode}
+              onToggleThemeMode={onToggleThemeMode}
+            />
+            <ManagePluginsDialog
+              mapControllerRef={mapControllerRef}
+              open={managePluginsOpen}
+              onOpenChange={setManagePluginsOpen}
+            />
+          </>
         ) : null}
       </header>
     </TooltipProvider>

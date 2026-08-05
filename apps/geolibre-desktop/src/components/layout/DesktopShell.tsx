@@ -1,7 +1,11 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { applyGroupEffects, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
-import { MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
+import {
+  MapCanvas,
+  resolveThemeBasemapStyle,
+  setExternalDeckLayerOrderHandler,
+} from "@geolibre/map";
 import { useTranslation } from "react-i18next";
 import {
   addRasterToMap,
@@ -43,6 +47,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -139,7 +144,9 @@ import { ProjectPluginTrustDialog } from "./ProjectPluginTrustDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
 import { DigitalTwinHeader } from "./DigitalTwinHeader";
+import { openSettingsSection } from "./SettingsDialog";
 import { ExpertWorkspaceHeader } from "./ExpertWorkspaceHeader";
+import "./digital-twin-shell.css";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
@@ -149,6 +156,10 @@ import {
   type DigitalTwinAccessContext,
   type DigitalTwinView,
 } from "../../product-modes/digital-twin/access";
+import {
+  DigitalTwinWorkspace,
+  type DigitalTwinWorkspaceView,
+} from "../../product-modes/digital-twin/ui/DigitalTwinWorkspace";
 
 /**
  * Confirm loading a vector source whose feature count tripped the loader's
@@ -163,6 +174,14 @@ import {
  * roughly where the transient allocation starts to be felt.
  */
 const LARGE_RASTER_SAMPLE_LIMIT = 40_000_000;
+const DIGITAL_TWIN_IMAGERY_BASEMAP = "geolibre://basemap/earth-usgs-imagery";
+const MAP_ONLY_QUERY_VALUES = new Set(["", "true", "1", "yes", "on"]);
+
+function locationUsesMapOnly(location: string): boolean {
+  const params = new URL(location, "https://geolibre.invalid").searchParams;
+  const value = params.get("maponly")?.trim().toLowerCase() ?? "";
+  return params.has("maponly") && MAP_ONLY_QUERY_VALUES.has(value);
+}
 
 function confirmLargeVectorDataset({ name, featureCount }: LargeVectorDataset) {
   return window.confirm(
@@ -497,6 +516,43 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * Moves one stable portal target between product layouts without remounting the
+ * MapCanvas rendered into it. MapLibre and imperative plugins can therefore
+ * keep the same map object while the surrounding Digital Twin / Expert chrome
+ * changes.
+ */
+function PersistentMapHost({
+  compact,
+  contentEl,
+}: {
+  compact: boolean;
+  contentEl: HTMLElement;
+}) {
+  const hostRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    host.replaceChildren(contentEl);
+    window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
+    return () => {
+      if (contentEl.parentElement === host) contentEl.remove();
+    };
+  }, [contentEl]);
+
+  return (
+    <main
+      ref={hostRef}
+      data-persistent-map-host=""
+      // `isolate` keeps map-panel z-indexes below body-portaled dialogs.
+      className={`relative isolate min-w-0 flex-1 overflow-hidden ${
+        compact ? "min-h-0" : "min-h-72 md:min-h-0"
+      }`}
+    />
+  );
+}
+
 // Seed width for the Layers side panel. The cap keeps the map usable near the
 // desktop breakpoint while still allowing the panel to be resized wider.
 function initialSidePanelWidth(): number {
@@ -522,6 +578,13 @@ export function DesktopShell({
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
   const workspaceMode = route.mode;
   const digitalTwinView = route.view;
+  const mapOnly = locationUsesMapOnly(route.location);
+  const [digitalTwinWorkspaceView, setDigitalTwinWorkspaceView] =
+    useState<DigitalTwinWorkspaceView>(digitalTwinView);
+
+  useEffect(() => {
+    setDigitalTwinWorkspaceView(digitalTwinView);
+  }, [digitalTwinView]);
   // Push the translated bookmark labels into the framework-agnostic plugins
   // package (which can't call t() itself). Done here rather than in TopToolbar
   // so it still applies when the toolbar is hidden (e.g. `?maponly`), where the
@@ -664,6 +727,15 @@ export function DesktopShell({
   const replaceStylePanelId = useReplaceStylePanelId();
   const replaceLayersPanelId = useReplaceLayersPanelId();
   const [pluginPanelWidth, setPluginPanelWidth] = useState(PLUGIN_PANEL_DEFAULT_WIDTH);
+  // MapCanvas is portaled into this stable target, while PersistentMapHost moves
+  // the target between the Digital Twin and Expert layouts. Keeping the React
+  // map subtree at one position prevents route changes from destroying the map
+  // object held by imperative Engine plugin controllers.
+  const [mapContentEl] = useState(() => {
+    const el = document.createElement("div");
+    el.className = "contents";
+    return el;
+  });
   // The active plugin panel's content lives in this one host element (created
   // once per app instance). The active dock slot adopts it via appendChild, so
   // moving the panel between docks relocates the same DOM and preserves the
@@ -734,6 +806,111 @@ export function DesktopShell({
   const [dropError, setDropError] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
+  const projectBasemapStyleUrl = useAppStore((state) => state.basemapStyleUrl);
+  const projectDisplayBasemap = resolveThemeBasemapStyle(projectBasemapStyleUrl, themeMode);
+  const projectDisplayBasemapRef = useRef(projectDisplayBasemap);
+  projectDisplayBasemapRef.current = projectDisplayBasemap;
+  const presentationStyleRequestRef = useRef<{
+    controller: MapController;
+    projectDisplayBasemap: string;
+  } | null>(null);
+  const presentationStyleLoadCleanupRef = useRef<(() => void) | null>(null);
+
+  const applyPresentationMapStyle = useCallback((styleUrl: string): boolean => {
+    const controller = mapControllerRef.current;
+    const map = controller?.getMap();
+    if (!controller || !map) return false;
+
+    presentationStyleLoadCleanupRef.current?.();
+    let listening = true;
+    const syncProjectLayers = () => {
+      if (!listening) return;
+      listening = false;
+      presentationStyleLoadCleanupRef.current = null;
+      if (mapControllerRef.current !== controller) return;
+
+      const state = useAppStore.getState();
+      controller.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
+      controller.setBasemapVisible(state.basemapVisible);
+      controller.setBasemapOpacity(state.basemapOpacity);
+      controller.highlightFeature(
+        state.layers.find((layer) => layer.id === state.selectedLayerId),
+        state.selectedFeatureIds.length > 0
+          ? state.selectedFeatureIds
+          : state.selectedFeatureId
+            ? [state.selectedFeatureId]
+            : [],
+      );
+      setMapReadyGeneration((generation) => generation + 1);
+    };
+
+    map.once("style.load", syncProjectLayers);
+    presentationStyleLoadCleanupRef.current = () => {
+      if (!listening) return;
+      listening = false;
+      map.off("style.load", syncProjectLayers);
+    };
+    controller.setStyle(styleUrl);
+    return true;
+  }, []);
+
+  // Entering Digital Twin mode changes only the displayed map style. The
+  // project's basemap remains untouched (and clean), and the current project
+  // style is restored when the user returns to Expert GIS.
+  useEffect(() => {
+    if (workspaceMode !== "digital-twin") return;
+    return () => {
+      const request = presentationStyleRequestRef.current;
+      presentationStyleRequestRef.current = null;
+      if (!request) return;
+      const restoreStyle = projectDisplayBasemapRef.current;
+      if (restoreStyle !== DIGITAL_TWIN_IMAGERY_BASEMAP) {
+        applyPresentationMapStyle(restoreStyle);
+      }
+    };
+  }, [applyPresentationMapStyle, workspaceMode]);
+
+  // Defer until after MapCanvas's own store/theme effects. If a project or
+  // theme change refreshes its saved basemap while Digital Twin is open, this
+  // presentation layer remains authoritative without racing that refresh.
+  useEffect(() => {
+    if (workspaceMode !== "digital-twin") return;
+    const frame = window.requestAnimationFrame(() => {
+      const controller = mapControllerRef.current;
+      if (!controller) return;
+      const previous = presentationStyleRequestRef.current;
+      if (
+        previous?.controller === controller &&
+        previous.projectDisplayBasemap === projectDisplayBasemap
+      ) {
+        return;
+      }
+
+      if (
+        projectDisplayBasemap === DIGITAL_TWIN_IMAGERY_BASEMAP ||
+        applyPresentationMapStyle(DIGITAL_TWIN_IMAGERY_BASEMAP)
+      ) {
+        presentationStyleRequestRef.current = {
+          controller,
+          projectDisplayBasemap,
+        };
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    applyPresentationMapStyle,
+    mapReadyGeneration,
+    projectDisplayBasemap,
+    workspaceMode,
+  ]);
+
+  useEffect(
+    () => () => {
+      presentationStyleLoadCleanupRef.current?.();
+    },
+    [],
+  );
+
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
   useEffect(() => {
     if (workspaceMode === "digital-twin" && externalPluginsReady) {
@@ -743,6 +920,7 @@ export function DesktopShell({
 
   const handleDigitalTwinNavigate = useCallback(
     (view: DigitalTwinView) => {
+      setDigitalTwinWorkspaceView(view);
       const regionId =
         route.regionId ??
         access.regions.find(
@@ -755,6 +933,21 @@ export function DesktopShell({
     },
     [access.mostRecentlyUsedRegionId, access.regions, navigate, route.regionId]
   );
+
+  const handleOpenDigitalTwinSettings = useCallback(() => {
+    setDigitalTwinWorkspaceView("settings");
+  }, []);
+
+  const handleDigitalTwinMapPresentation = useCallback((mode: "3d" | "plan") => {
+    const map = mapControllerRef.current?.getMap();
+    if (!map) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    map.easeTo({
+      bearing: mode === "3d" ? -24 : 0,
+      pitch: mode === "3d" ? 48 : 0,
+      duration: reducedMotion ? 0 : 500,
+    });
+  }, []);
 
   const handleOpenExpertWorkspace = useCallback(() => {
     navigate(`/workspace?returnTo=${encodeURIComponent(route.location)}`);
@@ -1794,28 +1987,138 @@ export function DesktopShell({
     [deferPanelResize, notebookPanelWidth],
   );
 
+  const mapSurface = (
+    <>
+      {/* Visually-hidden page title: gives the document the single
+          top-level heading that assistive tech (and the axe
+          `page-has-heading-one` check) expect, without altering the
+          chrome-free visual layout. Placed inside the main landmark so it
+          is not flagged as content outside a landmark. */}
+      <h1 className="sr-only">GeoLibre map workspace</h1>
+      <SectionErrorBoundary label="Map" fallbackClassName="h-full w-full">
+        <MapGrid themeMode={themeMode}>
+          <MapCanvas
+            controllerRef={mapControllerRef}
+            onMapDiagnosticEvent={handleMapDiagnosticEvent}
+            onControllerReady={handleMapControllerReady}
+            themeMode={themeMode}
+          />
+          <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
+          <MapContextMenu
+            mapControllerRef={mapControllerRef}
+            mapReadyGeneration={mapReadyGeneration}
+            onExplorePlace={handleExplorePlace}
+          />
+          <KnowledgeCardPanel
+            place={knowledgePlace}
+            lang={wikipediaLang(i18n.language)}
+            onClose={() => setKnowledgePlace(null)}
+            onFlyTo={handleKnowledgeFlyTo}
+          />
+          <BoundsRestrictionIndicator />
+          {/* Isolate the collaboration badge in its own boundary: it renders
+              over the map, so a fault here must never take down the map
+              itself (it shares this subtree's error boundary otherwise). */}
+          <SilentErrorBoundary label="Collaboration status">
+            <CollaborationStatusBadge api={collaboration} mapControllerRef={mapControllerRef} />
+          </SilentErrorBoundary>
+          <MapModeBanner mapControllerRef={mapControllerRef} />
+          <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
+          <RasterSubsetPanel
+            layer={rasterSubsetLayer}
+            onClose={() => setRasterSubsetLayer(null)}
+            mapControllerRef={mapControllerRef}
+          />
+          <BasemapExtractPanel
+            open={basemapExtractOpen}
+            onClose={() => setBasemapExtractOpen(false)}
+            mapControllerRef={mapControllerRef}
+          />
+          <Suspense fallback={null}>
+            <StyleManagerPanel />
+          </Suspense>
+          <Suspense fallback={null}>
+            <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
+          </Suspense>
+          <Suspense fallback={null}>
+            <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
+          </Suspense>
+          <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
+          <StoryMapComposeBar mapControllerRef={mapControllerRef} />
+        </MapGrid>
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="Plugin floating panels">
+        <FloatingPanels />
+      </SectionErrorBoundary>
+      {/* Mounted here (inside the map area, like FloatingPanels) so the
+          selection panels anchor to the map canvas's top-left corner and
+          drag-clamp to the map, not the whole window (#1314). */}
+      <SectionErrorBoundary label="Selection panels">
+        <Suspense fallback={null}>
+          <SelectByExpressionDialog />
+        </Suspense>
+        <Suspense fallback={null}>
+          <SelectByLocationDialog />
+        </Suspense>
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="Sun simulation panel">
+        <SunPanel />
+      </SectionErrorBoundary>
+      <SectionErrorBoundary label="Route animation panel">
+        <RouteAnimationPanel mapControllerRef={mapControllerRef} />
+      </SectionErrorBoundary>
+      <KnowledgeCardConsentDialog
+        open={knowledgeNoticeOpen}
+        onOpenChange={(open) => {
+          setKnowledgeNoticeOpen(open);
+          // Clear the paired pending place when the notice is dismissed
+          // (Cancel/Escape/overlay), mirroring dismissRoutingNotice so no
+          // stale target lingers. Confirm sets the place before this runs.
+          if (!open) setPendingKnowledgePlace(null);
+        }}
+        onConfirm={confirmKnowledgeConsent}
+      />
+      {/* Rendered here (not in TopToolbar) so the dialog the status badge
+          reopens stays mounted even in toolbar-hidden layouts (#754). */}
+      {collaboration.enabled && (
+        <CollaborateDialog
+          open={collaborateDialogOpen}
+          onOpenChange={setCollaborateDialogOpen}
+          api={collaboration}
+        />
+      )}
+    </>
+  );
+  const mapHost = (
+    <PersistentMapHost compact={layoutOptions.compact} contentEl={mapContentEl} />
+  );
+
   return (
     <div
       ref={shellRef}
       className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background"
+      data-digital-twin-shell={workspaceMode === "digital-twin" ? "" : undefined}
+      data-map-only={workspaceMode === "digital-twin" && mapOnly ? "" : undefined}
       style={shellStyle}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      {createPortal(mapSurface, mapContentEl)}
       {layoutOptions.toolbarVisible ? (
         workspaceMode === "digital-twin" ? (
           <SectionErrorBoundary label="Digital Twin header">
             <DigitalTwinHeader
               access={access}
               activeView={digitalTwinView}
+              settingsActive={digitalTwinWorkspaceView === "settings"}
               activeRegionId={route.regionId}
               compact={layoutOptions.compact}
-              diagnosticsErrorCount={diagnostics.errorCount}
               mapControllerRef={mapControllerRef}
               themeMode={themeMode}
               onNavigate={handleDigitalTwinNavigate}
+              onOpenSettingsView={handleOpenDigitalTwinSettings}
               onOpenAdministration={
                 access.capabilities.includes("administration")
                   ? () => navigate("/admin")
@@ -1869,6 +2172,21 @@ export function DesktopShell({
               browserContentEl,
             )
           : null}
+        {workspaceMode === "digital-twin" ? (
+          mapOnly ? (
+            mapHost
+          ) : (
+            <DigitalTwinWorkspace
+              activeView={digitalTwinWorkspaceView}
+              mapSlot={mapHost}
+              onMapPresentationChange={handleDigitalTwinMapPresentation}
+              onNavigate={handleDigitalTwinNavigate}
+              onOpenRealSettings={() => openSettingsSection("interface")}
+              pluginContentEl={dockContentEl}
+            />
+          )
+        ) : (
+          <>
         {replaceLayersPanelId ? (
           // Shared-rail mode on the Layers (left) side: the plugin panel shares
           // the Layers sidebar surface, so a single rail lists both the workbench
@@ -1950,111 +2268,7 @@ export function DesktopShell({
             </SectionErrorBoundary>
           </>
         )}
-        <main
-          // `isolate` creates a stacking context so map-panel z-indexes (up to 10000) stay below body-portaled dialogs. See #451.
-          className={`relative isolate min-w-0 flex-1 overflow-hidden ${
-            layoutOptions.compact ? "min-h-0" : "min-h-72 md:min-h-0"
-          }`}
-        >
-          {/* Visually-hidden page title: gives the document the single
-              top-level heading that assistive tech (and the axe
-              `page-has-heading-one` check) expect, without altering the
-              chrome-free visual layout. Placed inside the main landmark so it
-              is not flagged as content outside a landmark. */}
-          <h1 className="sr-only">GeoLibre map workspace</h1>
-          <SectionErrorBoundary label="Map" fallbackClassName="h-full w-full">
-            <MapGrid themeMode={themeMode}>
-              <MapCanvas
-                controllerRef={mapControllerRef}
-                onMapDiagnosticEvent={handleMapDiagnosticEvent}
-                onControllerReady={handleMapControllerReady}
-                themeMode={themeMode}
-              />
-              <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
-              <MapContextMenu
-                mapControllerRef={mapControllerRef}
-                mapReadyGeneration={mapReadyGeneration}
-                onExplorePlace={handleExplorePlace}
-              />
-              <KnowledgeCardPanel
-                place={knowledgePlace}
-                lang={wikipediaLang(i18n.language)}
-                onClose={() => setKnowledgePlace(null)}
-                onFlyTo={handleKnowledgeFlyTo}
-              />
-              <BoundsRestrictionIndicator />
-              {/* Isolate the collaboration badge in its own boundary: it renders
-                  over the map, so a fault here must never take down the map
-                  itself (it shares this subtree's error boundary otherwise). */}
-              <SilentErrorBoundary label="Collaboration status">
-                <CollaborationStatusBadge api={collaboration} mapControllerRef={mapControllerRef} />
-              </SilentErrorBoundary>
-              <MapModeBanner mapControllerRef={mapControllerRef} />
-              <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
-              <RasterSubsetPanel
-                layer={rasterSubsetLayer}
-                onClose={() => setRasterSubsetLayer(null)}
-                mapControllerRef={mapControllerRef}
-              />
-              <BasemapExtractPanel
-                open={basemapExtractOpen}
-                onClose={() => setBasemapExtractOpen(false)}
-                mapControllerRef={mapControllerRef}
-              />
-              <Suspense fallback={null}>
-                <StyleManagerPanel />
-              </Suspense>
-              <Suspense fallback={null}>
-                <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
-              </Suspense>
-              <Suspense fallback={null}>
-                <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
-              </Suspense>
-              <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
-              <StoryMapComposeBar mapControllerRef={mapControllerRef} />
-            </MapGrid>
-          </SectionErrorBoundary>
-          <SectionErrorBoundary label="Plugin floating panels">
-            <FloatingPanels />
-          </SectionErrorBoundary>
-          {/* Mounted here (inside the map area, like FloatingPanels) so the
-              selection panels anchor to the map canvas's top-left corner and
-              drag-clamp to the map, not the whole window (#1314). */}
-          <SectionErrorBoundary label="Selection panels">
-            <Suspense fallback={null}>
-              <SelectByExpressionDialog />
-            </Suspense>
-            <Suspense fallback={null}>
-              <SelectByLocationDialog />
-            </Suspense>
-          </SectionErrorBoundary>
-          <SectionErrorBoundary label="Sun simulation panel">
-            <SunPanel />
-          </SectionErrorBoundary>
-          <SectionErrorBoundary label="Route animation panel">
-            <RouteAnimationPanel mapControllerRef={mapControllerRef} />
-          </SectionErrorBoundary>
-          <KnowledgeCardConsentDialog
-            open={knowledgeNoticeOpen}
-            onOpenChange={(open) => {
-              setKnowledgeNoticeOpen(open);
-              // Clear the paired pending place when the notice is dismissed
-              // (Cancel/Escape/overlay), mirroring dismissRoutingNotice so no
-              // stale target lingers. Confirm sets the place before this runs.
-              if (!open) setPendingKnowledgePlace(null);
-            }}
-            onConfirm={confirmKnowledgeConsent}
-          />
-          {/* Rendered here (not in TopToolbar) so the dialog the status badge
-              reopens stays mounted even in toolbar-hidden layouts (#754). */}
-          {collaboration.enabled && (
-            <CollaborateDialog
-              open={collaborateDialogOpen}
-              onOpenChange={setCollaborateDialogOpen}
-              api={collaboration}
-            />
-          )}
-        </main>
+        {mapHost}
         {replaceStylePanelId ? (
           // Keep replace-style plugins on their established right-side dock,
           // but do not recreate the built-in Style rail now that layer styling
@@ -2095,6 +2309,8 @@ export function DesktopShell({
             </Suspense>
           </SectionErrorBoundary>
         ) : null}
+          </>
+        )}
       </div>
       {layoutOptions.attributePanelVisible ? (
         <SectionErrorBoundary label="Attribute table">

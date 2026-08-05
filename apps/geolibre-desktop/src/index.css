@@ -2921,12 +2921,15 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
  * The shell is `flex flex-col`: its direct children are the toolbar, the
  * workspace row (Layers + map + Style), the attribute table, and the status bar.
  * Hide all of them except the row, then within the row hide everything except
- * the `<main>` map landmark, which flexes to fill. */
+ * the `<main>` map landmark. Digital Twin keeps its workspace wrapper here and
+ * collapses that wrapper to its nested map in digital-twin-shell.css. */
 [data-map-fullscreen] > *:not([data-workspace-row]) {
   display: none !important;
 }
 
-[data-map-fullscreen] [data-workspace-row] > *:not(main) {
+[data-map-fullscreen]
+  [data-workspace-row]
+  > *:not(main):not([data-digital-twin-workspace]) {
   display: none !important;
 }
 
