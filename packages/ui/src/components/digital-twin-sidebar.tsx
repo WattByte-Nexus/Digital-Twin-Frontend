@@ -64,16 +64,18 @@ export function DigitalTwinSidebar({
       )}
       collapsible="icon"
     >
-      <SidebarHeader className="border-b border-sidebar-border p-4 group-data-[collapsible=icon]:px-2">
-        <span className="truncate text-sm font-semibold group-data-[collapsible=icon]:sr-only">
-          Digital Twin
-        </span>
-        <span
-          aria-hidden="true"
-          className="hidden size-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground group-data-[collapsible=icon]:flex"
-        >
-          DT
-        </span>
+      <SidebarHeader className="border-b border-sidebar-border p-4 transition-[padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none group-data-[collapsible=icon]:px-2">
+        <div className="relative h-8 overflow-hidden">
+          <span className="absolute inset-y-0 left-0 flex items-center whitespace-nowrap text-sm font-semibold opacity-100 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
+            Digital Twin
+          </span>
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-0 flex size-8 scale-90 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground opacity-0 transition-[opacity,transform] delay-0 duration-200 ease-out motion-reduce:transition-none group-data-[collapsible=icon]:scale-100 group-data-[collapsible=icon]:opacity-100 group-data-[collapsible=icon]:delay-75"
+          >
+            DT
+          </span>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -92,7 +94,7 @@ export function DigitalTwinSidebar({
                     type="button"
                   >
                     <Icon aria-hidden="true" className="mt-0.5" />
-                    <span className="min-w-0 group-data-[collapsible=icon]:hidden">
+                    <span className="min-w-0 max-w-48 overflow-hidden opacity-100 transition-[max-width,opacity,transform] duration-200 ease-out motion-reduce:transition-none group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-1 group-data-[collapsible=icon]:opacity-0">
                       <span className="block font-medium leading-5">{label}</span>
                       <span className="block whitespace-normal text-xs leading-4 text-muted-foreground">
                         {description}
