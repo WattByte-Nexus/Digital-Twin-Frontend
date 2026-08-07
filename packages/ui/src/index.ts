@@ -189,6 +189,7 @@ export {
 export {
   DigitalTwinAlertsDropdown,
   type DigitalTwinAlertsDropdownProps,
+  type DigitalTwinAlertSeverity,
   type DigitalTwinAlertSummary,
 } from "./components/digital-twin-alerts-dropdown";
 export {

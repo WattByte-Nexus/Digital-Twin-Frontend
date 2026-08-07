@@ -9,14 +9,16 @@ import { DigitalTwinTopbar } from "./digital-twin-topbar";
 const defaultArgs = {
   alerts: [
     {
-      description: "High · Boulder Creek Substation · 8 min ago",
+      description: "Boulder Creek Substation · 8 min ago",
       id: "alert-vegetation-clearance",
       name: "Vegetation clearance risk",
+      severity: "high" as const,
     },
     {
-      description: "Medium · Denver Feeder 12 · 21 min ago",
+      description: "Denver Feeder 12 · 21 min ago",
       id: "alert-transformer-loading",
       name: "Transformer loading anomaly",
+      severity: "medium" as const,
     },
   ],
   alertsCount: 7,
@@ -77,6 +79,17 @@ export const AlertsMenuOpen: Story = {
       within(document.body).getByText("View all alerts")
     ).toBeVisible();
     await userEvent.click(within(document.body).getByText("View all alerts"));
+    const inbox = within(
+      within(document.body).getByRole("dialog", { name: "Alerts" })
+    );
+    await expect(inbox.getByText("Vegetation clearance risk")).toBeVisible();
+    await userEvent.click(inbox.getByRole("button", { name: "Mark all reviewed" }));
+    await expect(inbox.getByText("No active alerts")).toBeVisible();
+    await userEvent.click(inbox.getByRole("tab", { name: "Acknowledged" }));
+    await expect(inbox.getByText("Transformer loading anomaly")).toBeVisible();
+    await userEvent.click(
+      inbox.getByRole("button", { name: "Open full alert inbox" })
+    );
     await expect(args.onOpenAlerts).toHaveBeenCalledOnce();
   },
 };

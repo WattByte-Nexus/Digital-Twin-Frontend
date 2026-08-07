@@ -119,14 +119,16 @@ const WORKSPACE_ALERTS = [
   {
     id: "alert-vegetation-clearance",
     name: "Vegetation clearance risk",
-    description: "High · Boulder Creek Substation · 8 min ago",
+    description: "Boulder Creek Substation · 8 min ago",
     regionId: "boulder",
+    severity: "high" as const,
   },
   {
     id: "alert-transformer-loading",
     name: "Transformer loading anomaly",
-    description: "Medium · Denver Feeder 12 · 21 min ago",
+    description: "Denver Feeder 12 · 21 min ago",
     regionId: "denver",
+    severity: "medium" as const,
   },
 ];
 
