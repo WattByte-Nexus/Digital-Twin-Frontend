@@ -9,6 +9,8 @@
 // that can be layered on later.
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
+import noRawThemeColors from "./eslint-rules/no-raw-theme-colors.mjs";
+import { themeColorLegacyFiles } from "./eslint-rules/theme-color-legacy-files.mjs";
 
 export default [
   {
@@ -53,6 +55,23 @@ export default [
     rules: {
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
+    },
+  },
+  {
+    files: [
+      "apps/**/src/**/*.{tsx,jsx}",
+      "packages/**/src/**/*.{tsx,jsx}",
+    ],
+    ignores: themeColorLegacyFiles,
+    plugins: {
+      theme: {
+        rules: {
+          "no-raw-theme-colors": noRawThemeColors,
+        },
+      },
+    },
+    rules: {
+      "theme/no-raw-theme-colors": "error",
     },
   },
 ];
