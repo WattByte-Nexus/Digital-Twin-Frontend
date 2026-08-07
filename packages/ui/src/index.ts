@@ -175,13 +175,13 @@ export {
 } from "./components/dropdown-menu";
 export {
   DigitalTwinTopbar,
-  type DigitalTwinDestination,
   type DigitalTwinOperator,
   type DigitalTwinRegion,
   type DigitalTwinTopbarProps,
 } from "./components/digital-twin-topbar";
 export {
   DigitalTwinSidebar,
+  type DigitalTwinDestination,
   type DigitalTwinSidebarProps,
 } from "./components/digital-twin-sidebar";
 export {

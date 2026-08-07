@@ -4,12 +4,9 @@ import {
   ChevronDown,
   CircleHelp,
   ExternalLink,
-  FlaskConical,
-  History,
   LogOut,
   MapPin,
   Moon,
-  Radio,
   Search,
   Settings,
   Sun,
@@ -38,8 +35,6 @@ import {
   TooltipTrigger,
 } from "./tooltip";
 
-export type DigitalTwinDestination = "live" | "scenarios" | "runs";
-
 export interface DigitalTwinRegion {
   id: string;
   name: string;
@@ -53,14 +48,14 @@ export interface DigitalTwinOperator {
 }
 
 export interface DigitalTwinTopbarProps {
-  activeDestination?: DigitalTwinDestination;
   activeRegionId: string;
   alertsCount?: number;
+  mapToolbar?: ReactNode;
   operator: DigitalTwinOperator;
   organizationName: string;
   regions: DigitalTwinRegion[];
+  sidebarTrigger?: ReactNode;
   themeMode?: "light" | "dark";
-  onNavigate?: (destination: DigitalTwinDestination) => void;
   onOpenAdministration?: () => void;
   onOpenAlerts?: () => void;
   onOpenDiagnostics?: () => void;
@@ -71,34 +66,6 @@ export interface DigitalTwinTopbarProps {
   onSignOut?: () => void;
   onToggleTheme?: () => void;
 }
-
-interface DestinationDefinition {
-  id: DigitalTwinDestination;
-  label: string;
-  description: string;
-  icon: LucideIcon;
-}
-
-const destinations: DestinationDefinition[] = [
-  {
-    id: "live",
-    label: "Live",
-    description: "Monitoring and alert inbox",
-    icon: Radio,
-  },
-  {
-    id: "scenarios",
-    label: "Scenarios",
-    description: "Bounded what-if studies",
-    icon: FlaskConical,
-  },
-  {
-    id: "runs",
-    label: "Runs",
-    description: "Run status, history, and replay",
-    icon: History,
-  },
-];
 
 function IconAction({
   label,
@@ -148,14 +115,14 @@ function MenuAction({
 }
 
 export function DigitalTwinTopbar({
-  activeDestination = "live",
   activeRegionId,
   alertsCount = 0,
+  mapToolbar,
   operator,
   organizationName,
   regions,
+  sidebarTrigger,
   themeMode = "dark",
-  onNavigate,
   onOpenAdministration,
   onOpenAlerts,
   onOpenDiagnostics,
@@ -168,10 +135,6 @@ export function DigitalTwinTopbar({
 }: DigitalTwinTopbarProps) {
   const activeRegion =
     regions.find((region) => region.id === activeRegionId) ?? regions[0];
-  const activeDestinationDefinition =
-    destinations.find((destination) => destination.id === activeDestination) ??
-    destinations[0];
-  const ActiveDestinationIcon = activeDestinationDefinition.icon;
   const themeLabel =
     themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode";
   const ThemeIcon = themeMode === "dark" ? Sun : Moon;
@@ -184,9 +147,14 @@ export function DigitalTwinTopbar({
         aria-label="Digital Twin application header"
         className={cn(
           themeClassName,
-          "surface-glass-subtle @container/topbar flex h-16 w-full min-w-0 items-center border-b px-4 text-card-foreground"
+          "surface-glass-subtle @container/topbar flex h-16 w-full min-w-0 items-center border-x-0 border-t-0 border-b border-border px-4 text-card-foreground"
         )}
       >
+        {sidebarTrigger ? (
+          <div className="me-1 flex shrink-0 items-center">
+            {sidebarTrigger}
+          </div>
+        ) : null}
         <Button
           asChild
           className="h-11 shrink-0 px-2 text-sm font-semibold"
@@ -201,65 +169,11 @@ export function DigitalTwinTopbar({
           aria-hidden="true"
           className="mx-1 h-7 w-px shrink-0 bg-border @sm/topbar:mx-2"
         />
-        <div className="ms-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                aria-label={`Change Digital Twin section. Current section: ${activeDestinationDefinition.label}`}
-                className="h-10 min-w-10 gap-2 px-2 @sm/topbar:px-3"
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                <ActiveDestinationIcon
-                  aria-hidden="true"
-                  className="h-4 w-4 shrink-0"
-                />
-                <span className="hidden text-sm font-medium @sm/topbar:inline">
-                  {activeDestinationDefinition.label}
-                </span>
-                <ChevronDown
-                  aria-hidden="true"
-                  className="hidden h-3.5 w-3.5 text-muted-foreground @sm/topbar:block"
-                />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              className={cn(
-                overlayClassName,
-                "w-72 min-w-[var(--radix-dropdown-menu-trigger-width)]"
-              )}
-            >
-              <DropdownMenuLabel>Digital Twin</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {destinations.map(
-                ({ description, icon: Icon, id, label }) => (
-                  <DropdownMenuItem
-                    aria-current={activeDestination === id ? "page" : undefined}
-                    className={cn(
-                      activeDestination === id &&
-                        "bg-accent text-accent-foreground"
-                    )}
-                    key={id}
-                    onSelect={() => onNavigate?.(id)}
-                  >
-                    <Icon
-                      aria-hidden="true"
-                      className="me-2 h-4 w-4 text-muted-foreground"
-                    />
-                    <span className="min-w-0">
-                      <span className="block">{label}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {description}
-                      </span>
-                    </span>
-                  </DropdownMenuItem>
-                )
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        {mapToolbar ? (
+          <div className="ms-1 min-w-0 shrink overflow-hidden">
+            {mapToolbar}
+          </div>
+        ) : null}
 
         <div className="ms-auto flex min-w-0 items-center gap-1 @sm/topbar:gap-1.5">
           <DropdownMenu>
@@ -330,7 +244,9 @@ export function DigitalTwinTopbar({
                 variant="ghost"
               >
                 <Search aria-hidden="true" className="h-4 w-4" />
-                <span className="hidden text-xs @5xl/topbar:inline">Search</span>
+                <span className="hidden text-xs @5xl/topbar:inline">
+                  Search
+                </span>
                 <kbd className="hidden rounded border bg-muted px-1.5 py-0.5 font-sans text-[10px] font-medium text-muted-foreground @[96rem]/topbar:inline">
                   /
                 </kbd>

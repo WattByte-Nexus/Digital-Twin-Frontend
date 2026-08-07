@@ -5,8 +5,13 @@ import {
   DigitalTwinMapStatus,
   DigitalTwinMapToolbar,
   DigitalTwinMonitoringStatus,
+  DigitalTwinSidebar,
   DigitalTwinTopbar,
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
   WeatherSettingsPopover,
+  type DigitalTwinDestination,
   type DigitalTwinMapDisplaySettings,
 } from "@geolibre/ui";
 import type { Meta, StoryObj } from "@storybook/react-vite";
@@ -51,6 +56,8 @@ function DigitalTwinMapWorkspace({
     );
   const [viewMode, setViewMode] = useState<"3d" | "plan">("3d");
   const [activeThemeMode, setActiveThemeMode] = useState(themeMode);
+  const [activeDestination, setActiveDestination] =
+    useState<DigitalTwinDestination>("live");
   const visibleDetailCount = Object.entries(displaySettings).filter(
     ([key, visible]) => key !== "satellite" && key !== "elevation" && visible
   ).length;
@@ -71,83 +78,92 @@ function DigitalTwinMapWorkspace({
     <div
       className={`${
         activeThemeMode === "dark" ? "dark" : "theme-light"
-      } flex h-full w-full flex-col overflow-hidden bg-background`}
+      } flex h-full w-full overflow-hidden bg-background`}
     >
-      <DigitalTwinTopbar
-        activeDestination="live"
-        activeRegionId="front-range"
-        alertsCount={7}
-        operator={{
-          name: "Maya Chen",
-          role: "Grid operations supervisor",
-          initials: "MC",
-        }}
-        organizationName="WattByte Nexus"
-        regions={WORKSPACE_REGIONS}
-        themeMode={activeThemeMode}
-        onToggleTheme={() => {
-          setActiveThemeMode((current) =>
-            current === "light" ? "dark" : "light"
-          );
-        }}
-      />
-
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
-        <SatelliteTerrainMap
-          {...SATELLITE_TERRAIN_STORY_ARGS}
-          satelliteVisible={displaySettings.satellite}
-          elevationEnabled={displaySettings.elevation}
-          referenceOverlayVisibility={displaySettings}
-          onMapReady={(map) => {
-            mapRef.current = map;
-          }}
+      <SidebarProvider className="min-h-0">
+        <DigitalTwinSidebar
+          activeDestination={activeDestination}
+          themeMode={activeThemeMode}
+          onNavigate={setActiveDestination}
         />
-
-        <div className="absolute left-4 top-4 z-10">
-          <DigitalTwinMapToolbar
-            theme={activeThemeMode}
-            value={displaySettings}
-            viewMode={viewMode}
-            onValueChange={setDisplaySettings}
-            onViewModeChange={changeViewMode}
-            onResetOrientation={() => {
-              mapRef.current?.easeTo({ bearing: 0, duration: 400 });
+        <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+          <DigitalTwinTopbar
+            activeRegionId="front-range"
+            alertsCount={7}
+            mapToolbar={
+              <DigitalTwinMapToolbar
+                className="h-10 rounded-md border-0 bg-transparent p-0 shadow-none"
+                theme={activeThemeMode}
+                value={displaySettings}
+                viewMode={viewMode}
+                onValueChange={setDisplaySettings}
+                onViewModeChange={changeViewMode}
+                onResetOrientation={() => {
+                  mapRef.current?.easeTo({ bearing: 0, duration: 400 });
+                }}
+              />
+            }
+            operator={{
+              name: "Maya Chen",
+              role: "Grid operations supervisor",
+              initials: "MC",
+            }}
+            organizationName="WattByte Nexus"
+            regions={WORKSPACE_REGIONS}
+            sidebarTrigger={<SidebarTrigger />}
+            themeMode={activeThemeMode}
+            onToggleTheme={() => {
+              setActiveThemeMode((current) =>
+                current === "light" ? "dark" : "light"
+              );
             }}
           />
-        </div>
 
-        <div className="absolute bottom-4 left-4 z-10">
-          <DigitalTwinMapStatus
-            viewMode={viewMode}
-            visibleDetailCount={visibleDetailCount}
-          />
-        </div>
-
-        <div className="absolute bottom-6 right-4 z-10">
-          <DigitalTwinMonitoringStatus themeMode={activeThemeMode} />
-        </div>
-
-        {showWeather ? (
-          <div className="absolute right-4 top-4 z-10">
-            <WeatherSettingsPopover
-              theme={activeThemeMode}
-              location="Boulder County, Colorado"
-              trigger={
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="icon"
-                  className="border bg-background/95 text-foreground shadow-lg backdrop-blur"
-                  aria-label="Open weather settings"
-                  title="Weather settings"
-                >
-                  <CloudSun aria-hidden="true" />
-                </Button>
-              }
+          <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+            <SatelliteTerrainMap
+              {...SATELLITE_TERRAIN_STORY_ARGS}
+              satelliteVisible={displaySettings.satellite}
+              elevationEnabled={displaySettings.elevation}
+              referenceOverlayVisibility={displaySettings}
+              onMapReady={(map) => {
+                mapRef.current = map;
+              }}
             />
+
+            <div className="absolute bottom-4 left-4 z-10">
+              <DigitalTwinMapStatus
+                viewMode={viewMode}
+                visibleDetailCount={visibleDetailCount}
+              />
+            </div>
+
+            <div className="absolute bottom-6 right-4 z-10">
+              <DigitalTwinMonitoringStatus themeMode={activeThemeMode} />
+            </div>
+
+            {showWeather ? (
+              <div className="absolute right-4 top-4 z-10">
+                <WeatherSettingsPopover
+                  theme={activeThemeMode}
+                  location="Boulder County, Colorado"
+                  trigger={
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon"
+                      className="border bg-background/95 text-foreground shadow-lg backdrop-blur"
+                      aria-label="Open weather settings"
+                      title="Weather settings"
+                    >
+                      <CloudSun aria-hidden="true" />
+                    </Button>
+                  }
+                />
+              </div>
+            ) : null}
           </div>
-        ) : null}
-      </div>
+        </SidebarInset>
+      </SidebarProvider>
     </div>
   );
 }

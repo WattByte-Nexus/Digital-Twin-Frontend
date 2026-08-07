@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
+import {
+  DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS,
+  DigitalTwinMapToolbar,
+} from "./digital-twin-map-toolbar";
 import { DigitalTwinTopbar } from "./digital-twin-topbar";
 
 const regions = [
@@ -21,7 +25,6 @@ const regions = [
 ];
 
 const defaultArgs = {
-  activeDestination: "live" as const,
   activeRegionId: "boulder",
   alertsCount: 7,
   operator: {
@@ -32,7 +35,6 @@ const defaultArgs = {
   organizationName: "Front Range Electric",
   regions,
   themeMode: "dark" as const,
-  onNavigate: fn(),
   onOpenAdministration: fn(),
   onOpenAlerts: fn(),
   onOpenDiagnostics: fn(),
@@ -85,13 +87,6 @@ export const OperatorMenuOpen: Story = {
   },
 };
 
-export const ScenariosActive: Story = {
-  args: {
-    activeDestination: "scenarios",
-    alertsCount: 2,
-  },
-};
-
 export const CompactWorkstation: Story = {
   decorators: [
     (Story) => (
@@ -102,25 +97,19 @@ export const CompactWorkstation: Story = {
   ],
 };
 
-export const CompactNavigationOpen: Story = {
-  decorators: [
-    (Story) => (
-      <div className="w-[920px] max-w-full">
-        <Story />
-      </div>
+export const WithMapToolbar: Story = {
+  args: {
+    mapToolbar: (
+      <DigitalTwinMapToolbar
+        className="h-10 rounded-md border-0 bg-transparent p-0 shadow-none"
+        onResetOrientation={fn()}
+        onValueChange={fn()}
+        onViewModeChange={fn()}
+        theme="dark"
+        value={DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS}
+        viewMode="3d"
+      />
     ),
-  ],
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(
-      canvas.getByRole("button", {
-        name: /change digital twin section.*current section: live/i,
-      })
-    );
-    const scenariosItem = await within(document.body).findByRole("menuitem", {
-      name: /Scenarios Bounded what-if studies/i,
-    });
-    await expect(scenariosItem).toBeVisible();
   },
 };
 

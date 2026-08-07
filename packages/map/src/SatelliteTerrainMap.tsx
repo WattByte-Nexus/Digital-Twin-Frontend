@@ -90,6 +90,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     const abortController = new AbortController();
     let disposed = false;
     let resizeObserver: ResizeObserver | null = null;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
     void (async () => {
       let referenceOverlay;
@@ -165,7 +166,16 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       };
       map.once("load", handleLoad);
 
-      resizeObserver = new ResizeObserver(() => map.resize());
+      resizeObserver = new ResizeObserver(() => {
+        if (resizeTimer !== null) clearTimeout(resizeTimer);
+        // Animated panels can report a new width every frame. Resizing the
+        // WebGL drawing buffer for each report causes visible flashes, so let
+        // the layout settle and resize the map once at its final dimensions.
+        resizeTimer = setTimeout(() => {
+          resizeTimer = null;
+          map.resize();
+        }, 80);
+      });
       resizeObserver.observe(container);
     })();
 
@@ -173,6 +183,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       disposed = true;
       abortController.abort();
       resizeObserver?.disconnect();
+      if (resizeTimer !== null) clearTimeout(resizeTimer);
       mapRef.current?.remove();
       mapRef.current = null;
       referenceLayersRef.current = [];

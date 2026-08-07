@@ -200,8 +200,7 @@
     border: 1px solid hsl(var(--surface-panel-border));
     background-color: hsl(var(--surface-panel));
     color: hsl(var(--surface-panel-foreground));
-    box-shadow:
-      inset 0 1px 0 hsl(var(--surface-panel-border) / 0.38),
+    box-shadow: inset 0 1px 0 hsl(var(--surface-panel-border) / 0.38),
       0 24px 70px hsl(var(--surface-panel-shadow) / 0.24);
   }
 
@@ -216,8 +215,7 @@
     border-color: hsl(var(--surface-panel-border)) !important;
     background-color: hsl(var(--surface-panel)) !important;
     color: hsl(var(--surface-panel-foreground)) !important;
-    box-shadow:
-      inset 0 1px 0 hsl(var(--surface-panel-border) / 0.38),
+    box-shadow: inset 0 1px 0 hsl(var(--surface-panel-border) / 0.38),
       0 18px 48px hsl(var(--surface-panel-shadow) / 0.24) !important;
   }
 
@@ -249,7 +247,7 @@
   --sidebar-primary-foreground: hsl(var(--primary-foreground));
   --sidebar-accent: hsl(var(--surface-panel-muted));
   --sidebar-accent-foreground: hsl(var(--surface-panel-foreground));
-  --sidebar-border: hsl(var(--surface-panel-border));
+  --sidebar-border: hsl(var(--border));
   --sidebar-ring: hsl(var(--ring));
 }
 
