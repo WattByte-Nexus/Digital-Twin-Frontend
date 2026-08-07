@@ -1,4 +1,4 @@
-import { Sun } from "lucide-react";
+import { Moon, Sun, Sunrise, Sunset } from "lucide-react";
 import * as React from "react";
 import { Input } from "../input";
 import { Label } from "../label";
@@ -11,12 +11,26 @@ interface CircularTimeSelectorProps {
   onChange: (hour: number, minute: number) => void;
 }
 
+export type TimeOfDayPhase = "night" | "sunrise" | "day" | "sunset";
+
+export function getTimeOfDayPhase(hour: number, minute: number): TimeOfDayPhase {
+  const totalMinutes = hour * 60 + minute;
+
+  if (totalMinutes < 6 * 60 || totalMinutes >= 20 * 60) return "night";
+  if (totalMinutes < 8 * 60) return "sunrise";
+  if (totalMinutes < 18 * 60) return "day";
+  return "sunset";
+}
+
 function CircularTimeSelector({ hour, minute, onChange }: CircularTimeSelectorProps) {
   const dialRef = React.useRef<HTMLDivElement>(null);
   const totalMinutes = hour * 60 + minute;
   const angle = (totalMinutes / 1440) * 360;
   const angleRadians = (angle * Math.PI) / 180;
   const handleRadius = 40;
+  const phase = getTimeOfDayPhase(hour, minute);
+  const TimeIcon =
+    phase === "night" ? Moon : phase === "sunrise" ? Sunrise : phase === "sunset" ? Sunset : Sun;
 
   const setFromPointer = React.useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -88,8 +102,18 @@ function CircularTimeSelector({ hour, minute, onChange }: CircularTimeSelectorPr
         }}
         aria-hidden="true"
       />
-      <div className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border bg-background shadow-sm">
-        <Sun className="h-[17px] w-[17px] text-amber-500" aria-hidden="true" />
+      <div
+        className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border bg-background shadow-sm"
+        data-time-phase={phase}
+      >
+        <TimeIcon
+          className={
+            phase === "night"
+              ? "h-[17px] w-[17px] text-purple-500 dark:text-purple-400"
+              : "h-[17px] w-[17px] text-amber-500"
+          }
+          aria-hidden="true"
+        />
       </div>
     </div>
   );
