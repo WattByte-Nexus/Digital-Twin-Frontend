@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const TILESET_DIR = path.join(
   ROOT,
-  "apps/geolibre-desktop/public/data/usgs-lidar/golden-pilot",
+  "apps/geolibre-desktop/public/data/usgs-lidar/golden-city",
 );
 
 interface Tile {
@@ -28,18 +28,28 @@ describe("Golden USGS LiDAR 3D Tiles pilot", () => {
     ) as { asset: { extras: Record<string, unknown> }; root: Tile };
     const source = JSON.parse(
       await readFile(path.join(TILESET_DIR, "source.json"), "utf8"),
-    ) as { pointCount: number; source: string; rights: string };
+    ) as {
+      pointCount: number;
+      source: string;
+      rights: string;
+      queryResolutionMeters: number;
+      municipality: { GEOID: string };
+      groundPointsRendered: boolean;
+      classifications: number[];
+      pointColoring: { mode: string; dimensions: [number, number] };
+    };
 
     assert.equal(tileset.asset.extras.source, "U.S. Geological Survey 3D Elevation Program");
     assert.equal(tileset.asset.extras.rights, "Public domain");
-    assert.ok(source.pointCount > 50_000);
+    assert.equal(source.pointCount, 750_000);
+    assert.equal(source.queryResolutionMeters, 1);
+    assert.equal(source.municipality.GEOID, "0830835");
     assert.match(source.source, /U\.S\. Geological Survey/);
     assert.match(source.rights, /Public domain/);
-
-    const pointCloud = await readFile(path.join(TILESET_DIR, "points.bin"));
-    assert.equal(pointCloud.subarray(0, 8).toString("ascii"), "GLPC0001");
-    assert.equal(pointCloud.readUInt32LE(8), source.pointCount);
-    assert.equal(pointCloud.byteLength, 36 + source.pointCount * 15);
+    assert.equal(source.groundPointsRendered, false);
+    assert.ok(!source.classifications.includes(2));
+    assert.equal(source.pointColoring.mode, "imagery-overlay");
+    assert.ok(source.pointColoring.dimensions.every((value) => value > 0));
 
     const uris = contentUris(tileset.root);
     assert.ok(uris.length > 1);
@@ -59,6 +69,6 @@ describe("Golden USGS LiDAR 3D Tiles pilot", () => {
       "utf8",
     );
     assert.match(pluginSource, /Golden USGS LiDAR \(3DEP\)/);
-    assert.match(pluginSource, /\/data\/usgs-lidar\/golden-pilot\/tileset\.json/);
+    assert.match(pluginSource, /\/data\/usgs-lidar\/golden-city\/tileset\.json/);
   });
 });

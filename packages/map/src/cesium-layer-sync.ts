@@ -303,6 +303,14 @@ export class CesiumLayerSync {
         tileset.destroy();
         return;
       }
+      tileset.pointCloudShading = new Cesium.PointCloudShading({
+        attenuation: true,
+        geometricErrorScale: 1,
+        maximumAttenuation: 3,
+        eyeDomeLighting: true,
+        eyeDomeLightingStrength: 1,
+        eyeDomeLightingRadius: 1,
+      });
       viewer.scene.primitives.add(tileset);
       this.applyTilesetAltitude(tileset, Number(layer.source.altitudeOffset));
       entry.handle = tileset;

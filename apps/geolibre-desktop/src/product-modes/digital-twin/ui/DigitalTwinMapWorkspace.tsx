@@ -1,5 +1,3 @@
-import { COORDINATE_SYSTEM } from "@deck.gl/core";
-import { PointCloudLayer } from "@deck.gl/layers";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { SatelliteTerrainMap } from "@geolibre/map";
 import {
@@ -48,6 +46,10 @@ import {
 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
+import {
+  createGoldenUsgsLidarLayer,
+  DIGITAL_TWIN_LIDAR_OVERLAY_PROPS,
+} from "../digital-twin-lidar";
 import { DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG } from "../satellite-terrain-config";
 import {
   createWeatherSunSimulationController,
@@ -56,61 +58,6 @@ import {
 
 export type WorkspaceTheme = "light" | "dark";
 type LidarStatus = "loading" | "ready" | "error";
-
-const GOLDEN_USGS_LIDAR_POINTS_URL =
-  "/data/usgs-lidar/golden-pilot/points.bin";
-const GOLDEN_USGS_LIDAR_HEADER_BYTES = 36;
-
-async function loadGoldenUsgsLidarPointCloud(): Promise<PointCloudLayer> {
-  const response = await fetch(GOLDEN_USGS_LIDAR_POINTS_URL);
-  if (!response.ok) {
-    throw new Error(`Golden LiDAR request failed (${response.status})`);
-  }
-  const buffer = await response.arrayBuffer();
-  const view = new DataView(buffer);
-  const magic = new TextDecoder().decode(new Uint8Array(buffer, 0, 8));
-  if (magic !== "GLPC0001") throw new Error("Invalid Golden LiDAR point-cloud header");
-
-  const pointCount = view.getUint32(8, true);
-  const coordinateOrigin = [
-    view.getFloat64(12, true),
-    view.getFloat64(20, true),
-    view.getFloat64(28, true),
-  ];
-  const positionBytes = pointCount * 3 * Float32Array.BYTES_PER_ELEMENT;
-  const expectedBytes = GOLDEN_USGS_LIDAR_HEADER_BYTES + positionBytes + pointCount * 3;
-  if (buffer.byteLength !== expectedBytes) {
-    throw new Error("Golden LiDAR point-cloud length does not match its header");
-  }
-
-  const positions = new Float32Array(
-    buffer,
-    GOLDEN_USGS_LIDAR_HEADER_BYTES,
-    pointCount * 3
-  );
-  const colors = new Uint8Array(
-    buffer,
-    GOLDEN_USGS_LIDAR_HEADER_BYTES + positionBytes,
-    pointCount * 3
-  );
-
-  return new PointCloudLayer({
-    id: "golden-usgs-lidar-point-cloud",
-    data: {
-      length: pointCount,
-      attributes: {
-        getPosition: { value: positions, size: 3 },
-        getColor: { value: colors, size: 3 },
-      },
-    },
-    coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
-    coordinateOrigin,
-    getNormal: [0, 0, 1],
-    pointSize: 2,
-    pickable: false,
-    operation: "draw",
-  });
-}
 
 export interface DigitalTwinMapWorkspaceProps {
   activeDestination?: DigitalTwinDestination;
@@ -273,23 +220,19 @@ export function DigitalTwinMapWorkspace({
     if (map) {
       if (showLidar) {
         setLidarStatus("loading");
+        const lidarLayer = createGoldenUsgsLidarLayer({
+          onReady: () => setLidarStatus("ready"),
+          onError: (error) => {
+            console.error("Golden USGS LiDAR could not be loaded", error);
+            setLidarStatus("error");
+          },
+        });
         const lidarOverlay = new MapboxOverlay({
-          interleaved: false,
-          layers: [],
+          ...DIGITAL_TWIN_LIDAR_OVERLAY_PROPS,
+          layers: [lidarLayer],
         });
         map.addControl(lidarOverlay);
         lidarOverlayRef.current = lidarOverlay;
-        void loadGoldenUsgsLidarPointCloud()
-          .then((layer) => {
-            if (lidarOverlayRef.current !== lidarOverlay) return;
-            lidarOverlay.setProps({ layers: [layer] });
-            setLidarStatus("ready");
-          })
-          .catch((error: unknown) => {
-            if (lidarOverlayRef.current !== lidarOverlay) return;
-            console.error("Golden USGS LiDAR could not be loaded", error);
-            setLidarStatus("error");
-          });
       }
       weatherSunRef.current = createWeatherSunSimulationController(
         map,

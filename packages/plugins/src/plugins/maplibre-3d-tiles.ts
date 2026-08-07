@@ -44,7 +44,7 @@ const DEFAULT_DRACO_DECODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/exa
 const DEFAULT_KTX2_TRANSCODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
 const GOOGLE_PHOTOREALISTIC_TILES_URL = "https://tile.googleapis.com/v1/3dtiles/root.json";
 const GOOGLE_PHOTOREALISTIC_TILES_LABEL = "Google Photorealistic 3D Tiles";
-const GOLDEN_USGS_LIDAR_TILES_PATH = "/data/usgs-lidar/golden-pilot/tileset.json";
+const GOLDEN_USGS_LIDAR_TILES_PATH = "/data/usgs-lidar/golden-city/tileset.json";
 const GOLDEN_USGS_LIDAR_TILES_URL = new URL(
   GOLDEN_USGS_LIDAR_TILES_PATH,
   window.location.origin,
@@ -1163,7 +1163,7 @@ function createGooglePhotorealisticTilesPanelListItem(layer: GeoLibreLayer): HTM
 
   const url = document.createElement("span");
   url.className = "three-d-tiles-list-url";
-  url.textContent = stringValue(layer.source.url) ?? layer.sourcePath;
+  url.textContent = stringValue(layer.source.url) ?? layer.sourcePath ?? null;
 
   const status = document.createElement("span");
   status.className = "three-d-tiles-list-status";
@@ -1448,7 +1448,7 @@ function buildExternalDeckThreeDTilesLayer(layer: GeoLibreLayer): Layer | null {
     id: googlePhotorealisticTilesDeckLayerId(layer),
     data,
     altitudeOffset,
-    pointSize: isGoldenUsgsLidarTilesLayer(layer) ? 2 : undefined,
+    pointSize: isGoldenUsgsLidarTilesLayer(layer) ? 3 : undefined,
     // Tileset caps + main-thread parsing shared with the I3S overlay (see
     // THREE_D_TILES_DECK_LOAD_OPTIONS for why workers are disabled), plus this
     // layer's per-request auth headers.

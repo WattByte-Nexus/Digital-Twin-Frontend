@@ -3,6 +3,7 @@
 # requires-python = ">=3.12,<3.13"
 # dependencies = [
 #   "ept-python==0.8",
+#   "pillow==12.1.0",
 #   "py3dtiles==12.1.1",
 # ]
 # ///
@@ -11,9 +12,9 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import math
-import struct
 import tempfile
 import urllib.parse
 import urllib.request
@@ -22,6 +23,7 @@ from pathlib import Path
 import ept
 import laspy
 import numpy as np
+from PIL import Image
 from py3dtiles.convert import convert
 from pyproj import CRS, Transformer
 
@@ -29,10 +31,29 @@ from pyproj import CRS, Transformer
 DEFAULT_EPT_URL = (
     "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/CO_DRCOG_2_2020"
 )
+DEFAULT_IMAGERY_URL = (
+    "https://drcog-data.sanborn.com/arcgis/rest/services/"
+    "DRCOG_2022/DRCOG_Mosaics_2022/ImageServer/exportImage"
+)
+DEFAULT_IMAGERY_SIZE = 4_096
+DEFAULT_CLASSIFICATIONS = [1, 3, 4, 5, 6, 14, 15]
 DEFAULT_OUTPUT = Path(
-    "apps/geolibre-desktop/public/data/usgs-lidar/golden-pilot"
+    "apps/geolibre-desktop/public/data/usgs-lidar/golden-city"
 )
 NOAA_GEOID_URL = "https://geodesy.noaa.gov/api/geoid/ght"
+GOLDEN_BOUNDARY_URL = (
+    "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/"
+    "Places_CouSub_ConCity_SubMCD/MapServer/4/query?"
+    + urllib.parse.urlencode(
+        {
+            "where": "GEOID='0830835'",
+            "outFields": "GEOID,BASENAME,NAME,AREALAND",
+            "returnGeometry": "true",
+            "outSR": "4326",
+            "f": "geojson",
+        }
+    )
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,27 +63,40 @@ def parse_args() -> argparse.Namespace:
             "NAVD88 height, and convert it to self-hostable OGC 3D Tiles."
         )
     )
-    parser.add_argument("--center-lon", type=float, default=-105.2211)
-    parser.add_argument("--center-lat", type=float, default=39.7555)
     parser.add_argument(
-        "--size-m",
+        "--query-resolution",
         type=float,
-        default=200,
-        help="Width and height of the square query in meters (default: 200).",
+        default=1,
+        help="EPT sampling resolution in meters for the city-wide query (default: 1).",
     )
     parser.add_argument("--ept-url", default=DEFAULT_EPT_URL)
+    parser.add_argument("--imagery-url", default=DEFAULT_IMAGERY_URL)
+    parser.add_argument(
+        "--imagery-size",
+        type=int,
+        default=DEFAULT_IMAGERY_SIZE,
+        help=(
+            "Maximum width or height of the orthophoto sampled onto the points "
+            "(default: 4096)."
+        ),
+    )
+    parser.add_argument("--boundary-url", default=GOLDEN_BOUNDARY_URL)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument(
         "--classifications",
         type=int,
         nargs="+",
-        help="Optional ASPRS classification values to retain, such as 2 6.",
+        default=DEFAULT_CLASSIFICATIONS,
+        help=(
+            "Above-ground ASPRS classifications to retain "
+            "(default: 1 3 4 5 6 14 15)."
+        ),
     )
     parser.add_argument(
         "--max-points",
         type=int,
-        default=150_000,
-        help="Deterministic display-point cap (default: 150000).",
+        default=750_000,
+        help="Deterministic display-point cap (default: 750000).",
     )
     parser.add_argument(
         "--geoid-height",
@@ -77,28 +111,51 @@ def parse_args() -> argparse.Namespace:
 
 
 def validate_args(args: argparse.Namespace) -> None:
-    if not -180 <= args.center_lon <= 180:
-        raise ValueError("--center-lon must be between -180 and 180")
-    if not -90 <= args.center_lat <= 90:
-        raise ValueError("--center-lat must be between -90 and 90")
-    if not math.isfinite(args.size_m) or args.size_m <= 0:
-        raise ValueError("--size-m must be greater than zero")
+    if not math.isfinite(args.query_resolution) or args.query_resolution <= 0:
+        raise ValueError("--query-resolution must be greater than zero")
     if args.max_points <= 0:
         raise ValueError("--max-points must be greater than zero")
+    if args.imagery_size <= 0:
+        raise ValueError("--imagery-size must be greater than zero")
     if args.jobs <= 0:
         raise ValueError("--jobs must be greater than zero")
 
 
-def web_mercator_bounds(lon: float, lat: float, size_m: float) -> tuple[float, ...]:
-    transformer = Transformer.from_crs(4326, 3857, always_xy=True)
-    center_x, center_y = transformer.transform(lon, lat)
-    half_size = size_m / 2
-    return (
-        center_x - half_size,
-        center_y - half_size,
-        center_x + half_size,
-        center_y + half_size,
+def fetch_city_boundary(boundary_url: str):
+    with urllib.request.urlopen(boundary_url, timeout=30) as response:
+        payload = json.load(response)
+    features = payload.get("features", [])
+    if len(features) != 1:
+        raise RuntimeError(
+            f"Expected one Golden municipal boundary, received {len(features)}"
+        )
+    feature = features[0]
+    coordinate_pairs: list[tuple[float, float]] = []
+
+    def collect_coordinates(value) -> None:
+        if (
+            isinstance(value, list)
+            and len(value) >= 2
+            and isinstance(value[0], (int, float))
+            and isinstance(value[1], (int, float))
+        ):
+            coordinate_pairs.append((float(value[0]), float(value[1])))
+            return
+        for child in value:
+            collect_coordinates(child)
+
+    collect_coordinates(feature["geometry"]["coordinates"])
+    longitudes, latitudes = zip(*coordinate_pairs, strict=True)
+    bounds_wgs84 = (
+        min(longitudes),
+        min(latitudes),
+        max(longitudes),
+        max(latitudes),
     )
+    to_mercator = Transformer.from_crs(4326, 3857, always_xy=True)
+    min_x, min_y = to_mercator.transform(bounds_wgs84[0], bounds_wgs84[1])
+    max_x, max_y = to_mercator.transform(bounds_wgs84[2], bounds_wgs84[3])
+    return feature, bounds_wgs84, (min_x, min_y, max_x, max_y)
 
 
 def fetch_geoid_height(lon: float, lat: float) -> float:
@@ -116,6 +173,7 @@ def fetch_geoid_height(lon: float, lat: float) -> float:
 def query_lidar(
     ept_url: str,
     bounds: tuple[float, ...],
+    query_resolution: float,
     classifications: list[int] | None,
     max_points: int,
 ) -> laspy.LasData:
@@ -123,10 +181,13 @@ def query_lidar(
     query = ept.EPT(
         ept_url.rstrip("/"),
         bounds=ept.Bounds(min_x, min_y, -1_000, max_x, max_y, 10_000),
+        queryResolution=query_resolution,
     )
     lidar = query.as_laspy()
-    if len(lidar.points) == 0:
-        raise RuntimeError("The USGS EPT query returned no points for the requested area")
+    if lidar is None or len(lidar.points) == 0:
+        raise RuntimeError(
+            "The USGS EPT query returned no points for the requested area"
+        )
 
     if classifications:
         mask = np.isin(lidar.classification, classifications)
@@ -138,63 +199,128 @@ def query_lidar(
             )
 
     if len(lidar.points) > max_points:
-        indices = np.linspace(0, len(lidar.points) - 1, max_points, dtype=np.int64)
+        indices = np.sort(
+            np.random.default_rng(0).choice(
+                len(lidar.points), size=max_points, replace=False
+            )
+        )
         lidar.points = lidar.points[indices]
     return lidar
 
 
-def normalized(values: np.ndarray, low: float, high: float) -> np.ndarray:
-    lower, upper = np.percentile(values, (low, high))
-    if upper <= lower:
-        return np.full(values.shape, 0.5, dtype=np.float64)
-    return np.clip((values - lower) / (upper - lower), 0, 1)
+def imagery_dimensions(bounds: tuple[float, ...], maximum_size: int) -> tuple[int, int]:
+    width_meters = bounds[2] - bounds[0]
+    height_meters = bounds[3] - bounds[1]
+    if width_meters >= height_meters:
+        return maximum_size, max(1, round(maximum_size * height_meters / width_meters))
+    return max(1, round(maximum_size * width_meters / height_meters)), maximum_size
+
+
+def fetch_imagery(
+    imagery_url: str,
+    bounds: tuple[float, ...],
+    maximum_size: int,
+) -> tuple[np.ndarray, str]:
+    width, height = imagery_dimensions(bounds, maximum_size)
+    query = urllib.parse.urlencode(
+        {
+            "bbox": ",".join(str(value) for value in bounds),
+            "bboxSR": 3857,
+            "imageSR": 3857,
+            "size": f"{width},{height}",
+            "format": "png32",
+            "f": "image",
+        }
+    )
+    request_url = f"{imagery_url}{'&' if '?' in imagery_url else '?'}{query}"
+    with urllib.request.urlopen(request_url, timeout=120) as response:
+        payload = response.read()
+    with Image.open(io.BytesIO(payload)) as image:
+        pixels = np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
+    if pixels.shape != (height, width, 3):
+        raise RuntimeError(
+            "Imagery service returned unexpected dimensions: "
+            f"{pixels.shape!r}, expected {(height, width, 3)!r}"
+        )
+    return pixels, request_url
+
+
+def sample_imagery_colors(
+    lidar: laspy.LasData,
+    imagery: np.ndarray,
+    bounds: tuple[float, ...],
+) -> np.ndarray:
+    height, width, _ = imagery.shape
+    x_fraction = (np.asarray(lidar.x) - bounds[0]) / (bounds[2] - bounds[0])
+    y_fraction = (bounds[3] - np.asarray(lidar.y)) / (bounds[3] - bounds[1])
+    columns = np.clip(np.rint(x_fraction * (width - 1)), 0, width - 1).astype(int)
+    rows = np.clip(np.rint(y_fraction * (height - 1)), 0, height - 1).astype(int)
+    return imagery[rows, columns]
 
 
 def colorize_and_correct_height(
-    lidar: laspy.LasData, geoid_height: float
+    lidar: laspy.LasData,
+    geoid_height: float,
+    imagery: np.ndarray,
+    bounds: tuple[float, ...],
 ) -> laspy.LasData:
     colored = laspy.convert(lidar, point_format_id=7)
     colored.z = np.asarray(colored.z) + geoid_height
+    colors = sample_imagery_colors(colored, imagery, bounds).copy()
 
-    elevation = normalized(np.asarray(colored.z), 1, 99)
-    intensity = normalized(np.asarray(colored.intensity, dtype=np.float64), 2, 98)
-    shade = 0.55 + 0.45 * intensity
+    # Preserve legibility for sparse utility classes whose footprints are too
+    # small to inherit a useful orthophoto color.
+    classifications = np.asarray(colored.classification)
+    colors[classifications == 14] = (222, 45, 255)
+    colors[classifications == 15] = (255, 126, 46)
 
-    red = (0.28 + 0.62 * elevation) * shade
-    green = (0.52 + 0.36 * elevation) * shade
-    blue = (0.68 + 0.28 * elevation) * shade
-    ground = np.asarray(colored.classification) == 2
-    red[ground] *= 0.72
-    green[ground] *= 0.9
-    blue[ground] *= 0.72
-
-    colored.red = np.rint(np.clip(red, 0, 1) * 65_535).astype(np.uint16)
-    colored.green = np.rint(np.clip(green, 0, 1) * 65_535).astype(np.uint16)
-    colored.blue = np.rint(np.clip(blue, 0, 1) * 65_535).astype(np.uint16)
+    colors_16_bit = colors.astype(np.uint16) * 257
+    colored.red = colors_16_bit[:, 0]
+    colored.green = colors_16_bit[:, 1]
+    colored.blue = colors_16_bit[:, 2]
     return colored
 
 
 def write_source_metadata(
     output: Path,
     args: argparse.Namespace,
+    boundary_feature: dict,
+    center: tuple[float, float],
     bounds: tuple[float, ...],
     geoid_height: float,
     point_count: int,
+    imagery_dimensions: tuple[int, int],
+    imagery_request_url: str,
 ) -> None:
     metadata = {
-        "title": "Golden USGS 3DEP LiDAR pilot",
+        "title": "Golden city-wide USGS 3DEP LiDAR",
         "project": "CO DRCOG 2 2020",
         "source": "U.S. Geological Survey 3D Elevation Program",
         "sourceUrl": args.ept_url,
         "rights": "Public domain; free of charge and without use restrictions",
-        "center": [args.center_lon, args.center_lat],
-        "querySizeMeters": args.size_m,
+        "municipality": boundary_feature["properties"],
+        "boundarySourceUrl": args.boundary_url,
+        "coverage": "Continuous bounding envelope of the Golden municipal boundary",
+        "center": list(center),
         "queryBoundsEpsg3857": list(bounds),
+        "queryResolutionMeters": args.query_resolution,
         "geoidModel": "GEOID18",
         "geoidHeightMeters": geoid_height,
         "pointCount": point_count,
         "classifications": args.classifications,
-        "mapWorkspacePointCloud": "points.bin",
+        "groundPointsRendered": False,
+        "pointColoring": {
+            "mode": "imagery-overlay",
+            "source": "DRCOG / Sanborn — DRAPP 2022",
+            "sourceUrl": args.imagery_url,
+            "requestUrl": imagery_request_url,
+            "imagerySize": args.imagery_size,
+            "dimensions": list(imagery_dimensions),
+            "semanticClassOverrides": {
+                "14": "wire conductor",
+                "15": "transmission tower",
+            },
+        },
     }
     (output / "source.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
@@ -213,58 +339,39 @@ def normalize_tileset_metadata(output: Path) -> None:
     tileset_path.write_text(json.dumps(tileset, separators=(",", ":")) + "\n")
 
 
-def write_map_workspace_point_cloud(
-    output: Path,
-    lidar: laspy.LasData,
-    center_lon: float,
-    center_lat: float,
-    bounds: tuple[float, ...],
-) -> None:
-    center_x = (bounds[0] + bounds[2]) / 2
-    center_y = (bounds[1] + bounds[3]) / 2
-    mercator_to_ground = math.cos(math.radians(center_lat))
-    positions = np.column_stack(
-        (
-            (np.asarray(lidar.x) - center_x) * mercator_to_ground,
-            (np.asarray(lidar.y) - center_y) * mercator_to_ground,
-            np.asarray(lidar.z),
-        )
-    ).astype("<f4")
-    colors = np.column_stack(
-        (
-            np.asarray(lidar.red) >> 8,
-            np.asarray(lidar.green) >> 8,
-            np.asarray(lidar.blue) >> 8,
-        )
-    ).astype(np.uint8)
-
-    with (output / "points.bin").open("wb") as destination:
-        destination.write(
-            struct.pack(
-                "<8sI3d",
-                b"GLPC0001",
-                len(lidar.points),
-                center_lon,
-                center_lat,
-                0.0,
-            )
-        )
-        destination.write(positions.tobytes())
-        destination.write(colors.tobytes())
-
-
 def build(args: argparse.Namespace) -> None:
     validate_args(args)
-    bounds = web_mercator_bounds(args.center_lon, args.center_lat, args.size_m)
+    boundary_feature, bounds_wgs84, bounds = fetch_city_boundary(
+        args.boundary_url
+    )
+    center = (
+        (bounds_wgs84[0] + bounds_wgs84[2]) / 2,
+        (bounds_wgs84[1] + bounds_wgs84[3]) / 2,
+    )
     geoid_height = (
         args.geoid_height
         if args.geoid_height is not None
-        else fetch_geoid_height(args.center_lon, args.center_lat)
+        else fetch_geoid_height(*center)
     )
 
-    print(f"Streaming USGS LiDAR for EPSG:3857 bounds {bounds}")
-    lidar = query_lidar(args.ept_url, bounds, args.classifications, args.max_points)
-    colored = colorize_and_correct_height(lidar, geoid_height)
+    print(
+        "Streaming city-wide USGS LiDAR for Golden boundary "
+        f"at {args.query_resolution:g} m EPT resolution"
+    )
+    lidar = query_lidar(
+        args.ept_url,
+        bounds,
+        args.query_resolution,
+        args.classifications,
+        args.max_points,
+    )
+    print("Fetching DRAPP orthophoto for point colorization")
+    imagery, imagery_request_url = fetch_imagery(
+        args.imagery_url,
+        bounds,
+        args.imagery_size,
+    )
+    colored = colorize_and_correct_height(lidar, geoid_height, imagery, bounds)
     print(
         f"Converting {len(colored.points):,} points with GEOID18 correction "
         f"{geoid_height:+.3f} m"
@@ -285,15 +392,26 @@ def build(args: argparse.Namespace) -> None:
         )
 
     normalize_tileset_metadata(args.output)
-    write_map_workspace_point_cloud(
-        args.output,
-        colored,
-        args.center_lon,
-        args.center_lat,
-        bounds,
+    obsolete_point_buffer = args.output / "points.bin"
+    if obsolete_point_buffer.exists():
+        obsolete_point_buffer.unlink()
+    (args.output / "boundary.geojson").write_text(
+        json.dumps(
+            {"type": "FeatureCollection", "features": [boundary_feature]},
+            separators=(",", ":"),
+        )
+        + "\n"
     )
     write_source_metadata(
-        args.output, args, bounds, geoid_height, len(colored.points)
+        args.output,
+        args,
+        boundary_feature,
+        center,
+        bounds,
+        geoid_height,
+        len(colored.points),
+        (imagery.shape[1], imagery.shape[0]),
+        imagery_request_url,
     )
     print(f"Wrote {args.output / 'tileset.json'}")
 

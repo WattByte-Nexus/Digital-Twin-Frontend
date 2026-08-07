@@ -23,6 +23,7 @@ function makeFakes() {
     wmsProviders: [] as Record<string, unknown>[],
     geojsonLoads: [] as { data: unknown; options: Record<string, unknown> }[],
     tilesetUrls: [] as unknown[],
+    pointCloudShadingOptions: [] as Record<string, unknown>[],
   };
 
   const viewer = {
@@ -67,6 +68,11 @@ function makeFakes() {
   };
 
   const Cesium = {
+    PointCloudShading: class {
+      constructor(public options: Record<string, unknown>) {
+        calls.pointCloudShadingOptions.push(options);
+      }
+    },
     UrlTemplateImageryProvider: class {
       url?: string;
       constructor(opts: Record<string, unknown>) {
@@ -113,6 +119,7 @@ function makeFakes() {
           show: true,
           destroy: () => {},
           modelMatrix: null,
+          pointCloudShading: null,
           boundingSphere: { center: {} },
         });
       },
@@ -333,6 +340,17 @@ describe("CesiumLayerSync", () => {
     await f.flush();
     assert.equal(f.calls.tilesetUrls[0], "https://tiles/root.json");
     assert.equal(f.calls.primitivesAdded.length, 1);
+    assert.deepEqual(f.calls.pointCloudShadingOptions[0], {
+      attenuation: true,
+      eyeDomeLighting: true,
+      eyeDomeLightingRadius: 1,
+      eyeDomeLightingStrength: 1,
+      geometricErrorScale: 1,
+      maximumAttenuation: 3,
+    });
+    assert.ok(
+      (f.calls.primitivesAdded[0] as { pointCloudShading: unknown }).pointCloudShading,
+    );
   });
 
   it("keeps the Google Maps API key header on a Google Photorealistic tileset", async () => {
