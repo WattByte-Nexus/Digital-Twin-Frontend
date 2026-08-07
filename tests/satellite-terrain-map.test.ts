@@ -139,6 +139,28 @@ test("satellite terrain style orders imagery, terrain, and reference details", (
   });
 });
 
+test("satellite terrain style renders an atmospheric sky above the horizon", () => {
+  const style = buildSatelliteTerrainStyle({
+    satelliteSource: {
+      tiles: ["https://imagery.example/{z}/{x}/{y}.jpg"],
+      tileSize: 256,
+    },
+    terrainSource: {
+      tiles: ["https://terrain.example/{z}/{x}/{y}.png"],
+      tileSize: 256,
+    },
+  });
+
+  assert.deepEqual(style.sky, {
+    "sky-color": "#88c6fc",
+    "horizon-color": "#ffffff",
+    "fog-color": "#ffffff",
+    "fog-ground-blend": 0.9,
+    "horizon-fog-blend": 0.8,
+    "sky-horizon-blend": 0.8,
+  });
+});
+
 test("satellite reference categories toggle independently", () => {
   const calls: Array<[string, string, string]> = [];
   const map = {

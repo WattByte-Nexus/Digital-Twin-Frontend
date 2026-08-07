@@ -175,6 +175,14 @@ export function buildSatelliteTerrainStyle({
           )
         : []),
     ],
+    sky: {
+      "sky-color": "#88c6fc",
+      "horizon-color": "#ffffff",
+      "fog-color": "#ffffff",
+      "fog-ground-blend": 0.9,
+      "horizon-fog-blend": 0.8,
+      "sky-horizon-blend": 0.8,
+    },
     ...(referenceOverlay?.glyphs ? { glyphs: referenceOverlay.glyphs } : {}),
     ...(referenceOverlay?.sprite ? { sprite: referenceOverlay.sprite } : {}),
     ...(elevationEnabled
