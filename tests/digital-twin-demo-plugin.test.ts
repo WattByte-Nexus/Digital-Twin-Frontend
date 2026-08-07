@@ -4,7 +4,9 @@ import { describe, it } from "node:test";
 import {
   ApiProblem,
   buildIgnitionPointFeature,
+  buildOperationalPowerLineFeatures,
   buildPowerLineNetwork,
+  buildPowerLineDetailView,
   buildRegionBoundsGeoJson,
   buildRunRequest,
   buildScenarioRequest,
@@ -13,6 +15,7 @@ import {
   createDigitalTwinClient,
   createRunArtifactCoordinator,
   createSimulationReplayController,
+  defaultApiUrl,
   mergeRunProgress,
   normalizeApiBaseUrl,
   REPLAY_CACHE_MAX_FRAMES,
@@ -56,6 +59,26 @@ const treeFeature = {
 };
 
 describe("digital-twin-demo bundled plugin", () => {
+  it("uses the same-origin Digital Twin proxy during local Vite development", () => {
+    const runtimeWindow = {
+      location: new URL("http://localhost:5173/?workspace=digital-twin"),
+      localStorage: { getItem: () => "http://127.0.0.1:8000" },
+    };
+
+    assert.equal(
+      defaultApiUrl(runtimeWindow),
+      "http://localhost:5173/__digital_twin_api",
+    );
+  });
+
+  it("makes the header's Runs mode a dedicated prior-runs view", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.match(source, /this\.scenarioSection\.hidden = showingRuns;/);
+    assert.match(source, /this\.historySection\.hidden = !showingRuns;/);
+    assert.match(source, /this\.scenarioSection\.append\(main, launch\);/);
+  });
+
   it("keeps green tree circles the same screen size at every zoom level", async () => {
     const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
 
@@ -411,6 +434,149 @@ describe("digital-twin-demo bundled plugin", () => {
     const headers = new Headers(calls[0].init?.headers);
     assert.equal(headers.get("Idempotency-Key"), "run-key");
     assert.equal(headers.get("X-Request-ID"), "request-1");
+  });
+
+  it("loads operational line summaries and encoded line details through the API client", async () => {
+    const calls: string[] = [];
+    const client = createDigitalTwinClient("http://127.0.0.1:8000", {
+      fetchImpl: async (input: string | URL | Request) => {
+        calls.push(String(input));
+        return Response.json([]);
+      },
+    });
+
+    await client.listPowerLines("region/1");
+    await client.getPowerLine("region/1", "line/7");
+
+    assert.deepEqual(calls, [
+      "http://127.0.0.1:8000/api/v1/regions/region%2F1/power-lines",
+      "http://127.0.0.1:8000/api/v1/regions/region%2F1/power-lines/line%2F7",
+    ]);
+  });
+
+  it("turns operational line summaries into pickable GeoJSON without public asset ids", () => {
+    assert.deepEqual(
+      buildOperationalPowerLineFeatures([
+        {
+          power_line_id: "line-7",
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [-105.1, 40],
+              [-105, 40.1],
+            ],
+            bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
+          },
+        },
+      ]),
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { kind: "operational_power_line", power_line_id: "line-7" },
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [-105.1, 40],
+                [-105, 40.1],
+              ],
+            },
+          },
+        ],
+      },
+    );
+  });
+
+  it("builds explicit succeeded, failed, and awaiting-tick power-line detail states", () => {
+    const base = {
+      power_line_id: "line-7",
+      region_id: "region-1",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [-105.1, 40],
+          [-105, 40.1],
+        ],
+        bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
+      },
+      conductor: {
+        mass_per_meter_kg_m: 1.35,
+        span_length_m: 100,
+        diameter_m: 0.02,
+        conductor_diameter_m: 0.019,
+        horizontal_tension_n: 24525,
+        air_density_kg_m3: 1.225,
+        drag_coefficient: 1.2,
+        static_sag_m: 0.675,
+        elastic_modulus_pa: 77_000_000_000,
+        cross_sectional_area_m2: 0.000386,
+      },
+    };
+
+    const awaiting = buildPowerLineDetailView({ ...base, latest_physics: null });
+    assert.equal(awaiting.statusLabel, "Awaiting first completed tick");
+    assert.equal(awaiting.statusTone, "muted");
+
+    const failed = buildPowerLineDetailView({
+      ...base,
+      latest_physics: {
+        status: "failed",
+        source: "failed",
+        failure_kind: "non_convergent",
+        tick: 9,
+        line_snapshot: 3,
+        weather_version: "2026-07-31T18:00:00Z",
+        weather_source_ref: "weather://region-1/2026-07-31T18:00:00Z",
+        feature_contract_version: "power-line-static-v1",
+        model_version: "model-1",
+        model_checksum: "a".repeat(64),
+      },
+    });
+    assert.equal(failed.statusLabel, "Solve failed");
+    assert.equal(failed.statusDetail, "Non-convergent · tick 9");
+    assert.equal(failed.statusTone, "error");
+
+    const succeeded = buildPowerLineDetailView({
+      ...base,
+      latest_physics: {
+        status: "succeeded",
+        source: "fem",
+        tick: 9,
+        line_snapshot: 3,
+        weather_version: "2026-07-31T18:00:00Z",
+        weather_source_ref: "weather://region-1/2026-07-31T18:00:00Z",
+        wind_speed_mps: 18.4,
+        midspan_displacement_m: 1.2,
+        max_displacement_m: 1.5,
+        max_displacement_position_m: 53,
+        collision_envelope_m: { min_x: 0, max_x: 100, min_y: -1.51, max_y: 1.51 },
+        feature_contract_version: "power-line-static-v1",
+        model_version: "model-1",
+        model_checksum: "a".repeat(64),
+        routing_reason: "near_threshold",
+        solver_version: "solver-2",
+        surrogate_confidence: 0.73,
+      },
+    });
+    assert.equal(succeeded.statusLabel, "Physics available");
+    assert.equal(succeeded.statusDetail, "FEM · tick 9 · 18.4 m/s wind");
+    assert.equal(succeeded.physicsMetrics.find((metric: { label: string }) => metric.label === "Max displacement")?.value, "1.50 m");
+    assert.match(succeeded.footprintNote, /not verified vegetation contact/i);
+  });
+
+  it("gives operational power-line clicks priority over ignition placement", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+    const styles = await readFile(new URL("dist/style.css", pluginRoot), "utf8");
+
+    assert.match(source, /const nearestPole = this\.poleNearEvent\(event\)/);
+    assert.match(source, /const nearestPowerLine = nearestPole \?\? this\.powerLineNearEvent\(event\)/);
+    assert.match(source, /if \(nearestPowerLine\) \{[\s\S]*this\.onPowerLineClick\(nearestPowerLine, \[anchor\.lng, anchor\.lat\]\)[\s\S]*return;/);
+    assert.match(source, /showPowerLinePopup\(anchor, loading/);
+    assert.match(source, /role", "dialog"/);
+    assert.match(source, /className = "dt-power-line-popup"/);
+    assert.match(styles, /\.dt-power-line-popup\s*\{/);
+    assert.doesNotMatch(source, /showMessage\(`\$\{powerLineId\}: \$\{view\.statusLabel\}/);
   });
 
   it("streams named durable run progress and closes after terminal delivery", () => {

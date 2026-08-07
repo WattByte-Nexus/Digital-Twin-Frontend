@@ -64,3 +64,6 @@ python/examples/my-map.geolibre.json
 # Rendered Homebrew cask, emitted to the working dir by scripts/render-*-cask.sh
 # for submission to a tap / homebrew-cask; not committed to this repo.
 /geolibre.rb
+
+*storybook.log
+storybook-static

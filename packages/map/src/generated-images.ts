@@ -94,6 +94,23 @@ export type GeneratedImageFactory = () =>
 const factories = new Map<string, GeneratedImageFactory>();
 const wiredMaps = new WeakSet<maplibregl.Map>();
 
+// Basemap styles can use data-driven image expressions whose values come from
+// vector-tile attributes. Those values are not guaranteed to exist in the
+// style's sprite (for example, an uncommon POI class or road-shield length).
+// MapLibre reports every unresolved value as a console warning. Registering a
+// transparent pixel preserves the existing visual result (no icon is drawn)
+// while marking the foreign request as resolved so it is not retried or warned
+// about. GeoLibre-owned ids remain strict so a missing internal factory stays
+// visible during development.
+const TRANSPARENT_MISSING_IMAGE: GeneratedImageResult = {
+  image: {
+    width: 1,
+    height: 1,
+    data: new Uint8Array([0, 0, 0, 0]),
+  } as GeneratedImage,
+  pixelRatio: 1,
+};
+
 // Bound the registry so a long session of custom-SVG editing (each distinct
 // markup hashes to a new id) can't grow it without limit. Built-in shapes and
 // patterns have low cardinality and stay well under this.
@@ -118,7 +135,13 @@ export function registerGeneratedImage(id: string, factory: GeneratedImageFactor
 function addGeneratedImage(map: maplibregl.Map, id: string): void {
   if (map.hasImage(id)) return;
   const factory = factories.get(id);
-  if (!factory) return;
+  if (!factory) {
+    if (id.startsWith("geolibre-")) return;
+    map.addImage(id, TRANSPARENT_MISSING_IMAGE.image, {
+      pixelRatio: TRANSPARENT_MISSING_IMAGE.pixelRatio,
+    });
+    return;
+  }
   let result: ReturnType<GeneratedImageFactory>;
   try {
     result = factory();

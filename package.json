@@ -9,8 +9,11 @@
     "workers/*"
   ],
   "scripts": {
+    "postinstall": "node scripts/patch-maplibre-time-slider.mjs",
     "dev": "npm run dev -w geolibre-desktop",
     "build": "npm run build -w geolibre-desktop",
+    "storybook": "npm run storybook -w geolibre-desktop",
+    "build:storybook": "npm run build-storybook -w geolibre-desktop",
     "build:jupyterlite": "node scripts/build-jupyterlite.mjs",
     "build:embed": "node scripts/build-embed.mjs",
     "seed:digital-twin:boulder": "node scripts/seed-boulder-region.mjs",

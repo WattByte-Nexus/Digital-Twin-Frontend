@@ -1,24 +1,17 @@
-import { Button } from "@geolibre/ui";
-import { PanelRightClose, X } from "lucide-react";
+import { GlassSimulationPopover } from "@geolibre/ui";
 import {
-  type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
-import {
-  PANEL_RESIZE_END_EVENT,
-  PANEL_RESIZE_START_EVENT,
-} from "../../../lib/panel-resize";
 import type { DigitalTwinView } from "../access";
 import { LiveView } from "./LiveView";
 import { RunsView } from "./views/RunsView";
 import { ScenariosView } from "./views/ScenariosView";
 import { SettingsView } from "./views/SettingsView";
+import { SimulationAreaChart, type SimulationAreaSample } from "./SimulationAreaChart";
 import "./digital-twin-workspace.css";
 
 export type DigitalTwinWorkspaceView = DigitalTwinView | "settings";
@@ -30,22 +23,6 @@ interface DigitalTwinWorkspaceProps {
   onNavigate: (view: DigitalTwinView) => void;
   onOpenRealSettings: () => void;
   pluginContentEl: HTMLElement;
-}
-
-const SIMULATION_DRAWER_DEFAULT_WIDTH = 420;
-const SIMULATION_DRAWER_MIN_WIDTH = 340;
-const SIMULATION_DRAWER_MAX_WIDTH = 680;
-const DRAWER_FOCUSABLE_SELECTOR = [
-  "a[href]",
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  '[tabindex]:not([tabindex="-1"])',
-].join(",");
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function PluginContentHost({ contentEl }: { contentEl: HTMLElement }) {
@@ -71,35 +48,28 @@ export function DigitalTwinWorkspace({
   onOpenRealSettings,
   pluginContentEl,
 }: DigitalTwinWorkspaceProps) {
-  const drawerRef = useRef<HTMLElement>(null);
   const simulationOpenerRef = useRef<HTMLElement | null>(null);
-  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const restoreFocusFrameRef = useRef<number | null>(null);
   const [simulationOpen, setSimulationOpen] = useState(false);
-  const [simulationWidth, setSimulationWidth] = useState(
-    SIMULATION_DRAWER_DEFAULT_WIDTH
-  );
+  const [areaSamples, setAreaSamples] = useState<SimulationAreaSample[]>([]);
 
   useEffect(() => {
-    window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
-  }, [activeView, simulationOpen]);
+    const handleAreaSeries = (event: Event) => {
+      const detail = (event as CustomEvent<{ samples?: SimulationAreaSample[] }>).detail;
+      setAreaSamples(Array.isArray(detail?.samples) ? detail.samples : []);
+    };
+    window.addEventListener("geolibre:digital-twin-area-series", handleAreaSeries);
+    return () => window.removeEventListener("geolibre:digital-twin-area-series", handleAreaSeries);
+  }, []);
 
   useEffect(
     () => () => {
-      resizeCleanupRef.current?.();
       if (restoreFocusFrameRef.current !== null) {
         window.cancelAnimationFrame(restoreFocusFrameRef.current);
       }
     },
     []
   );
-
-  useEffect(() => {
-    if (!simulationOpen) return;
-    drawerRef.current
-      ?.querySelector<HTMLElement>("[data-dt-simulation-close]")
-      ?.focus();
-  }, [simulationOpen]);
 
   const openSimulation = useCallback(() => {
     const activeElement = document.activeElement;
@@ -123,133 +93,13 @@ export function DigitalTwinWorkspace({
     });
   }, []);
 
-  const handleDrawerKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeSimulation();
-      return;
-    }
-    if (event.key !== "Tab") return;
-
-    const drawer = drawerRef.current;
-    if (!drawer) return;
-    const focusableElements = Array.from(
-      drawer.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE_SELECTOR)
-    ).filter(
-      (element) => !element.closest("[hidden]") && !element.closest("[inert]")
-    );
-    if (focusableElements.length === 0) {
-      event.preventDefault();
-      drawer.focus();
-      return;
-    }
-
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
-    if (event.shiftKey && document.activeElement === firstElement) {
-      event.preventDefault();
-      lastElement.focus();
-    } else if (!event.shiftKey && document.activeElement === lastElement) {
-      event.preventDefault();
-      firstElement.focus();
-    }
-  };
-
-  const clampSimulationWidth = (width: number) => {
-    const viewportCap = Math.max(
-      SIMULATION_DRAWER_MIN_WIDTH,
-      Math.min(SIMULATION_DRAWER_MAX_WIDTH, window.innerWidth - 160)
-    );
-    return clamp(width, SIMULATION_DRAWER_MIN_WIDTH, viewportCap);
-  };
-
-  const updateSimulationWidth = (width: number) => {
-    const nextWidth = clampSimulationWidth(width);
-    drawerRef.current?.style.setProperty(
-      "--dt-simulation-drawer-width",
-      `${nextWidth}px`
-    );
-    setSimulationWidth(nextWidth);
-  };
-
-  const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    resizeCleanupRef.current?.();
-
-    const handle = event.currentTarget;
-    const pointerId = event.pointerId;
-    const startX = event.clientX;
-    const startWidth = simulationWidth;
-    const direction = getComputedStyle(handle).direction === "rtl" ? -1 : 1;
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-    let nextWidth = startWidth;
-    let finished = false;
-
-    handle.setPointerCapture?.(pointerId);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
-
-    const handleMove = (moveEvent: PointerEvent) => {
-      nextWidth = clampSimulationWidth(
-        startWidth + direction * (startX - moveEvent.clientX)
-      );
-      drawerRef.current?.style.setProperty(
-        "--dt-simulation-drawer-width",
-        `${nextWidth}px`
-      );
-    };
-
-    const finishResize = (commit: boolean) => {
-      if (finished) return;
-      finished = true;
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleEnd);
-      window.removeEventListener("pointercancel", handleCancel);
-      try {
-        if (handle.hasPointerCapture?.(pointerId)) {
-          handle.releasePointerCapture?.(pointerId);
-        }
-      } catch {
-        // Pointer capture may already be released after an OS-level cancel.
-      }
-      if (commit) setSimulationWidth(nextWidth);
-      else {
-        drawerRef.current?.style.setProperty(
-          "--dt-simulation-drawer-width",
-          `${startWidth}px`
-        );
-      }
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      resizeCleanupRef.current = null;
-      window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
-    };
-
-    function handleEnd() {
-      finishResize(true);
-    }
-
-    function handleCancel() {
-      finishResize(false);
-    }
-
-    resizeCleanupRef.current = handleCancel;
-    window.addEventListener("pointermove", handleMove);
-    window.addEventListener("pointerup", handleEnd);
-    window.addEventListener("pointercancel", handleCancel);
-  };
-
   return (
     <div className="dt-product-workspace" data-digital-twin-workspace="">
       <div
-        aria-hidden={activeView !== "live" || simulationOpen}
+        aria-hidden={activeView !== "live"}
         className="dt-product-workspace__view"
         data-active={activeView === "live" ? "true" : "false"}
-        inert={activeView !== "live" || simulationOpen}
+        inert={activeView !== "live"}
       >
         <LiveView
           mapSlot={mapSlot}
@@ -259,13 +109,11 @@ export function DigitalTwinWorkspace({
         />
       </div>
       <div
-        aria-hidden={activeView !== "scenarios" || simulationOpen}
+        aria-hidden={activeView !== "scenarios"}
         className="dt-product-workspace__view"
         data-active={activeView === "scenarios" ? "true" : "false"}
-        inert={activeView !== "scenarios" || simulationOpen}
-        role={
-          activeView === "scenarios" && !simulationOpen ? "main" : undefined
-        }
+        inert={activeView !== "scenarios"}
+        role={activeView === "scenarios" ? "main" : undefined}
       >
         <ScenariosView
           onNavigateLive={() => onNavigate("live")}
@@ -273,11 +121,11 @@ export function DigitalTwinWorkspace({
         />
       </div>
       <div
-        aria-hidden={activeView !== "runs" || simulationOpen}
+        aria-hidden={activeView !== "runs"}
         className="dt-product-workspace__view"
         data-active={activeView === "runs" ? "true" : "false"}
-        inert={activeView !== "runs" || simulationOpen}
-        role={activeView === "runs" && !simulationOpen ? "main" : undefined}
+        inert={activeView !== "runs"}
+        role={activeView === "runs" ? "main" : undefined}
       >
         <RunsView
           onNavigateLive={() => onNavigate("live")}
@@ -285,80 +133,32 @@ export function DigitalTwinWorkspace({
         />
       </div>
       <div
-        aria-hidden={activeView !== "settings" || simulationOpen}
+        aria-hidden={activeView !== "settings"}
         className="dt-product-workspace__view"
         data-active={activeView === "settings" ? "true" : "false"}
-        inert={activeView !== "settings" || simulationOpen}
-        role={activeView === "settings" && !simulationOpen ? "main" : undefined}
+        inert={activeView !== "settings"}
+        role={activeView === "settings" ? "main" : undefined}
       >
         <SettingsView onOpenRealSettings={onOpenRealSettings} />
       </div>
 
-      <aside
-        ref={drawerRef}
-        aria-hidden={!simulationOpen}
-        aria-label="Simulation workspace"
-        aria-modal={simulationOpen || undefined}
-        className="dt-simulation-drawer"
-        data-open={simulationOpen ? "true" : "false"}
-        inert={!simulationOpen}
-        onKeyDown={handleDrawerKeyDown}
-        role="dialog"
-        style={
-          {
-            "--dt-simulation-drawer-width": `${simulationWidth}px`,
-          } as CSSProperties
-        }
-        tabIndex={-1}
+      <GlassSimulationPopover
+        anchor={<span aria-hidden="true" className="dt-simulation-popover-anchor" />}
+        bodyClassName="h-full"
+        contentClassName="dt-simulation-popover"
+        onOpenChange={(open) => {
+          if (open) setSimulationOpen(true);
+          else closeSimulation();
+        }}
+        open={simulationOpen}
+        side="bottom"
+        sideOffset={8}
       >
-        <div
-          aria-label="Resize simulation workspace"
-          aria-orientation="vertical"
-          aria-valuemax={SIMULATION_DRAWER_MAX_WIDTH}
-          aria-valuemin={SIMULATION_DRAWER_MIN_WIDTH}
-          aria-valuenow={simulationWidth}
-          className="dt-simulation-drawer__resize"
-          onKeyDown={(event) => {
-            const step = event.shiftKey ? 40 : 10;
-            const direction =
-              getComputedStyle(event.currentTarget).direction === "rtl"
-                ? -1
-                : 1;
-            if (event.key === "ArrowLeft") {
-              event.preventDefault();
-              updateSimulationWidth(simulationWidth + direction * step);
-            } else if (event.key === "ArrowRight") {
-              event.preventDefault();
-              updateSimulationWidth(simulationWidth - direction * step);
-            } else if (event.key === "Home") {
-              event.preventDefault();
-              updateSimulationWidth(SIMULATION_DRAWER_MIN_WIDTH);
-            } else if (event.key === "End") {
-              event.preventDefault();
-              updateSimulationWidth(SIMULATION_DRAWER_MAX_WIDTH);
-            }
-          }}
-          onPointerDown={handleResizeStart}
-          role="separator"
-          tabIndex={0}
-        />
-        <header className="dt-simulation-drawer__header">
-          <span className="dt-simulation-drawer__title">
-            <PanelRightClose aria-hidden="true" />
-            Simulation workspace
-          </span>
-          <Button
-            aria-label="Close simulation workspace"
-            data-dt-simulation-close=""
-            onClick={closeSimulation}
-            size="icon"
-            variant="ghost"
-          >
-            <X aria-hidden="true" />
-          </Button>
-        </header>
-        <PluginContentHost contentEl={pluginContentEl} />
-      </aside>
+        <div className="dt-simulation-content">
+          <PluginContentHost contentEl={pluginContentEl} />
+          <SimulationAreaChart samples={areaSamples} />
+        </div>
+      </GlassSimulationPopover>
     </div>
   );
 }

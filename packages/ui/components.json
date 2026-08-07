@@ -1,0 +1,20 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/globals.css",
+    "baseColor": "zinc",
+    "cssVariables": true
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@geolibre/ui/components",
+    "utils": "@geolibre/ui/lib/utils",
+    "ui": "@geolibre/ui/components",
+    "lib": "@geolibre/ui/lib",
+    "hooks": "@geolibre/ui/hooks"
+  }
+}

@@ -218,15 +218,10 @@ test.describe("WattByte Nexus Figma workspace", () => {
       name: "Simulation workspace",
     });
     await expect(simulationDialog).toBeVisible();
-    await expect(
-      simulationDialog.getByRole("button", {
-        name: "Close simulation workspace",
-      })
-    ).toBeFocused();
+    await expect(simulationDialog).not.toHaveAttribute("aria-modal", "true");
+    await expect(page.locator(".dt-live-view__map")).toBeVisible();
     await expect(page.locator(".dt-demo")).toBeVisible();
-    await page
-      .getByRole("button", { name: "Close simulation workspace" })
-      .click();
+    await page.keyboard.press("Escape");
     await expect(startInvestigation).toBeFocused();
 
     await rail.getByRole("button", { name: "Scenarios", exact: true }).click();
@@ -242,9 +237,7 @@ test.describe("WattByte Nexus Figma workspace", () => {
     await expect(
       page.getByRole("heading", { name: "Simulation Scenario" })
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Close simulation workspace" })
-      .click();
+    await page.keyboard.press("Escape");
 
     await rail.getByRole("button", { name: "Runs", exact: true }).click();
     await expect(page).toHaveURL(/\/regions\/boulder-co\/runs$/);
@@ -258,9 +251,7 @@ test.describe("WattByte Nexus Figma workspace", () => {
     await expect(
       page.getByRole("heading", { name: "Prior runs" })
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Close simulation workspace" })
-      .click();
+    await page.keyboard.press("Escape");
 
     await rail.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(
@@ -307,17 +298,10 @@ test.describe("WattByte Nexus Figma workspace", () => {
     );
 
     await page.getByRole("button", { name: "Start investigation" }).click();
-    const drawer = page.getByRole("dialog", {
-      name: "Simulation workspace",
-    });
-    const drawerBefore = (await drawer.boundingBox())?.width ?? 0;
-    await dragSeparator(page, "Resize simulation workspace", -48);
-    expect((await drawer.boundingBox())?.width ?? 0).toBeGreaterThan(
-      drawerBefore + 35
-    );
-    await page
-      .getByRole("button", { name: "Close simulation workspace" })
-      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Simulation workspace" })
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
 
     const rail = page.getByRole("complementary", {
       name: "Digital Twin navigation",

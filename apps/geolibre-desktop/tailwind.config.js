@@ -48,6 +48,12 @@ export default {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
+        glass: {
+          DEFAULT: "hsl(var(--glass))",
+          foreground: "hsl(var(--glass-foreground))",
+          border: "hsl(var(--glass-border))",
+          muted: "hsl(var(--glass-muted))",
+        },
       },
     },
   },

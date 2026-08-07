@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  defaultDigitalTwinApiUrl,
   fetchDigitalTwinEarthEngineCatalog,
   groupDigitalTwinEarthEngineLayers,
   normalizeDigitalTwinApiUrl,
@@ -12,6 +13,18 @@ function json(value: unknown, status = 200): Response {
 }
 
 describe("Digital Twin Earth Engine catalog", () => {
+  it("uses the same-origin Digital Twin proxy during local Vite development", () => {
+    const runtimeWindow = {
+      location: new URL("http://127.0.0.1:5173/"),
+      localStorage: { getItem: () => "http://127.0.0.1:8000" },
+    } as unknown as NonNullable<Parameters<typeof defaultDigitalTwinApiUrl>[0]>;
+
+    assert.equal(
+      defaultDigitalTwinApiUrl(runtimeWindow),
+      "http://127.0.0.1:5173/__digital_twin_api",
+    );
+  });
+
   it("normalizes absolute HTTP API URLs", () => {
     assert.equal(normalizeDigitalTwinApiUrl("https://engine.example.com/api/?debug=1#x"), "https://engine.example.com/api");
     assert.throws(() => normalizeDigitalTwinApiUrl("file:///tmp/engine"), /HTTP or HTTPS/);

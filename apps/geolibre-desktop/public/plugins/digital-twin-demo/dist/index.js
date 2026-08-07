@@ -4,6 +4,7 @@ const PLUGIN_VERSION = "0.4.0";
 const PANEL_ID = "digital-twin-demo-panel";
 const API_STORAGE_KEY = "geolibre.digital-twin-demo.api-url";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
+const DEV_API_PROXY_PATH = "/__digital_twin_api";
 const ASSET_ENTRY_ID = "digital-twin-demo-assets";
 const ASSET_SOURCE_ID = "digital-twin-demo-assets-source";
 const TREE_LAYER_ID = "digital-twin-demo-tree-points";
@@ -11,7 +12,10 @@ export const TREE_CIRCLE_RADIUS_PX = 5;
 const POWER_LINE_LAYER_ID = "digital-twin-demo-power-lines";
 const POWER_LINE_POLE_LAYER_ID = "digital-twin-demo-power-line-poles";
 const POWER_LINE_CONDUCTOR_LAYER_ID = "digital-twin-demo-power-line-conductors";
+const SELECTED_POWER_LINE_LAYER_ID = "digital-twin-demo-selected-power-line";
 const POWER_LINE_MODEL_PATH = "assets/13.8kv_power_pole.glb";
+export const DIGITAL_TWIN_MAP_ASSET_SELECTION_EVENT =
+  "geolibre:digital-twin-map-asset-selection";
 // The GLB is 9.375 m tall in its authored coordinate system. Render it as a
 // compact neighborhood distribution pole: 8.5 m (about 28 ft) above ground.
 // This remains realistic while keeping the poles in proportion with nearby
@@ -92,6 +96,48 @@ function asFeatureCollection(value, label = "GeoJSON") {
   return value;
 }
 
+function ringAreaSquareMeters(ring) {
+  if (!Array.isArray(ring) || ring.length < 4) return 0;
+  const radius = 6_371_008.8;
+  let sum = 0;
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    const current = validCoordinate(ring[index]);
+    const next = validCoordinate(ring[index + 1]);
+    if (!current || !next) continue;
+    const longitudeDelta = ((next[0] - current[0]) * Math.PI) / 180;
+    const currentLatitude = (current[1] * Math.PI) / 180;
+    const nextLatitude = (next[1] * Math.PI) / 180;
+    sum += longitudeDelta * (2 + Math.sin(currentLatitude) + Math.sin(nextLatitude));
+  }
+  return Math.abs((sum * radius * radius) / 2);
+}
+
+function polygonAreaSquareMeters(coordinates) {
+  if (!Array.isArray(coordinates) || !coordinates.length) return 0;
+  return Math.max(
+    0,
+    ringAreaSquareMeters(coordinates[0]) -
+      coordinates.slice(1).reduce((total, ring) => total + ringAreaSquareMeters(ring), 0),
+  );
+}
+
+function featureCollectionAreaHectares(collection) {
+  const totalSquareMeters = asFeatureCollection(collection).features.reduce((total, feature) => {
+    const geometry = feature?.geometry;
+    if (geometry?.type === "Polygon") {
+      return total + polygonAreaSquareMeters(geometry.coordinates);
+    }
+    if (geometry?.type === "MultiPolygon" && Array.isArray(geometry.coordinates)) {
+      return total + geometry.coordinates.reduce(
+        (sum, polygon) => sum + polygonAreaSquareMeters(polygon),
+        0,
+      );
+    }
+    return total;
+  }, 0);
+  return Number((totalSquareMeters / 10_000).toFixed(2));
+}
+
 function validCoordinate(coordinate) {
   const longitude = Number(coordinate?.[0]);
   const latitude = Number(coordinate?.[1]);
@@ -101,6 +147,153 @@ function validCoordinate(coordinate) {
     Math.abs(latitude) <= 90
     ? [longitude, latitude]
     : null;
+}
+
+export function buildOperationalPowerLineFeatures(value) {
+  const lines = Array.isArray(value) ? value : asPageItems(value);
+  const features = lines.map((line) => {
+    const powerLineId = nonEmptyString(line?.power_line_id, "Power line ID");
+    const geometry = line?.geometry;
+    if (!isRecord(geometry) || geometry.type !== "LineString") {
+      throw new Error(`Power line ${powerLineId} must include a LineString geometry.`);
+    }
+    const coordinates = Array.isArray(geometry.coordinates)
+      ? geometry.coordinates.map(validCoordinate).filter(Boolean)
+      : [];
+    if (coordinates.length < 2) {
+      throw new Error(`Power line ${powerLineId} must include at least two coordinates.`);
+    }
+    return {
+      type: "Feature",
+      properties: { kind: "operational_power_line", power_line_id: powerLineId },
+      geometry: { type: "LineString", coordinates },
+    };
+  });
+  return emptyFeatureCollection(features);
+}
+
+function metric(label, value) {
+  return { label, value };
+}
+
+function fixedMetric(value, digits, unit) {
+  const number = finiteNumber(value, unit);
+  return `${number.toFixed(digits)} ${unit}`;
+}
+
+function optionalFixedMetric(value, digits, unit) {
+  return value == null ? "Not available" : fixedMetric(value, digits, unit);
+}
+
+function humanizeToken(value) {
+  const text = String(value ?? "unknown").replaceAll("_", "-");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export function buildPowerLineDetailView(detail) {
+  if (!isRecord(detail)) throw new Error("Power-line detail must be an object.");
+  const powerLineId = nonEmptyString(detail.power_line_id, "Power line ID");
+  const regionId = nonEmptyString(detail.region_id, "Region ID");
+  const conductor = detail.conductor;
+  if (!isRecord(conductor)) throw new Error("Power-line conductor details are required.");
+  const geometry = detail.geometry;
+  if (!isRecord(geometry) || !Array.isArray(geometry.coordinates)) {
+    throw new Error("Power-line geometry is required.");
+  }
+  const endpoints = geometry.coordinates.map(validCoordinate).filter(Boolean);
+  if (endpoints.length < 2) throw new Error("Power-line geometry requires two endpoints.");
+  const physics = detail.latest_physics;
+  const staticMetrics = [
+    metric("Span length", fixedMetric(conductor.span_length_m, 1, "m")),
+    metric("Mass", fixedMetric(conductor.mass_per_meter_kg_m, 3, "kg/m")),
+    metric("Aerodynamic diameter", fixedMetric(conductor.diameter_m, 4, "m")),
+    metric("Conductor diameter", fixedMetric(conductor.conductor_diameter_m, 4, "m")),
+    metric("Horizontal tension", fixedMetric(conductor.horizontal_tension_n, 0, "N")),
+    metric("Static sag", optionalFixedMetric(conductor.static_sag_m, 3, "m")),
+    metric("Drag coefficient", finiteNumber(conductor.drag_coefficient, "Drag coefficient").toFixed(2)),
+    metric("Air density", fixedMetric(conductor.air_density_kg_m3, 3, "kg/m³")),
+    metric("Elastic modulus", conductor.elastic_modulus_pa == null
+      ? "Not available"
+      : `${(finiteNumber(conductor.elastic_modulus_pa, "Elastic modulus") / 1e9).toFixed(1)} GPa`),
+    metric("Cross-sectional area", optionalFixedMetric(conductor.cross_sectional_area_m2, 6, "m²")),
+  ];
+
+  const base = {
+    powerLineId,
+    regionId,
+    geometryMetrics: [
+      metric(
+        "Endpoints",
+        `${endpoints[0][1].toFixed(5)}, ${endpoints[0][0].toFixed(5)} → ${endpoints.at(-1)[1].toFixed(5)}, ${endpoints.at(-1)[0].toFixed(5)}`,
+      ),
+      ...(isRecord(geometry.bounds)
+        ? [metric(
+            "Bounds",
+            `${finiteNumber(geometry.bounds.south, "South bound").toFixed(5)}, ${finiteNumber(geometry.bounds.west, "West bound").toFixed(5)} → ${finiteNumber(geometry.bounds.north, "North bound").toFixed(5)}, ${finiteNumber(geometry.bounds.east, "East bound").toFixed(5)}`,
+          )]
+        : []),
+    ],
+    staticMetrics,
+    physicsMetrics: [],
+    lineage: [],
+    footprintNote: "",
+  };
+  if (physics == null) {
+    return {
+      ...base,
+      statusLabel: "Awaiting first completed tick",
+      statusDetail: "Static conductor inputs are available.",
+      statusTone: "muted",
+    };
+  }
+  if (!isRecord(physics) || (physics.status !== "succeeded" && physics.status !== "failed")) {
+    throw new Error("Latest physics has an unsupported status.");
+  }
+  const tick = finiteNumber(physics.tick, "Physics tick");
+  const lineage = [
+    metric("Weather", formatDateTime(physics.weather_version)),
+    metric("Weather source", nonEmptyString(physics.weather_source_ref, "Weather source")),
+    metric("Model", nonEmptyString(physics.model_version, "Model version")),
+    metric("Model checksum", nonEmptyString(physics.model_checksum, "Model checksum")),
+    metric("Feature contract", nonEmptyString(physics.feature_contract_version, "Feature contract")),
+    metric("Line snapshot", String(finiteNumber(physics.line_snapshot, "Line snapshot"))),
+  ];
+  if (physics.solver_version) lineage.push(metric("Solver", physics.solver_version));
+  if (physics.routing_reason) lineage.push(metric("Routing", humanizeToken(physics.routing_reason)));
+  if (physics.cached_from_tick != null) {
+    lineage.push(metric("Cached from tick", String(physics.cached_from_tick)));
+  }
+  if (physics.surrogate_confidence != null) {
+    lineage.push(metric("Surrogate confidence", `${(physics.surrogate_confidence * 100).toFixed(0)}%`));
+  }
+  if (physics.status === "failed") {
+    return {
+      ...base,
+      lineage,
+      statusLabel: "Solve failed",
+      statusDetail: `${humanizeToken(physics.failure_kind)} · tick ${tick}`,
+      statusTone: "error",
+    };
+  }
+  const envelope = physics.collision_envelope_m;
+  if (!isRecord(envelope)) throw new Error("Succeeded physics must include a collision envelope.");
+  return {
+    ...base,
+    lineage,
+    statusLabel: "Physics available",
+    statusDetail: `${String(physics.source).toUpperCase()} · tick ${tick} · ${finiteNumber(physics.wind_speed_mps, "Wind speed").toFixed(1)} m/s wind`,
+    statusTone: "ready",
+    physicsMetrics: [
+      metric("Midspan displacement", fixedMetric(physics.midspan_displacement_m, 2, "m")),
+      metric("Max displacement", fixedMetric(physics.max_displacement_m, 2, "m")),
+      metric("Max position", fixedMetric(physics.max_displacement_position_m, 1, "m")),
+      metric(
+        "Solved footprint",
+        `x ${finiteNumber(envelope.min_x, "Envelope min x").toFixed(2)}–${finiteNumber(envelope.max_x, "Envelope max x").toFixed(2)} m · y ${finiteNumber(envelope.min_y, "Envelope min y").toFixed(2)}–${finiteNumber(envelope.max_y, "Envelope max y").toFixed(2)} m`,
+      ),
+    ],
+    footprintNote: "The solved footprint is a conductor collision envelope, not verified vegetation contact or clearance.",
+  };
 }
 
 function powerLinePaths(collection) {
@@ -120,6 +313,14 @@ function powerLinePaths(collection) {
     }
   }
   return paths;
+}
+
+export function selectableMapAssetKind(feature) {
+  const kind = feature?.properties?.kind;
+  if (kind === "tree") return "tree";
+  if (kind === "power_line" || kind === "operational_power_line") return "power_line";
+  if (kind === "pole") return "pole";
+  return null;
 }
 
 function coordinateKey([longitude, latitude]) {
@@ -278,16 +479,34 @@ export function normalizeApiBaseUrl(value) {
   return parsed.href.replace(/\/+$/, "");
 }
 
-function defaultApiUrl() {
+function devProxyApiUrl(runtimeWindow) {
+  const location = runtimeWindow?.location;
+  if (
+    !location ||
+    location.port !== "5173" ||
+    !["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)
+  ) {
+    return null;
+  }
+  return new URL(DEV_API_PROXY_PATH, location.origin).href.replace(/\/+$/, "");
+}
+
+export function defaultApiUrl(
+  runtimeWindow = typeof window === "undefined" ? undefined : window,
+) {
   const runtime =
-    typeof window !== "undefined" && typeof window.__DIGITAL_TWIN_API_URL__ === "string"
-      ? window.__DIGITAL_TWIN_API_URL__
+    typeof runtimeWindow?.__DIGITAL_TWIN_API_URL__ === "string"
+      ? runtimeWindow.__DIGITAL_TWIN_API_URL__
       : null;
-  const stored =
-    typeof window !== "undefined"
-      ? window.localStorage?.getItem(API_STORAGE_KEY)
-      : null;
-  for (const candidate of [runtime, stored, DEFAULT_API_URL]) {
+  const stored = runtimeWindow?.localStorage?.getItem(API_STORAGE_KEY) ?? null;
+  const proxy = devProxyApiUrl(runtimeWindow);
+  for (const candidate of [
+    runtime,
+    stored === DEFAULT_API_URL ? null : stored,
+    proxy,
+    stored,
+    DEFAULT_API_URL,
+  ]) {
     if (!candidate) continue;
     try {
       return normalizeApiBaseUrl(candidate);
@@ -462,6 +681,16 @@ export function createDigitalTwinClient(baseUrl, options = {}) {
         signal,
         cache: "no-cache",
       }),
+    listPowerLines: (regionId, signal) =>
+      request(`/api/v1/regions/${encodeURIComponent(regionId)}/power-lines`, {
+        signal,
+        cache: "no-cache",
+      }),
+    getPowerLine: (regionId, powerLineId, signal) =>
+      request(
+        `/api/v1/regions/${encodeURIComponent(regionId)}/power-lines/${encodeURIComponent(powerLineId)}`,
+        { signal, cache: "no-cache" },
+      ),
     getWeatherDatasets: (regionId, signal) =>
       request(`/api/v1/regions/${encodeURIComponent(regionId)}/weather-datasets?limit=100`, {
         signal,
@@ -1140,6 +1369,64 @@ function button(label, className = "dt-button") {
   return node;
 }
 
+function powerLineMetricGrid(metrics) {
+  const grid = el("dl", "dt-power-line-metrics");
+  for (const item of metrics) {
+    const row = el("div", "dt-power-line-metric");
+    row.append(el("dt", "", item.label), el("dd", "", item.value));
+    grid.append(row);
+  }
+  return grid;
+}
+
+function powerLinePopupSection(title, metrics, open = true) {
+  const section = el("details", "dt-power-line-popup-section");
+  section.open = open;
+  section.append(el("summary", "", title), powerLineMetricGrid(metrics));
+  return section;
+}
+
+function loadingPowerLinePopup(powerLineId) {
+  const content = el("div", "dt-power-line-popup-content");
+  content.append(
+    el("div", "dt-power-line-popup-kicker", "Operational power line"),
+    el("h3", "", powerLineId),
+    el("div", "dt-power-line-popup-loading", "Loading conductor and physics details…"),
+  );
+  return content;
+}
+
+function errorPowerLinePopup(powerLineId, message) {
+  const content = el("div", "dt-power-line-popup-content");
+  content.append(
+    el("div", "dt-power-line-popup-kicker", "Operational power line"),
+    el("h3", "", powerLineId),
+    el("div", "dt-power-line-popup-error", message),
+  );
+  return content;
+}
+
+function renderPowerLinePopupContent(view) {
+  const content = el("div", "dt-power-line-popup-content");
+  content.append(
+    el("div", "dt-power-line-popup-kicker", "Operational power line"),
+    el("h3", "", view.powerLineId),
+    el("div", "dt-power-line-popup-region", `Region ${view.regionId}`),
+  );
+  const status = el("div", `dt-power-line-popup-status dt-power-line-popup-status-${view.statusTone}`);
+  status.append(el("strong", "", view.statusLabel), el("span", "", view.statusDetail));
+  content.append(status, powerLinePopupSection("Geometry", view.geometryMetrics));
+  if (view.physicsMetrics.length) {
+    content.append(powerLinePopupSection("Latest physics", view.physicsMetrics));
+  }
+  if (view.footprintNote) content.append(el("p", "dt-power-line-popup-note", view.footprintNote));
+  content.append(
+    powerLinePopupSection("Conductor", view.staticMetrics, false),
+    ...(view.lineage.length ? [powerLinePopupSection("Lineage", view.lineage, false)] : []),
+  );
+  return content;
+}
+
 function labelledField(label, input) {
   const wrapper = el("label", "dt-field");
   wrapper.append(el("span", "dt-field-label", label), input);
@@ -1446,9 +1733,10 @@ export function buildSimulationRunStatusView(run) {
 }
 
 class AssetMapController {
-  constructor(app, onIgnitionClick) {
+  constructor(app, onIgnitionClick, onPowerLineClick) {
     this.app = app;
     this.onIgnitionClick = onIgnitionClick;
+    this.onPowerLineClick = onPowerLineClick;
     this.map = app.getMap?.() ?? null;
     this.data = emptyFeatureCollection();
     this.selection = emptyFeatureCollection();
@@ -1463,6 +1751,8 @@ class AssetMapController {
     this.layerState = { visible: true, opacity: 1 };
     this.onStyleData = () => this.ensureLayers();
     this.mapContainer = this.map?.getContainer?.() ?? null;
+    this.powerLinePopup = null;
+    this.selectedPowerLineId = null;
     this.treeCursorActive = false;
     this.treeNearEvent = (event) => {
       if (!this.map || !this.mapContainer || !this.layerState.visible) return null;
@@ -1482,6 +1772,65 @@ class AssetMapController {
         if (distance <= nearestDistance) {
           nearest = feature;
           nearestDistance = distance;
+        }
+      }
+      return nearest;
+    };
+    this.powerLineNearEvent = (event) => {
+      if (!this.map || !this.mapContainer || !this.layerState.visible) return null;
+      const bounds = this.mapContainer.getBoundingClientRect();
+      const point = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+      let nearest = null;
+      let nearestDistance = 10 ** 2;
+      for (const feature of this.data.features) {
+        if (
+          feature?.properties?.kind !== "power_line" &&
+          feature?.properties?.kind !== "operational_power_line"
+        ) continue;
+        const coordinates = feature?.geometry?.coordinates;
+        if (!Array.isArray(coordinates)) continue;
+        for (let index = 1; index < coordinates.length; index += 1) {
+          const start = this.map.project(coordinates[index - 1]);
+          const end = this.map.project(coordinates[index]);
+          const dx = end.x - start.x;
+          const dy = end.y - start.y;
+          const lengthSquared = dx ** 2 + dy ** 2;
+          const progress = lengthSquared ? Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)) : 0;
+          const distance = (start.x + progress * dx - point.x) ** 2 + (start.y + progress * dy - point.y) ** 2;
+          if (distance <= nearestDistance) { nearest = feature; nearestDistance = distance; }
+        }
+      }
+      return nearest;
+    };
+    this.poleNearEvent = (event) => {
+      if (!this.map || !this.mapContainer || !this.layerState.visible) return null;
+      const bounds = this.mapContainer.getBoundingClientRect();
+      const point = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+      let nearest = null;
+      let nearestDistance = 24 ** 2;
+      for (const feature of this.data.features) {
+        if (
+          feature?.properties?.kind !== "power_line" &&
+          feature?.properties?.kind !== "operational_power_line"
+        ) continue;
+        const geometry = feature?.geometry;
+        const paths =
+          geometry?.type === "LineString"
+            ? [geometry.coordinates]
+            : geometry?.type === "MultiLineString"
+              ? geometry.coordinates
+              : [];
+        for (const path of paths) {
+          if (!Array.isArray(path)) continue;
+          for (const coordinate of path) {
+            if (!Array.isArray(coordinate) || coordinate.length < 2) continue;
+            const projected = this.map.project(coordinate);
+            const distance = (projected.x - point.x) ** 2 + (projected.y - point.y) ** 2;
+            if (distance <= nearestDistance) {
+              nearest = feature;
+              nearestDistance = distance;
+            }
+          }
         }
       }
       return nearest;
@@ -1517,6 +1866,20 @@ class AssetMapController {
     this.onMapContainerClick = (event) => {
       const canvas = this.map?.getCanvas?.();
       if (!this.map || !this.mapContainer || !canvas?.contains(event.target)) return;
+      const nearestPole = this.poleNearEvent(event);
+      const nearestPowerLine = nearestPole ?? this.powerLineNearEvent(event);
+      if (nearestPowerLine) {
+        this.dispatchMapAssetSelection(
+          nearestPole ? { properties: { kind: "pole" } } : nearestPowerLine,
+        );
+        const bounds = this.mapContainer.getBoundingClientRect();
+        const anchor = this.map.unproject({
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+        });
+        this.onPowerLineClick(nearestPowerLine, [anchor.lng, anchor.lat]);
+        return;
+      }
       const selectedPoint = this.selectionNearEvent(event);
       const nearestTree = this.treeNearEvent(event);
       const bounds = this.mapContainer.getBoundingClientRect();
@@ -1524,12 +1887,13 @@ class AssetMapController {
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
       });
+      this.dispatchMapAssetSelection(selectedPoint ?? nearestTree);
       this.onIgnitionClick(
         selectedPoint ?? nearestTree ?? buildIgnitionPointFeature([lngLat.lng, lngLat.lat]),
       );
     };
     this.onMapContainerMouseMove = (event) => {
-      this.setTreeCursor(Boolean(this.selectionNearEvent(event) ?? this.treeNearEvent(event)));
+      this.setTreeCursor(Boolean(this.poleNearEvent(event) ?? this.powerLineNearEvent(event) ?? this.selectionNearEvent(event) ?? this.treeNearEvent(event)));
     };
     this.onMapContainerMouseLeave = () => this.setTreeCursor(false);
     this.onEnter = () => {
@@ -1543,6 +1907,14 @@ class AssetMapController {
     this.mapContainer?.addEventListener("mousemove", this.onMapContainerMouseMove, true);
     this.mapContainer?.addEventListener("mouseleave", this.onMapContainerMouseLeave);
     void this.initializePowerLineOverlay();
+  }
+
+  dispatchMapAssetSelection(feature) {
+    window.dispatchEvent(
+      new CustomEvent(DIGITAL_TWIN_MAP_ASSET_SELECTION_EVENT, {
+        detail: { kind: selectableMapAssetKind(feature) },
+      }),
+    );
   }
 
   async initializePowerLineOverlay() {
@@ -1672,6 +2044,65 @@ class AssetMapController {
     if (source?.setData) source.setData(this.selection);
   }
 
+  setSelectedPowerLine(powerLineId) {
+    this.selectedPowerLineId = powerLineId ?? null;
+    const map = this.map;
+    if (!map?.getLayer(SELECTED_POWER_LINE_LAYER_ID)) return;
+    try {
+      map.setFilter(SELECTED_POWER_LINE_LAYER_ID, [
+        "all",
+        ["==", ["get", "kind"], "operational_power_line"],
+        ["==", ["get", "power_line_id"], this.selectedPowerLineId ?? ""],
+      ]);
+    } catch {
+      // A style transition can remove the layer between getLayer and setFilter.
+    }
+  }
+
+  showPowerLinePopup(anchor, content, onClose) {
+    if (!this.map || !this.mapContainer || !Array.isArray(anchor)) return;
+    this.closePowerLinePopup(false);
+    const popup = document.createElement("div");
+    popup.className = "dt-power-line-popup";
+    popup.setAttribute("role", "dialog");
+    popup.setAttribute("aria-label", "Power-line details");
+    const close = button("×", "dt-power-line-popup-close");
+    close.title = "Close power-line details";
+    close.setAttribute("aria-label", close.title);
+    close.addEventListener("click", () => this.closePowerLinePopup(true));
+    const body = el("div", "dt-power-line-popup-body");
+    body.append(content);
+    popup.append(close, body);
+    this.mapContainer.append(popup);
+    const update = () => {
+      if (!this.map || !popup.isConnected) return;
+      const point = this.map.project(anchor);
+      const horizontalMargin = popup.offsetWidth / 2 + 12;
+      const clampedX = Math.max(
+        horizontalMargin,
+        Math.min(this.mapContainer.clientWidth - horizontalMargin, point.x),
+      );
+      popup.classList.toggle("dt-power-line-popup-below", point.y < popup.offsetHeight + 24);
+      popup.style.left = `${clampedX}px`;
+      popup.style.top = `${point.y}px`;
+    };
+    this.powerLinePopup = { popup, update, onClose };
+    this.map.on("move", update);
+    this.map.on("resize", update);
+    update();
+  }
+
+  closePowerLinePopup(notify = true) {
+    const active = this.powerLinePopup;
+    if (!active) return;
+    this.map?.off("move", active.update);
+    this.map?.off("resize", active.update);
+    active.popup.remove();
+    this.powerLinePopup = null;
+    this.setSelectedPowerLine(null);
+    if (notify) active.onClose?.();
+  }
+
   ensureLayers() {
     const map = this.map;
     if (!map || typeof map.isStyleLoaded === "function" && !map.isStyleLoaded()) return;
@@ -1739,11 +2170,28 @@ class AssetMapController {
           id: POWER_LINE_LAYER_ID,
           type: "line",
           source: ASSET_SOURCE_ID,
-          filter: ["==", ["get", "kind"], "power_line"],
+          filter: ["in", ["get", "kind"], ["literal", ["power_line", "operational_power_line"]]],
           paint: {
             "line-color": "#2d3542",
             "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 15, 4],
             "line-opacity": 0.9,
+          },
+        });
+      }
+      if (!map.getLayer(SELECTED_POWER_LINE_LAYER_ID)) {
+        map.addLayer({
+          id: SELECTED_POWER_LINE_LAYER_ID,
+          type: "line",
+          source: ASSET_SOURCE_ID,
+          filter: [
+            "all",
+            ["==", ["get", "kind"], "operational_power_line"],
+            ["==", ["get", "power_line_id"], this.selectedPowerLineId ?? ""],
+          ],
+          paint: {
+            "line-color": "#f06b18",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 8, 4, 15, 8],
+            "line-opacity": 0.95,
           },
         });
       }
@@ -1800,6 +2248,7 @@ class AssetMapController {
       // update so satellite imagery can never cover the selected points.
       if (map.getLayer(SELECTION_HALO_LAYER_ID)) map.moveLayer(SELECTION_HALO_LAYER_ID);
       if (map.getLayer(SELECTION_LAYER_ID)) map.moveLayer(SELECTION_LAYER_ID);
+      if (map.getLayer(SELECTED_POWER_LINE_LAYER_ID)) map.moveLayer(SELECTED_POWER_LINE_LAYER_ID);
       if (!this.bound) {
         map.on("mouseenter", TREE_LAYER_ID, this.onEnter);
         map.on("mouseleave", TREE_LAYER_ID, this.onLeave);
@@ -1816,7 +2265,7 @@ class AssetMapController {
     if (!map) return;
     if (!this.layerState.visible) this.setTreeCursor(false);
     const visibility = this.layerState.visible ? "visible" : "none";
-    for (const layerId of [POWER_LINE_LAYER_ID, TREE_LAYER_ID]) {
+    for (const layerId of [POWER_LINE_LAYER_ID, TREE_LAYER_ID, SELECTED_POWER_LINE_LAYER_ID]) {
       if (!map.getLayer(layerId)) continue;
       try {
         map.setLayoutProperty(layerId, "visibility", visibility);
@@ -1833,7 +2282,14 @@ class AssetMapController {
       map.setPaintProperty(
         TREE_LAYER_ID,
         "circle-stroke-opacity",
-        this.layerState.opacity,
+        0.8 * this.layerState.opacity,
+      );
+    }
+    if (map.getLayer(SELECTED_POWER_LINE_LAYER_ID)) {
+      map.setPaintProperty(
+        SELECTED_POWER_LINE_LAYER_ID,
+        "line-opacity",
+        0.95 * this.layerState.opacity,
       );
     }
     this.renderPowerLineObjects();
@@ -1841,6 +2297,7 @@ class AssetMapController {
 
   destroy() {
     this.destroyed = true;
+    this.closePowerLinePopup(false);
     this.stateUnsubscribe?.();
     this.entryUnregister?.();
     this.stateUnsubscribe = null;
@@ -1865,6 +2322,7 @@ class AssetMapController {
     for (const layerId of [
       SELECTION_LAYER_ID,
       SELECTION_HALO_LAYER_ID,
+      SELECTED_POWER_LINE_LAYER_ID,
       TREE_LAYER_ID,
       POWER_LINE_LAYER_ID,
       REGION_LINE_LAYER_ID,
@@ -2588,11 +3046,30 @@ class DigitalTwinDemoPanel {
     this.visualizationAbort = null;
     this.weatherRefreshAbort = null;
     this.weatherRefreshTimer = null;
+    this.powerLineDetailAbort = null;
+    this.mapPresentationTimer = null;
     this.destroyed = false;
     this.submissionKeys = null;
-    this.assetMap = new AssetMapController(app, (feature) => this.toggleTree(feature));
+    this.areaSeries = [];
+    this.assetMap = new AssetMapController(
+      app,
+      (feature) => this.toggleTree(feature),
+      (feature, anchor) => this.inspectPowerLine(feature, anchor),
+    );
     this.wildfireMap = new WildfireMapController(app);
     this.build();
+    this.onConnectionSettings = (event) => {
+      const apiUrl = event?.detail?.apiUrl;
+      if (typeof apiUrl !== "string" || !apiUrl.trim()) return;
+      this.apiInput.value = apiUrl;
+      void this.connect();
+    };
+    window.addEventListener("geolibre:digital-twin-connection", this.onConnectionSettings);
+    this.onDigitalTwinView = (event) => {
+      this.setActiveView(event?.detail?.view);
+    };
+    window.addEventListener("geolibre:digital-twin-view", this.onDigitalTwinView);
+    this.setActiveView(/\/runs(?:\/|$)/.test(window.location.pathname) ? "runs" : "live");
     this.replayControl = new SimulationReplayControl((frame) =>
       this.replayController?.showTick(frame.tick),
     );
@@ -2607,7 +3084,7 @@ class DigitalTwinDemoPanel {
 
     const main = el("div", "dt-console-main");
     const header = el("header", "dt-console-header");
-    const title = el("h2", "dt-title", "Wildfire run");
+    const title = el("h2", "dt-title", "Simulation Scenario");
     this.connectionBadge = el("span", "dt-status dt-status-muted", "Connecting");
     header.append(title, this.connectionBadge);
 
@@ -2617,13 +3094,8 @@ class DigitalTwinDemoPanel {
       el("span", "dt-kicker", "Area"),
       (this.areaValue = el("strong", "dt-summary-value", "Not selected")),
     );
-    const weatherSummary = el("div", "dt-summary-item");
-    weatherSummary.append(
-      el("span", "dt-kicker", "Weather"),
-      (this.weatherValue = el("strong", "dt-summary-value", "Not available")),
-    );
     this.editAreaButton = button("Edit", "dt-text-button dt-summary-edit");
-    summary.append(areaSummary, weatherSummary, this.editAreaButton);
+    summary.append(areaSummary, this.editAreaButton);
 
     this.connectionNotice = el("div", "dt-connection-alert");
     const noticeCopy = el("div", "dt-connection-copy");
@@ -2644,19 +3116,10 @@ class DigitalTwinDemoPanel {
     this.apiInput.value = defaultApiUrl();
     this.apiInput.autocomplete = "off";
     this.apiInput.spellcheck = false;
-    this.connectButton = button("Reconnect");
-    this.connectButton.addEventListener("click", () => this.connect());
-    const engineRow = el("div", "dt-inline");
-    engineRow.append(this.apiInput, this.connectButton);
-    this.engineDetail = el("div", "dt-hint", "Checking Engine readiness…");
-    this.engineSection = el("details", "dt-drawer dt-secondary-drawer");
-    this.engineSection.append(el("summary", "", "Connection settings"));
-    const engineBody = el("div", "dt-drawer-body");
-    engineBody.append(labelledField("API URL", engineRow), this.engineDetail);
-    this.engineSection.append(engineBody);
     this.openEngineButton.addEventListener("click", () => {
-      this.engineSection.open = true;
-      this.engineSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      window.dispatchEvent(new CustomEvent("geolibre:open-settings", {
+        detail: { section: "connection" },
+      }));
     });
 
     this.regionSelect = el("select", "dt-select");
@@ -2699,14 +3162,18 @@ class DigitalTwinDemoPanel {
     const ignition = el("section", "dt-ignition");
     const ignitionHeading = el("div", "dt-ignition-heading");
     ignitionHeading.append(
-      el("span", "dt-ignition-label", "Ignition"),
-      el("h3", "", "Place ignition points on the map"),
+      el("span", "dt-ignition-label", "Geometry"),
+      el("h3", "", "Selected geometry"),
     );
     this.selectionCount = el("strong", "dt-selection-count", "0 selected");
+    this.lineSelectionCount = el("strong", "dt-selection-count", "0 selected");
     const ignitionCopy = el("div", "dt-ignition-copy");
     ignitionCopy.append(
+      el("span", "dt-selection-kind", "Points"),
       this.selectionCount,
-      el("p", "", "Click anywhere on the map to define where the fire starts."),
+      el("span", "dt-selection-kind", "Lines"),
+      this.lineSelectionCount,
+      el("p", "", "Select points and power lines directly on the map."),
     );
     const ignitionBar = el("div", "dt-selection-bar");
     this.clearTreesButton = button("Clear selection", "dt-text-button");
@@ -2827,24 +3294,19 @@ class DigitalTwinDemoPanel {
     this.refreshRunsButton.addEventListener("click", () => this.loadHistory());
     historyHeader.append(this.refreshRunsButton);
     this.historyList = el("div", "dt-history-list");
-    const history = el("details", "dt-drawer dt-secondary-drawer");
-    const historySummary = el("summary", "", "Prior runs");
-    const historyBody = el("div", "dt-drawer-body");
-    historyBody.append(historyHeader, this.historyList);
-    history.append(historySummary, historyBody);
-
-    const secondary = el("div", "dt-secondary-actions");
-    secondary.append(this.engineSection, history);
+    const history = el("section", "dt-history-section");
+    history.append(el("h3", "dt-history-heading", "Prior runs"), historyHeader, this.historyList);
+    this.historySection = history;
 
     main.append(
       header,
       summary,
       this.connectionNotice,
-      inputs,
       ignition,
-      conditions,
     );
-    this.root.append(main, launch, secondary);
+    this.scenarioSection = el("div", "dt-scenario-section");
+    this.scenarioSection.append(main, launch);
+    this.root.append(this.scenarioSection, history);
 
     this.toast = el("div", "dt-toast");
     this.toast.hidden = true;
@@ -2855,10 +3317,15 @@ class DigitalTwinDemoPanel {
     this.renderDescriptorList(this.earthEngineLayers, [], "Connect to discover Earth Engine layers.");
   }
 
+  setActiveView(view) {
+    const showingRuns = view === "runs";
+    this.scenarioSection.hidden = showingRuns;
+    this.historySection.hidden = !showingRuns;
+  }
+
   setConnection(status, text, detail) {
     this.connectionBadge.className = `dt-status dt-status-${status}`;
     this.connectionBadge.textContent = text;
-    this.engineDetail.textContent = detail;
     this.connectionNotice.className = `dt-connection-alert dt-connection-alert-${status}`;
     this.connectionNoticeTitle.textContent =
       status === "ready"
@@ -2868,6 +3335,11 @@ class DigitalTwinDemoPanel {
           : "Connecting to the Engine";
     this.connectionNoticeDetail.textContent = detail;
     this.connectionNotice.hidden = status === "ready";
+    window.dispatchEvent(
+      new CustomEvent("geolibre:digital-twin-connection-status", {
+        detail: { status, detail },
+      }),
+    );
     this.updateScenarioSummary();
   }
 
@@ -2879,6 +3351,27 @@ class DigitalTwinDemoPanel {
     this.toastTimer = setTimeout(() => {
       this.toast.hidden = true;
     }, 6000);
+  }
+
+  publishAreaSample(tick, collection) {
+    if (!Number.isInteger(tick) || !collection) return;
+    const sample = { tick, areaHectares: featureCollectionAreaHectares(collection) };
+    this.areaSeries = [
+      ...this.areaSeries.filter((candidate) => candidate.tick !== tick),
+      sample,
+    ].sort((left, right) => left.tick - right.tick);
+    window.dispatchEvent(
+      new CustomEvent("geolibre:digital-twin-area-series", {
+        detail: { samples: this.areaSeries },
+      }),
+    );
+  }
+
+  resetAreaSeries() {
+    this.areaSeries = [];
+    window.dispatchEvent(
+      new CustomEvent("geolibre:digital-twin-area-series", { detail: { samples: [] } }),
+    );
   }
 
   async connect() {
@@ -2905,6 +3398,7 @@ class DigitalTwinDemoPanel {
         onLoading: (frame) => this.replayControl?.setLoading(frame),
         onFrame: ({ runId, tick, url, collection }) => {
           if (this.destroyed) return;
+          this.publishAreaSample(tick, collection);
           this.wildfireMap.setData(collection, {
             runId,
             tick,
@@ -2924,6 +3418,7 @@ class DigitalTwinDemoPanel {
       this.runArtifactCoordinator = createRunArtifactCoordinator(this.client, {
         onArtifact: ({ runId, tick, url, collection }) => {
           if (this.destroyed || this.activeRun?.run_id !== runId) return;
+          this.publishAreaSample(tick, collection);
           this.wildfireMap.setData(collection, { runId, tick, sourceUrl: url });
         },
         onError: (error, artifact) => {
@@ -2999,6 +3494,9 @@ class DigitalTwinDemoPanel {
 
   async loadRegion(regionId) {
     if (!this.client || !regionId) return;
+    this.powerLineDetailAbort?.abort();
+    this.powerLineDetailAbort = null;
+    this.assetMap.closePowerLinePopup(false);
     const assetRegionIds = this.assetRegionIds[regionId] ?? [regionId];
     this.assetMap.setRegions(this.regions, regionId);
     clearInterval(this.weatherRefreshTimer);
@@ -3012,16 +3510,33 @@ class DigitalTwinDemoPanel {
     this.clearTrees();
     this.regionMeta.textContent = "Loading region assets and input catalog…";
     try {
-      const [region, assets, weatherPage] = await Promise.all([
+      const [region, assets, weatherPage, operationalLines] = await Promise.all([
         this.client.getRegion(regionId, abort.signal),
         this.loadFirstPopulatedAssets(assetRegionIds, abort.signal),
         this.client.getWeatherDatasets(regionId, abort.signal),
+        // The geometry layer remains usable on Engine deployments that have not
+        // exposed the optional authoritative power-line-detail endpoint yet.
+        // Do not let a 404 here abort the whole region batch and blank the
+        // existing asset power lines from the map.
+        this.client.listPowerLines(regionId, abort.signal).catch((error) => {
+          if (!abort.signal.aborted) {
+            console.warn("[Digital Twin Demo] Power-line details are unavailable.", error);
+          }
+          return [];
+        }),
       ]);
       if (abort.signal.aborted || this.destroyed) return;
       this.region = region;
       this.weatherDatasets = asPageItems(weatherPage);
-      this.assetMap.setData(assets, region.name ?? region.region_id);
+      const assetCollection = asFeatureCollection(assets, "Engine assets");
+      const operationalCollection = buildOperationalPowerLineFeatures(operationalLines);
+      const mappedAssets = emptyFeatureCollection([
+        ...assetCollection.features,
+        ...operationalCollection.features,
+      ]);
+      this.assetMap.setData(mappedAssets, region.name ?? region.region_id);
       this.app.fitBounds?.(regionBoundsArray(region));
+      this.presentMapAfterFit();
       this.renderRegionMeta(assets);
       this.populateWeather();
       this.startWeatherRefresh();
@@ -3036,6 +3551,30 @@ class DigitalTwinDemoPanel {
     }
   }
 
+  presentMapAfterFit() {
+    const map = this.app.getMap?.();
+    if (!map) return;
+    clearTimeout(this.mapPresentationTimer);
+    const queuePresentation = () => {
+      this.mapPresentationTimer = setTimeout(() => {
+        this.mapPresentationTimer = null;
+        if (this.destroyed) return;
+        const reduceMotion =
+          typeof window !== "undefined" &&
+          window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        map.easeTo?.({
+          bearing: -24,
+          pitch: 48,
+          zoom: Math.min((map.getZoom?.() ?? 12) + 2, 15),
+          duration: reduceMotion ? 0 : 650,
+          essential: false,
+        });
+      }, 160);
+    };
+    if (map.isMoving?.()) map.once?.("moveend", queuePresentation);
+    else queuePresentation();
+  }
+
   async loadFirstPopulatedAssets(regionIds, signal) {
     let fallback = emptyFeatureCollection();
     for (const regionId of regionIds) {
@@ -3044,6 +3583,49 @@ class DigitalTwinDemoPanel {
       if (asFeatureCollection(assets).features.length > 0) return assets;
     }
     return fallback;
+  }
+
+  async inspectPowerLine(feature, anchor) {
+    const powerLineId = feature?.properties?.power_line_id;
+    if (
+      !this.client ||
+      !this.region ||
+      typeof powerLineId !== "string" ||
+      !Array.isArray(anchor)
+    ) return;
+    this.powerLineDetailAbort?.abort();
+    const abort = new AbortController();
+    this.powerLineDetailAbort = abort;
+    const close = () => {
+      abort.abort();
+      if (this.powerLineDetailAbort === abort) this.powerLineDetailAbort = null;
+      if (this.lineSelectionCount) this.lineSelectionCount.textContent = "0 selected";
+    };
+    if (this.lineSelectionCount) this.lineSelectionCount.textContent = "1 selected";
+    this.assetMap.showPowerLinePopup(anchor, loadingPowerLinePopup(powerLineId), close);
+    this.assetMap.setSelectedPowerLine(powerLineId);
+    try {
+      const detail = await this.client.getPowerLine(
+        this.region.region_id,
+        powerLineId,
+        abort.signal,
+      );
+      if (abort.signal.aborted || this.destroyed) return;
+      const view = buildPowerLineDetailView(detail);
+      this.assetMap.showPowerLinePopup(anchor, renderPowerLinePopupContent(view), close);
+      this.assetMap.setSelectedPowerLine(powerLineId);
+    } catch (error) {
+      if (abort.signal.aborted || this.destroyed) return;
+      this.assetMap.showPowerLinePopup(
+        anchor,
+        errorPowerLinePopup(
+          powerLineId,
+          `Could not load details: ${this.errorMessage(error)}`,
+        ),
+        close,
+      );
+      this.assetMap.setSelectedPowerLine(powerLineId);
+    }
   }
 
   renderRegionMeta(assets) {
@@ -3110,16 +3692,11 @@ class DigitalTwinDemoPanel {
   }
 
   updateScenarioSummary() {
-    if (!this.areaValue || !this.weatherValue) return;
+    if (!this.areaValue) return;
     const selectedRegion = this.region ??
       this.regions.find((candidate) => candidate?.region_id === this.regionSelect?.value);
     this.areaValue.textContent =
       selectedRegion?.name ?? selectedRegion?.region_id ?? "Not selected";
-    const weather = this.selectedWeather?.();
-    this.weatherValue.textContent = weather
-      ? `${String(weather.provider ?? "Weather").toUpperCase()} · ${formatCompactDate(weather.version)}`
-      : "Not available";
-
     if (this.windValue) {
       this.windValue.textContent =
         `${this.windSpeedInput?.value || "—"} ${this.windUnitSelect?.value || "mph"} ${bearingLabel(this.windBearingInput?.value)}`;
@@ -3411,6 +3988,7 @@ class DigitalTwinDemoPanel {
   async startRun() {
     if (!this.client || !this.region) return;
     try {
+      this.resetAreaSeries();
       this.replayController?.stop();
       this.replayLoadGeneration += 1;
       this.replayControl?.clear();
@@ -3888,10 +4466,16 @@ class DigitalTwinDemoPanel {
 
   destroy() {
     this.destroyed = true;
+    window.removeEventListener("geolibre:digital-twin-connection", this.onConnectionSettings);
+    window.removeEventListener("geolibre:digital-twin-view", this.onDigitalTwinView);
+    this.powerLineDetailAbort?.abort();
+    this.powerLineDetailAbort = null;
     this.loadAbort?.abort();
     this.visualizationAbort?.abort();
     this.weatherRefreshAbort?.abort();
     clearInterval(this.weatherRefreshTimer);
+    clearTimeout(this.mapPresentationTimer);
+    this.mapPresentationTimer = null;
     this.stopRunMonitoring();
     this.runArtifactCoordinator?.stop();
     this.runArtifactCoordinator = null;

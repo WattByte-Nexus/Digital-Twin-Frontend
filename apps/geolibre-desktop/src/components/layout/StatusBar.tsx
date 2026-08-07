@@ -1,20 +1,43 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@geolibre/core";
 import { cn } from "@geolibre/ui";
-import { Bug } from "lucide-react";
+import { Bell, Bug } from "lucide-react";
 import { formatSpeedKmh } from "../../lib/gps-tracking";
 
+interface StatusMetricProps {
+  label: string;
+  value: string;
+  className?: string;
+}
+
+function StatusMetric({ label, value, className }: StatusMetricProps) {
+  return (
+    <span className={cn("inline-flex shrink-0 items-baseline gap-1.5 px-1.5", className)}>
+      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/80">
+        {label}
+      </span>
+      <span className="font-mono text-[11px] font-medium tabular-nums text-foreground/85">
+        {value}
+      </span>
+    </span>
+  );
+}
+
 interface StatusBarProps {
+  alertsLabel?: string;
   compact?: boolean;
   diagnosticsErrorCount: number;
   diagnosticsWarningCount: number;
+  onOpenAlerts?: () => void;
   onOpenDiagnostics: () => void;
 }
 
 export function StatusBar({
+  alertsLabel,
   compact = false,
   diagnosticsErrorCount,
   diagnosticsWarningCount,
+  onOpenAlerts,
   onOpenDiagnostics,
 }: StatusBarProps) {
   const pointerCoords = useAppStore((s) => s.pointerCoords);
@@ -54,23 +77,35 @@ export function StatusBar({
   return (
     <footer
       className={cn(
-        "flex h-7 shrink-0 items-center gap-4 overflow-y-hidden whitespace-nowrap border-t bg-muted/40 px-3 font-mono text-xs text-muted-foreground",
+        "flex min-h-9 shrink-0 items-center gap-2 overflow-y-hidden whitespace-nowrap border-t border-border/80 bg-background/95 px-3 py-1 shadow-[0_-1px_10px_rgb(15_23_42/0.05)] backdrop-blur-sm",
         compact ? "overflow-hidden" : "overflow-x-auto",
       )}
     >
-      <span className="shrink-0">
-        {compact ? "XY" : "Coords"}: {coordText}
-      </span>
-      {gpsText && <span className="shrink-0">GPS: {gpsText}</span>}
-      <span className="shrink-0">Zoom: {mapView.zoom.toFixed(2)}</span>
-      <span className="shrink-0">Bearing: {mapView.bearing.toFixed(1)}°</span>
-      <span className="shrink-0">Pitch: {mapView.pitch.toFixed(1)}°</span>
-      {compact ? null : <span className="min-w-0 flex-1 truncate">BBox: {bboxText}</span>}
+      <div className="flex min-w-0 items-center gap-0.5 rounded-md border border-border/70 bg-muted/45 py-0.5 shadow-sm">
+        <StatusMetric label={compact ? "XY" : "Coordinates"} value={coordText} />
+        {gpsText && <StatusMetric label="GPS" value={gpsText} />}
+        <StatusMetric label="Zoom" value={mapView.zoom.toFixed(2)} />
+        <StatusMetric label="Bearing" value={`${mapView.bearing.toFixed(1)}°`} />
+        <StatusMetric label="Pitch" value={`${mapView.pitch.toFixed(1)}°`} />
+      </div>
+      {compact ? null : (
+        <StatusMetric className="min-w-0 flex-1 truncate" label="Map extent" value={bboxText} />
+      )}
+      {onOpenAlerts && alertsLabel ? (
+        <button
+          type="button"
+          className="ms-auto inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/10 px-2 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-500/20 dark:text-amber-200"
+          onClick={onOpenAlerts}
+        >
+          <Bell aria-hidden="true" className="h-3.5 w-3.5" />
+          {alertsLabel}
+        </button>
+      ) : null}
       <button
         type="button"
         className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground",
-          "ms-auto",
+          "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground",
+          !onOpenAlerts && "ms-auto",
           diagnosticsErrorCount > 0 && "text-red-700 dark:text-red-300",
           diagnosticsErrorCount === 0 &&
             diagnosticsWarningCount > 0 &&
@@ -78,8 +113,11 @@ export function StatusBar({
         )}
         onClick={onOpenDiagnostics}
       >
-        <Bug className="h-3 w-3" />
-        {compact ? "Diag" : "Diagnostics"}: {diagnosticsCount}
+        <Bug className="h-3.5 w-3.5" />
+        {compact ? "Diag" : "Diagnostics"}
+        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] leading-none tabular-nums text-foreground/80">
+          {diagnosticsCount}
+        </span>
       </button>
     </footer>
   );

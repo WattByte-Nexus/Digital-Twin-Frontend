@@ -632,6 +632,9 @@ Full documentation, including the User Guide and Tutorials, is published at
 - **User Guide** - a [feature-by-feature reference](https://geolibre.app/user-guide/interface/) for the interface, adding data, layers, styling, the attribute table, map controls, processing, the SQL Workspace, data integrations, plugins, settings, and embedding.
 - **Tutorials** - [hands-on, end-to-end workflows](https://geolibre.app/tutorials/): your first map, cloud-native data, vector analysis, terrain analysis, spatial SQL, and sharing and embedding.
 - **Reference**
+  - [Digital Twin Product Requirements](docs/digital-twin-product-requirements.md)
+  - [Digital Twin Pilot Workflow Contract](docs/pilot-workflow-contract.md)
+  - [Digital Twin Pilot UI Specification](docs/digital-twin-ui-spec.md)
   - [Architecture](docs/architecture.md)
   - [Android](docs/android.md)
   - [Project format](docs/project-format.md)

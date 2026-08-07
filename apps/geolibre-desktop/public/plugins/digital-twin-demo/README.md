@@ -33,9 +33,13 @@ Tick `0` remains the Engine's private initial-state lineage entry and is not
 offered because the public artifact endpoint accepts positive compute ticks
 only.
 
-The default API URL is `http://127.0.0.1:8000`. A deployment can set
-`window.__DIGITAL_TWIN_API_URL__` before GeoLibre starts, or the user can edit
-the URL in the panel. The last successful value is retained in local storage.
+The default API URL is `http://127.0.0.1:8000`. During local Vite development,
+GeoLibre reaches that API through the same-origin `/__digital_twin_api` proxy so
+the browser does not require the Engine to allow the Vite origin through CORS.
+Set `DIGITAL_TWIN_API_PROXY_TARGET` to point the development proxy at another
+Engine address. A deployment can set `window.__DIGITAL_TWIN_API_URL__` before
+GeoLibre starts, or the user can edit the URL in the panel. The last successful
+value is retained in local storage.
 
 The Engine publishes renderable weather and Earth Engine descriptors through
 region-scoped `/map-layers` endpoints. The plugin queries every curated region

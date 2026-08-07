@@ -7,11 +7,65 @@
       "scenarios": "Scenarios",
       "runs": "Runs"
     },
+    "subheader": {
+      "label": "{{mode}} options",
+      "live": {
+        "overview": "Overview",
+        "alerts": "Alerts",
+        "assets": "Asset status",
+        "overviewItems": {
+          "operations": "Operations summary",
+          "map": "Map overview"
+        },
+        "assetsItems": {
+          "all": "All assets",
+          "lines": "Lines",
+          "vegetation": "Vegetation"
+        }
+      },
+      "scenarios": {
+        "library": "Scenario library",
+        "drafts": "Drafts",
+        "templates": "Templates",
+        "libraryItems": {
+          "all": "All scenarios",
+          "recent": "Recent scenarios",
+          "shared": "Shared with me"
+        },
+        "draftItems": {
+          "mine": "My drafts",
+          "review": "Needs review"
+        },
+        "templateItems": {
+          "all": "All templates",
+          "weather": "Weather",
+          "vegetation": "Vegetation"
+        }
+      },
+      "runs": {
+        "active": "Active runs",
+        "history": "Run history",
+        "replay": "Replay",
+        "activeItems": {
+          "all": "All active runs",
+          "autonomous": "Autonomous runs",
+          "manual": "Manual runs"
+        },
+        "historyItems": {
+          "all": "All runs",
+          "completed": "Completed",
+          "failed": "Failed"
+        },
+        "replayItems": {
+          "recent": "Recent replays",
+          "saved": "Saved replays"
+        }
+      }
+    },
     "header": {
       "region": "Region",
       "regionUnassigned": "Region not assigned",
       "assignedRegion": "Assigned region: {{region}}",
-      "monitoringUnavailable": "Monitoring not connected",
       "openDiagnostics": "Open diagnostics",
       "searchCommands": "Search commands",
       "keyboardHelp": "Keyboard shortcuts",
@@ -1505,6 +1559,7 @@
     "description": "Configure project preferences and runtime settings.",
     "saveButton": "Save Settings",
     "section": {
+      "connection": "Connection",
       "map": "Map",
       "style": "Style",
       "layout": "Layout",
@@ -1514,6 +1569,13 @@
       "ai": "AI Providers",
       "environment": "Environment",
       "updates": "Updates"
+    },
+    "connection": {
+      "title": "Digital Twin connection",
+      "description": "Configure the API used by the Digital Twin Engine.",
+      "apiUrl": "API URL",
+      "reconnect": "Reconnect",
+      "notChecked": "Connection status has not been checked."
     },
     "menu": {
       "mapPreferences": "Map Preferences",

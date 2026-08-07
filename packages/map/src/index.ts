@@ -1,23 +1,45 @@
-export { MapCanvas, type MapCanvasProps, type MapDiagnosticEvent } from "./MapCanvas";
-export { SecondaryMapCanvas, type SecondaryMapCanvasProps } from "./SecondaryMapCanvas";
+export {
+  MapCanvas,
+  type MapCanvasProps,
+  type MapDiagnosticEvent,
+} from "./MapCanvas";
+export {
+  SecondaryMapCanvas,
+  type SecondaryMapCanvasProps,
+} from "./SecondaryMapCanvas";
 export {
   SatelliteTerrainMap,
   type SatelliteTerrainInitialView,
   type SatelliteTerrainMapProps,
 } from "./SatelliteTerrainMap";
 export {
+  DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
+  loadSatelliteReferenceOverlay,
+  SATELLITE_REFERENCE_LAYER_PREFIX,
+  SATELLITE_REFERENCE_SOURCE_ID,
+  setSatelliteReferenceVisibility,
+  type SatelliteReferenceCategory,
+  type SatelliteReferenceLayer,
+  type SatelliteReferenceOverlay,
+  type SatelliteReferenceVisibility,
+} from "./satellite-reference-overlay";
+export {
   buildSatelliteTerrainStyle,
+  SATELLITE_FALLBACK_LAYER_ID,
+  SATELLITE_FALLBACK_SOURCE_ID,
   SATELLITE_LAYER_ID,
   SATELLITE_SOURCE_ID,
+  setElevationEnabled,
+  setSatelliteVisibility,
+  setTerrainGroundVisibility,
+  TERRAIN_BACKGROUND_LAYER_ID,
+  TERRAIN_GROUND_LAYER_ID,
   TERRAIN_SOURCE_ID,
   type SatelliteRasterSource,
   type SatelliteTerrainStyleOptions,
   type TerrainRasterSource,
 } from "./satellite-terrain-style";
-export {
-  resolveThemeBasemapStyle,
-  type MapThemeMode,
-} from "./theme-basemap";
+export { resolveThemeBasemapStyle, type MapThemeMode } from "./theme-basemap";
 export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";
 export { isCesiumSupportedLayerType } from "./cesium-layer-sync";
 export {

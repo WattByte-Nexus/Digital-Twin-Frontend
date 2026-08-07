@@ -3,7 +3,8 @@
   "compilerOptions": {
     "composite": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@geolibre/ui/*": ["../../packages/ui/src/*"]
     }
   },
   "include": ["src"],

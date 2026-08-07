@@ -72,7 +72,7 @@
   > .dt-product-workspace__view:not(:first-child),
 [data-digital-twin-shell][data-map-fullscreen]
   [data-digital-twin-workspace]
-  > .dt-simulation-drawer,
+  > .dt-simulation-popover-anchor,
 [data-digital-twin-shell][data-map-fullscreen] .dt-live-view__queue,
 [data-digital-twin-shell][data-map-fullscreen] .dt-live-view__details,
 [data-digital-twin-shell][data-map-fullscreen] .dt-live-view__replay-empty {

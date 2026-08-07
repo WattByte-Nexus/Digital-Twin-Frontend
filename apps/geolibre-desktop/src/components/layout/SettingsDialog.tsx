@@ -52,6 +52,7 @@ import {
   Locate,
   MapPinned,
   LayoutPanelTop,
+  Link,
   Moon,
   Palette,
   PanelLeft,
@@ -118,6 +119,7 @@ import {
 import { StylePanel } from "../panels/StylePanel";
 
 export type SettingsSection =
+  | "connection"
   | "map"
   | "style"
   | "layout"
@@ -133,6 +135,21 @@ export type SettingsFocusTarget = "shareToken" | "accentColor";
 
 /** Window event letting any panel open Settings at a given section (no prop-drilling). */
 export const OPEN_SETTINGS_EVENT = "geolibre:open-settings";
+
+const DIGITAL_TWIN_API_STORAGE_KEY = "geolibre.digital-twin-demo.api-url";
+const DIGITAL_TWIN_CONNECTION_EVENT = "geolibre:digital-twin-connection";
+const DIGITAL_TWIN_CONNECTION_STATUS_EVENT = "geolibre:digital-twin-connection-status";
+const DEFAULT_DIGITAL_TWIN_API_URL = "http://127.0.0.1:8000";
+
+interface DigitalTwinConnectionStatus {
+  detail: string;
+  status: "ready" | "error" | "muted";
+}
+
+function readDigitalTwinApiUrl(): string {
+  if (typeof window === "undefined") return DEFAULT_DIGITAL_TWIN_API_URL;
+  return window.localStorage.getItem(DIGITAL_TWIN_API_STORAGE_KEY) ?? DEFAULT_DIGITAL_TWIN_API_URL;
+}
 
 /**
  * Open the Settings dialog at `section` from anywhere in the app, optionally
@@ -177,6 +194,7 @@ const SECTION_ITEMS: Array<{
   labelKey: `settings.section.${SettingsSection}`;
   icon: typeof MapPinned;
 }> = [
+  { id: "connection", labelKey: "settings.section.connection", icon: Link },
   { id: "map", labelKey: "settings.section.map", icon: MapPinned },
   { id: "style", labelKey: "settings.section.style", icon: Palette },
   { id: "layout", labelKey: "settings.section.layout", icon: LayoutPanelTop },
@@ -385,6 +403,12 @@ export function SettingsDialog({
   const showSettingsItem = (id: string) => isMenuItemVisible(desktopSettings.uiProfile, id);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
+  const [digitalTwinApiUrl, setDigitalTwinApiUrl] = useState(readDigitalTwinApiUrl);
+  const [digitalTwinConnectionStatus, setDigitalTwinConnectionStatus] =
+    useState<DigitalTwinConnectionStatus | null>(null);
+  const [digitalTwinConnectionError, setDigitalTwinConnectionError] = useState<string | null>(
+    null,
+  );
   // The Browser is a dockable right panel (open/close via the registry), not a
   // persisted layout preference, so its Layout toggle acts on the live registry
   // state directly rather than through the draft settings.
@@ -540,6 +564,8 @@ export function SettingsDialog({
       setCustomColorDraft(null);
       return;
     }
+    setDigitalTwinApiUrl(readDigitalTwinApiUrl());
+    setDigitalTwinConnectionError(null);
     const seededPreferences = clonePreferences(useAppStore.getState().preferences);
     setDraftPreferences(seededPreferences);
     setDraftDesktopSettings(
@@ -572,6 +598,38 @@ export function SettingsDialog({
     setError(null);
     setLiveProjection(mapControllerRef.current?.readProjection() ?? null);
   }, [open, mapControllerRef]);
+
+  useEffect(() => {
+    const onConnectionStatus = (event: Event) => {
+      const detail = (event as CustomEvent<DigitalTwinConnectionStatus>).detail;
+      if (!detail || !["ready", "error", "muted"].includes(detail.status)) return;
+      setDigitalTwinConnectionStatus(detail);
+    };
+    window.addEventListener(DIGITAL_TWIN_CONNECTION_STATUS_EVENT, onConnectionStatus);
+    return () =>
+      window.removeEventListener(DIGITAL_TWIN_CONNECTION_STATUS_EVENT, onConnectionStatus);
+  }, []);
+
+  const reconnectDigitalTwin = () => {
+    let apiUrl: string;
+    try {
+      const parsed = new URL(digitalTwinApiUrl.trim());
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("The API URL must use http or https.");
+      }
+      apiUrl = parsed.href.replace(/\/+$/, "");
+    } catch {
+      setDigitalTwinConnectionError("Enter a valid HTTP API URL.");
+      return;
+    }
+    window.localStorage.setItem(DIGITAL_TWIN_API_STORAGE_KEY, apiUrl);
+    setDigitalTwinApiUrl(apiUrl);
+    setDigitalTwinConnectionError(null);
+    setDigitalTwinConnectionStatus({ status: "muted", detail: "Connecting…" });
+    window.dispatchEvent(
+      new CustomEvent(DIGITAL_TWIN_CONNECTION_EVENT, { detail: { apiUrl } }),
+    );
+  };
 
   // Let other panels deep-link into a specific Settings section (e.g. the AI
   // Assistant onboarding card opens the AI Providers section to add credentials).
@@ -1428,7 +1486,41 @@ export function SettingsDialog({
               {SECTION_ITEMS.filter((item) => isSectionVisible(item.id)).map(renderSectionButton)}
             </nav>
             <div className="min-h-0 overflow-y-auto p-6">
-              {effectiveSection === "map" ? (
+              {effectiveSection === "connection" ? (
+                <div className="space-y-5">
+                  <div className="space-y-1.5">
+                    <h3 className="text-sm font-semibold">{t("settings.connection.title")}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {t("settings.connection.description")}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-digital-twin-api-url">
+                      {t("settings.connection.apiUrl")}
+                    </Label>
+                    <Input
+                      id="settings-digital-twin-api-url"
+                      type="url"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={digitalTwinApiUrl}
+                      onChange={(event) => setDigitalTwinApiUrl(event.target.value)}
+                    />
+                    {digitalTwinConnectionError ? (
+                      <p className="text-xs text-destructive">{digitalTwinConnectionError}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button type="button" onClick={reconnectDigitalTwin}>
+                      <Link className="h-3.5 w-3.5" />
+                      {t("settings.connection.reconnect")}
+                    </Button>
+                    <p aria-live="polite" className="text-sm text-muted-foreground">
+                      {digitalTwinConnectionStatus?.detail ?? t("settings.connection.notChecked")}
+                    </p>
+                  </div>
+                </div>
+              ) : effectiveSection === "map" ? (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>

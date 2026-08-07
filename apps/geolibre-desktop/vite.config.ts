@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import type { RollupLog, RollupOptions, WarningHandlerWithDefault } from "rollup";
 import { fileURLToPath } from "node:url";
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import { createLogger, defineConfig, loadEnv, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
@@ -43,6 +43,11 @@ function resolveViteMode(): string {
 // real shell env var (process.env alone would miss the file).
 const CONFIG_DIR = path.dirname(fileURLToPath(import.meta.url));
 const FILE_ENV = loadEnv(resolveViteMode(), CONFIG_DIR, "");
+const DIGITAL_TWIN_API_PROXY_PATH = "/__digital_twin_api";
+const DIGITAL_TWIN_API_PROXY_TARGET =
+  process.env.DIGITAL_TWIN_API_PROXY_TARGET ||
+  FILE_ENV.DIGITAL_TWIN_API_PROXY_TARGET ||
+  "http://127.0.0.1:8000";
 if (!process.env.VITE_GOOGLE_MAPS_API_KEY) {
   const googleMapsApiKey =
     process.env.GOOGLE_MAPS_API_KEY ||
@@ -234,6 +239,26 @@ const RADIX_OPTIMIZE_EXCLUDES = [
   "@radix-ui/react-slider",
   "@radix-ui/react-slot",
 ];
+
+// @developmentseed/geotiff and @developmentseed/affine publish .js.map files
+// whose `sources` point at TypeScript files omitted from their npm packages.
+// Vite therefore cannot resolve those sources while serving the excluded
+// dependencies in development. The JavaScript and maps themselves are valid,
+// so suppress only this known third-party packaging warning; missing sources in
+// our code or any other dependency must remain visible.
+const BROKEN_DEVELOPMENTSEED_SOURCEMAP_WARNING =
+  /^Sourcemap for ".*[\\/]node_modules[\\/]@developmentseed[\\/](?:geotiff|affine)[\\/]dist[\\/].+" points to missing source files$/;
+const viteLogger = createLogger();
+const viteWarn = viteLogger.warn;
+const viteWarnOnce = viteLogger.warnOnce;
+viteLogger.warn = (message, options) => {
+  if (BROKEN_DEVELOPMENTSEED_SOURCEMAP_WARNING.test(message)) return;
+  viteWarn(message, options);
+};
+viteLogger.warnOnce = (message, options) => {
+  if (BROKEN_DEVELOPMENTSEED_SOURCEMAP_WARNING.test(message)) return;
+  viteWarnOnce(message, options);
+};
 
 function manualChunks(id: string): string | undefined {
   // Lazy per-locale i18n catalogs (src/i18n/index.ts dynamic-imports every
@@ -835,6 +860,7 @@ function pwaPlugin(): Plugin[] {
 
 export default defineConfig({
   base: APP_BASE,
+  customLogger: viteLogger,
   plugins: [
     ...(PGLITE_CDN ? [pgliteCdnLoaderPlugin()] : []),
     ...(CEREUS_CDN ? [cereusCdnLoaderPlugin()] : []),
@@ -866,6 +892,14 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    proxy: {
+      [DIGITAL_TWIN_API_PROXY_PATH]: {
+        target: DIGITAL_TWIN_API_PROXY_TARGET,
+        changeOrigin: true,
+        rewrite: (requestPath) =>
+          requestPath.slice(DIGITAL_TWIN_API_PROXY_PATH.length) || "/",
+      },
+    },
   },
   worker: {
     format: "es",

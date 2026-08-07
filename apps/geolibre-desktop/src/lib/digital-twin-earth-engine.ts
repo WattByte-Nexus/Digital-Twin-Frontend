@@ -1,5 +1,6 @@
 const API_STORAGE_KEY = "geolibre.digital-twin-demo.api-url";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
+const DEV_API_PROXY_PATH = "/__digital_twin_api";
 
 interface DigitalTwinRuntimeWindow extends Window {
   __DIGITAL_TWIN_API_URL__?: string;
@@ -76,11 +77,28 @@ export function normalizeDigitalTwinApiUrl(value: string): string {
   return parsed.href.replace(/\/+$/, "");
 }
 
-export function defaultDigitalTwinApiUrl(): string {
-  const runtimeWindow = typeof window === "undefined" ? undefined : (window as DigitalTwinRuntimeWindow);
+function devProxyApiUrl(runtimeWindow: DigitalTwinRuntimeWindow | undefined): string | undefined {
+  const location = runtimeWindow?.location;
+  if (
+    !location ||
+    location.port !== "5173" ||
+    !["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)
+  ) {
+    return undefined;
+  }
+  return new URL(DEV_API_PROXY_PATH, location.origin).href.replace(/\/+$/, "");
+}
+
+export function defaultDigitalTwinApiUrl(
+  runtimeWindow: DigitalTwinRuntimeWindow | undefined =
+    typeof window === "undefined" ? undefined : (window as DigitalTwinRuntimeWindow),
+): string {
+  const stored = runtimeWindow?.localStorage?.getItem(API_STORAGE_KEY);
   const candidates = [
     runtimeWindow?.__DIGITAL_TWIN_API_URL__,
-    runtimeWindow?.localStorage?.getItem(API_STORAGE_KEY),
+    stored === DEFAULT_API_URL ? undefined : stored,
+    devProxyApiUrl(runtimeWindow),
+    stored,
     DEFAULT_API_URL,
   ];
   for (const candidate of candidates) {
