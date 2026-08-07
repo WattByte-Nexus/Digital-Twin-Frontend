@@ -121,7 +121,7 @@ const LIDAR_PANEL_LAYOUT_FIX = `
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
   box-sizing: border-box;
   color: #111827;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
   font-size: 12px;
   list-style: none;
   margin: 0;

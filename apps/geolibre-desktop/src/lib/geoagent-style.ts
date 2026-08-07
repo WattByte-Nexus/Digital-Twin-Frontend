@@ -57,7 +57,7 @@ const GEOAGENT_SELECT_FIXES = `
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
   box-sizing: border-box;
   color: #17202a;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   font-size: 13px;
   margin: 0;
   max-height: 220px;
