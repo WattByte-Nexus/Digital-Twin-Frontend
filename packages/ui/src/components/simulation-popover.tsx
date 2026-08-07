@@ -11,7 +11,7 @@ import {
 } from "./popover";
 import { ScrollArea } from "./scroll-area";
 
-export interface GlassSimulationPopoverProps {
+export interface SimulationPopoverProps {
   children: React.ReactNode;
   trigger?: React.ReactElement;
   anchor?: React.ReactElement;
@@ -29,11 +29,11 @@ export interface GlassSimulationPopoverProps {
 }
 
 /**
- * A non-modal glass work surface for configuring and monitoring simulations.
+ * A non-modal work surface for configuring and monitoring simulations.
  * The consumer owns the simulation form and run state; this component owns
  * only the accessible popover chrome and scrolling behavior.
  */
-export function GlassSimulationPopover({
+export function SimulationPopover({
   children,
   trigger,
   anchor,
@@ -48,7 +48,7 @@ export function GlassSimulationPopover({
   panelClassName,
   bodyClassName,
   theme,
-}: GlassSimulationPopoverProps) {
+}: SimulationPopoverProps) {
   return (
     <Popover
       defaultOpen={defaultOpen}

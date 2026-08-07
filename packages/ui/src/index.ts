@@ -135,9 +135,9 @@ export {
   TableCell,
 } from "./components/table";
 export {
-  GlassSimulationPopover,
-  type GlassSimulationPopoverProps,
-} from "./components/glass-simulation-popover";
+  SimulationPopover,
+  type SimulationPopoverProps,
+} from "./components/simulation-popover";
 export {
   WeatherSettingsPanel,
   WeatherSettingsPopover,

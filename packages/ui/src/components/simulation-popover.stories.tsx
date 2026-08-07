@@ -7,7 +7,7 @@ import airportBackdrop from "../assets/glass-sidebar-airport.png";
 import { Button } from "./button";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "./chart";
-import { GlassSimulationPopover } from "./glass-simulation-popover";
+import { SimulationPopover } from "./simulation-popover";
 
 const chartConfig = {
   area: { label: "Area", color: "hsl(var(--chart-1))" },
@@ -126,11 +126,11 @@ function StoryCanvas({ children, dark }: { children: React.ReactNode; dark: bool
 }
 
 const meta = {
-  title: "UI/Glass Simulation Popover",
-  component: GlassSimulationPopover,
+  title: "UI/Simulation Popover",
+  component: SimulationPopover,
   parameters: { layout: "fullscreen" },
   tags: ["autodocs"],
-} satisfies Meta<typeof GlassSimulationPopover>;
+} satisfies Meta<typeof SimulationPopover>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -142,7 +142,7 @@ export const DarkMode: Story = {
     trigger: <Button variant="glass">New simulation</Button>,
     theme: "dark",
   },
-  render: (args) => <StoryCanvas dark><GlassSimulationPopover {...args} /></StoryCanvas>,
+  render: (args) => <StoryCanvas dark><SimulationPopover {...args} /></StoryCanvas>,
 };
 
 export const Light: Story = {
@@ -152,5 +152,5 @@ export const Light: Story = {
     trigger: <Button variant="glass">New simulation</Button>,
     theme: "light",
   },
-  render: (args) => <StoryCanvas dark={false}><GlassSimulationPopover {...args} /></StoryCanvas>,
+  render: (args) => <StoryCanvas dark={false}><SimulationPopover {...args} /></StoryCanvas>,
 };

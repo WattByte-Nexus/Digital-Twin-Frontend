@@ -1,4 +1,4 @@
-import { GlassSimulationPopover } from "@geolibre/ui";
+import { SimulationPopover } from "@geolibre/ui";
 import {
   type ReactNode,
   useCallback,
@@ -142,7 +142,7 @@ export function DigitalTwinWorkspace({
         <SettingsView onOpenRealSettings={onOpenRealSettings} />
       </div>
 
-      <GlassSimulationPopover
+      <SimulationPopover
         anchor={<span aria-hidden="true" className="dt-simulation-popover-anchor" />}
         bodyClassName="h-full"
         contentClassName="dt-simulation-popover"
@@ -158,7 +158,7 @@ export function DigitalTwinWorkspace({
           <PluginContentHost contentEl={pluginContentEl} />
           <SimulationAreaChart samples={areaSamples} />
         </div>
-      </GlassSimulationPopover>
+      </SimulationPopover>
     </div>
   );
 }
