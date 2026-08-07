@@ -29,7 +29,7 @@ export function WeatherEventRow({
       <div className="relative">
         <Input
           id={id}
-          className="input-compact-number h-8 min-w-0 ps-3 pe-10 text-right tabular-nums"
+          className="input-compact-number h-8 min-w-0 ps-3 pe-8 text-right tabular-nums"
           type="number"
           min={0}
           max={maximum}
