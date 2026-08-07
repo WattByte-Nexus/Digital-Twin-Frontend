@@ -3,12 +3,28 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { DigitalTwinSidebar } from "./digital-twin-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "./sidebar";
 
+const regions = [
+  {
+    id: "boulder",
+    name: "Boulder County",
+    description: "Foothills assets and wildfire exposure",
+  },
+  {
+    id: "sandbox",
+    name: "Qualification Sandbox",
+    description: "Isolated workspace for model validation",
+  },
+];
+
 const meta = {
   title: "Digital Twin/Sidebar",
   component: DigitalTwinSidebar,
   args: {
     activeDestination: "live",
+    activeRegionId: "boulder",
     onNavigate: fn(),
+    onSelectRegion: fn(),
+    regions,
     themeMode: "light",
   },
   decorators: [
@@ -44,6 +60,18 @@ export const Default: Story = {
 export const RunsActive: Story = {
   args: {
     activeDestination: "runs",
+  },
+};
+
+export const RegionMenuOpen: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole("button", { name: /change assigned region/i })
+    );
+    await expect(
+      within(document.body).getByText("Qualification Sandbox")
+    ).toBeVisible();
   },
 };
 

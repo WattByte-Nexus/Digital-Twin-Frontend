@@ -11,6 +11,7 @@ import {
   type SatelliteReferenceOverlay,
   type SatelliteReferenceVisibility,
 } from "./satellite-reference-overlay";
+import type { MapThemeMode } from "./theme-basemap";
 
 export const SATELLITE_SOURCE_ID = "digital-twin-satellite";
 export const SATELLITE_LAYER_ID = "digital-twin-satellite";
@@ -32,7 +33,15 @@ export interface SatelliteTerrainStyleOptions {
   terrainExaggeration?: number;
   satelliteVisible?: boolean;
   elevationEnabled?: boolean;
+  themeMode?: MapThemeMode;
 }
+
+const DARK_RASTER_PAINT = {
+  "raster-brightness-min": 0.02,
+  "raster-brightness-max": 0.42,
+  "raster-saturation": -0.2,
+  "raster-contrast": 0.15,
+} as const;
 
 type SatelliteVisibilityMap = Pick<
   MapLibreMap,
@@ -91,7 +100,9 @@ export function buildSatelliteTerrainStyle({
   terrainExaggeration = 1,
   satelliteVisible = true,
   elevationEnabled = true,
+  themeMode = "light",
 }: SatelliteTerrainStyleOptions): StyleSpecification {
+  const dark = themeMode === "dark";
   return {
     version: 8,
     sources: {
@@ -120,7 +131,7 @@ export function buildSatelliteTerrainStyle({
         id: TERRAIN_BACKGROUND_LAYER_ID,
         type: "background",
         paint: {
-          "background-color": "#dfe3dc",
+          "background-color": dark ? "#07111f" : "#dfe3dc",
         },
       },
       ...(satelliteFallbackSource
@@ -129,6 +140,7 @@ export function buildSatelliteTerrainStyle({
               id: SATELLITE_FALLBACK_LAYER_ID,
               type: "raster" as const,
               source: SATELLITE_FALLBACK_SOURCE_ID,
+              ...(dark ? { paint: DARK_RASTER_PAINT } : {}),
               ...(satelliteVisible
                 ? {}
                 : { layout: { visibility: "none" as const } }),
@@ -139,6 +151,7 @@ export function buildSatelliteTerrainStyle({
         id: SATELLITE_LAYER_ID,
         type: "raster",
         source: SATELLITE_SOURCE_ID,
+        ...(dark ? { paint: DARK_RASTER_PAINT } : {}),
         ...(satelliteVisible
           ? {}
           : { layout: { visibility: "none" as const } }),
@@ -156,9 +169,9 @@ export function buildSatelliteTerrainStyle({
         },
         paint: {
           "hillshade-exaggeration": 0.45,
-          "hillshade-shadow-color": "#667064",
-          "hillshade-highlight-color": "#f8faf6",
-          "hillshade-accent-color": "#929b8f",
+          "hillshade-shadow-color": dark ? "#020617" : "#667064",
+          "hillshade-highlight-color": dark ? "#334155" : "#f8faf6",
+          "hillshade-accent-color": dark ? "#0f172a" : "#929b8f",
         },
       },
       ...(referenceOverlay
@@ -176,9 +189,9 @@ export function buildSatelliteTerrainStyle({
         : []),
     ],
     sky: {
-      "sky-color": "#88c6fc",
-      "horizon-color": "#ffffff",
-      "fog-color": "#ffffff",
+      "sky-color": dark ? "#07111f" : "#88c6fc",
+      "horizon-color": dark ? "#111827" : "#ffffff",
+      "fog-color": dark ? "#111827" : "#ffffff",
       "fog-ground-blend": 0.9,
       "horizon-fog-blend": 0.8,
       "sky-horizon-blend": 0.8,

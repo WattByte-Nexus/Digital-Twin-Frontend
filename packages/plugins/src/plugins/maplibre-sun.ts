@@ -226,10 +226,16 @@ class SunEngine {
   // Wall-clock timestamp of the previous animation frame; null while paused.
   private lastFrame: number | null = null;
   private destroyed = false;
+  private readonly advanceClock: (deltaMs: number) => void;
 
-  constructor(map: MapLibreMap, settings: SunSettings) {
+  constructor(
+    map: MapLibreMap,
+    settings: SunSettings,
+    advanceClock: (deltaMs: number) => void,
+  ) {
     this.map = map;
     this.settings = settings;
+    this.advanceClock = advanceClock;
     let saved: LightSpecification | undefined;
     try {
       saved = map.getLight();
@@ -457,11 +463,69 @@ class SunEngine {
     if (this.lastFrame !== null) {
       const elapsedSec = (now - this.lastFrame) / 1000;
       const advancedMs = elapsedSec * this.settings.speed * MS_PER_MINUTE;
-      advanceSunClock(advancedMs);
+      this.advanceClock(advancedMs);
     }
     this.lastFrame = now;
     this.rafId = window.requestAnimationFrame(this.tick);
   }
+}
+
+export interface SunSimulationController {
+  destroy: () => void;
+  getSettings: () => SunSettings;
+  setSettings: (next: Partial<SunSettings>) => boolean;
+}
+
+function advanceSettings(settings: SunSettings, deltaMs: number): SunSettings {
+  const dayStart = localDayStart(settings.dateMs);
+  let dateMs = settings.dateMs + deltaMs;
+  if (dateMs < dayStart + MS_PER_DAY) return { ...settings, dateMs };
+  if (settings.loop) {
+    dateMs = dayStart + ((dateMs - dayStart) % MS_PER_DAY);
+    return { ...settings, dateMs };
+  }
+  return { ...settings, dateMs: dayStart + MS_PER_DAY - 1, playing: false };
+}
+
+/**
+ * Attach the Sun Simulation renderer to a map without activating its plugin or
+ * opening the built-in Sun panel. The caller owns this controller and must
+ * destroy it before removing the map.
+ */
+export function createSunSimulationController(
+  map: MapLibreMap,
+  initialSettings: Partial<SunSettings> = DEFAULT_SUN_SETTINGS,
+): SunSimulationController {
+  let destroyed = false;
+  let controllerSettings = normalizeSunSettings(initialSettings, DEFAULT_SUN_SETTINGS);
+  let sunEngine: SunEngine;
+
+  const applySettings = (next: Partial<SunSettings>): boolean => {
+    if (destroyed) return false;
+    const normalized = normalizeSunSettings(
+      { ...controllerSettings, ...next },
+      DEFAULT_SUN_SETTINGS,
+    );
+    if (sunSettingsEqual(normalized, controllerSettings)) return false;
+    controllerSettings = normalized;
+    sunEngine.applySettings(controllerSettings);
+    return true;
+  };
+
+  sunEngine = new SunEngine(map, controllerSettings, (deltaMs) => {
+    const next = advanceSettings(controllerSettings, deltaMs);
+    applySettings(next);
+  });
+
+  return {
+    destroy: () => {
+      if (destroyed) return;
+      destroyed = true;
+      sunEngine.destroy();
+    },
+    getSettings: () => ({ ...controllerSettings }),
+    setSettings: applySettings,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -486,7 +550,7 @@ function attachEngine(app: GeoLibreAppAPI): boolean {
   const map = app.getMap?.();
   if (!map) return false;
   if (engine && engine.getMapInstance() !== map) detachEngine();
-  if (!engine) engine = new SunEngine(map, settings);
+  if (!engine) engine = new SunEngine(map, settings, advanceSunClock);
   return true;
 }
 
@@ -563,22 +627,7 @@ export function setSunSettings(next: Partial<SunSettings>): boolean {
  * the engine's animation loop each frame; stops at end-of-day when not looping.
  */
 export function advanceSunClock(deltaMs: number): void {
-  const dayStart = localDayStart(settings.dateMs);
-  let next = settings.dateMs + deltaMs;
-  if (next >= dayStart + MS_PER_DAY) {
-    if (settings.loop) {
-      // Wrap back into the same displayed local day so the panel and engine
-      // agree about the playback boundary.
-      next = dayStart + ((next - dayStart) % MS_PER_DAY);
-    } else {
-      next = dayStart + MS_PER_DAY - 1;
-      setSunSettings({ dateMs: next, playing: false });
-      return;
-    }
-  }
-  // dateMs-only update; avoid the equality short-circuit churn from setSunSettings
-  // by writing directly and pushing to the engine.
-  settings = { ...settings, dateMs: next };
+  settings = advanceSettings(settings, deltaMs);
   engine?.applySettings(settings);
   notifyState();
 }

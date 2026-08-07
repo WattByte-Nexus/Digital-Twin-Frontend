@@ -1,5 +1,22 @@
-import { FlaskConical, History, Radio, type LucideIcon } from "lucide-react";
+import {
+  ChevronDown,
+  FlaskConical,
+  History,
+  MapPin,
+  Radio,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "../lib/utils";
+import { Button } from "./button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +37,12 @@ interface DestinationDefinition {
 }
 
 export type DigitalTwinDestination = "live" | "scenarios" | "runs";
+
+export interface DigitalTwinRegion {
+  id: string;
+  name: string;
+  description: string;
+}
 
 const destinations: DestinationDefinition[] = [
   {
@@ -44,39 +67,92 @@ const destinations: DestinationDefinition[] = [
 
 export interface DigitalTwinSidebarProps {
   activeDestination?: DigitalTwinDestination;
+  activeRegionId: string;
   className?: string;
+  regions: DigitalTwinRegion[];
   themeMode?: "light" | "dark";
   onNavigate?: (destination: DigitalTwinDestination) => void;
+  onSelectRegion?: (regionId: string) => void;
 }
 
 export function DigitalTwinSidebar({
   activeDestination = "live",
+  activeRegionId,
   className,
+  regions,
   themeMode = "dark",
   onNavigate,
+  onSelectRegion,
 }: DigitalTwinSidebarProps) {
+  const activeRegion =
+    regions.find((region) => region.id === activeRegionId) ?? regions[0];
+  const themeClassName = themeMode === "dark" ? "dark" : "theme-light";
+
   return (
     <Sidebar
       aria-label="Digital Twin navigation"
       className={cn(
-        themeMode === "dark" ? "dark" : "theme-light",
+        themeClassName,
         "surface-glass-subtle border-y-0 border-l-0 border-sidebar-border [&_[data-slot=sidebar-inner]]:bg-transparent",
         className
       )}
       collapsible="icon"
     >
-      <SidebarHeader className="h-16 shrink-0 justify-center border-b border-sidebar-border px-4 py-0 transition-[padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none group-data-[collapsible=icon]:px-2">
-        <div className="relative h-8 overflow-hidden">
-          <span className="absolute inset-y-0 left-0 flex items-center whitespace-nowrap text-sm font-semibold opacity-100 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
-            Digital Twin
-          </span>
-          <span
-            aria-hidden="true"
-            className="absolute left-0 top-0 flex size-8 scale-90 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground opacity-0 transition-[opacity,transform] delay-0 duration-200 ease-out motion-reduce:transition-none group-data-[collapsible=icon]:scale-100 group-data-[collapsible=icon]:opacity-100 group-data-[collapsible=icon]:delay-75"
+      <SidebarHeader className="h-16 shrink-0 justify-center border-b border-sidebar-border px-2 py-0">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              aria-label={`Change assigned region. Current region: ${
+                activeRegion?.name ?? "Unassigned"
+              }`}
+              className="h-11 w-full min-w-0 justify-start gap-2.5 px-2.5 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2"
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <MapPin
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0 text-muted-foreground"
+              />
+              <span className="min-w-0 flex-1 truncate text-start text-xs font-medium group-data-[collapsible=icon]:hidden">
+                {activeRegion?.name ?? "Unassigned"}
+              </span>
+              <ChevronDown
+                aria-hidden="true"
+                className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden"
+              />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className={cn(
+              themeClassName,
+              "surface-glass-overlay w-72 min-w-[var(--radix-dropdown-menu-trigger-width)]"
+            )}
           >
-            DT
-          </span>
-        </div>
+            <DropdownMenuLabel>Assigned region</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup
+              value={activeRegionId}
+              onValueChange={onSelectRegion}
+            >
+              {regions.map((region) => (
+                <DropdownMenuRadioItem
+                  className="px-2 py-2 data-[state=checked]:bg-accent/60 [&>span:first-child]:hidden"
+                  key={region.id}
+                  value={region.id}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate">{region.name}</span>
+                    <span className="block whitespace-normal text-xs leading-4 text-muted-foreground">
+                      {region.description}
+                    </span>
+                  </span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

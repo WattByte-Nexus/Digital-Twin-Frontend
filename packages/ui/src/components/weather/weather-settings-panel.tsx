@@ -33,7 +33,9 @@ export function WeatherSettingsPanel({
   className,
   initialValue,
   location = "United Arab Emirates, Sharjah Emirate",
+  onValueChange,
   theme = "light",
+  value: controlledValue,
 }: WeatherSettingsPanelProps) {
   const resolvedInitial = React.useMemo<WeatherSettingsValue>(
     () => ({
@@ -43,7 +45,14 @@ export function WeatherSettingsPanel({
     }),
     [initialValue],
   );
-  const [value, setValue] = React.useState(resolvedInitial);
+  const [uncontrolledValue, setUncontrolledValue] = React.useState(resolvedInitial);
+  const value = controlledValue ?? uncontrolledValue;
+
+  const setValue = (update: React.SetStateAction<WeatherSettingsValue>) => {
+    const nextValue = typeof update === "function" ? update(value) : update;
+    if (controlledValue === undefined) setUncontrolledValue(nextValue);
+    onValueChange?.(nextValue);
+  };
 
   const updateEvent = (event: WeatherEventKey, amount: number) => {
     setValue((current) => ({

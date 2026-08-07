@@ -32,7 +32,9 @@ export interface WeatherSettingsPanelProps {
   className?: string;
   initialValue?: WeatherSettingsInitialValue;
   location?: string;
+  onValueChange?: (value: WeatherSettingsValue) => void;
   theme?: WeatherTheme;
+  value?: WeatherSettingsValue;
 }
 
 export const DEFAULT_WEATHER_EVENTS: WeatherSettingsValue["events"] = {

@@ -118,6 +118,17 @@ export {
 } from "./components/tooltip";
 export { ScrollArea, type ScrollAreaProps } from "./components/scroll-area";
 export {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "./components/command";
+export {
   Dialog,
   DialogTrigger,
   DialogContent,
@@ -145,6 +156,8 @@ export {
   WeatherModeToggle,
   TimeOfDayControl,
   WeatherEventRow,
+  DEFAULT_WEATHER_EVENTS,
+  DEFAULT_WEATHER_SETTINGS,
   type WeatherSettingsPanelProps,
   type WeatherSettingsPopoverProps,
   type WeatherTheme,
@@ -176,12 +189,12 @@ export {
 export {
   DigitalTwinTopbar,
   type DigitalTwinOperator,
-  type DigitalTwinRegion,
   type DigitalTwinTopbarProps,
 } from "./components/digital-twin-topbar";
 export {
   DigitalTwinSidebar,
   type DigitalTwinDestination,
+  type DigitalTwinRegion,
   type DigitalTwinSidebarProps,
 } from "./components/digital-twin-sidebar";
 export {

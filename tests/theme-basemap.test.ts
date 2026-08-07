@@ -18,6 +18,12 @@ describe("resolveThemeBasemapStyle", () => {
     assert.equal(resolveThemeBasemapStyle(liberty, "light"), liberty);
   });
 
+  it("uses the dark style for the Digital Twin imagery presentation", () => {
+    const imagery = "geolibre://basemap/earth-usgs-imagery";
+    assert.equal(resolveThemeBasemapStyle(imagery, "dark"), DARK_STYLE);
+    assert.equal(resolveThemeBasemapStyle(imagery, "light"), imagery);
+  });
+
   it("keeps an explicitly selected dark style in either theme", () => {
     assert.equal(resolveThemeBasemapStyle(DARK_STYLE, "dark"), DARK_STYLE);
     assert.equal(resolveThemeBasemapStyle(DARK_STYLE, "light"), DARK_STYLE);

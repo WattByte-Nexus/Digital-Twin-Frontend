@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { PanelLeftIcon } from "lucide-react"
+import { MenuIcon } from "lucide-react"
 import { Slot } from "radix-ui"
 
 import { useIsMobile } from "@geolibre/ui/hooks/use-mobile"
@@ -258,7 +258,9 @@ function SidebarTrigger({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar()
+  const { isMobile, openMobile, state, toggleSidebar } = useSidebar()
+  const isExpanded = isMobile ? openMobile : state === "expanded"
+  const label = isExpanded ? "Close sidebar" : "Open sidebar"
 
   return (
     <Button
@@ -266,15 +268,20 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon"
-      className={cn("size-7", className)}
+      aria-expanded={isExpanded}
+      aria-label={label}
+      title={label}
+      className={cn(
+        "size-8 rounded-lg text-muted-foreground hover:bg-accent/70 hover:text-foreground [&>svg]:size-[18px] [&>svg]:stroke-[1.75]",
+        className
+      )}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
-      <PanelLeftIcon />
-      <span className="sr-only">Toggle Sidebar</span>
+      <MenuIcon aria-hidden="true" />
     </Button>
   )
 }

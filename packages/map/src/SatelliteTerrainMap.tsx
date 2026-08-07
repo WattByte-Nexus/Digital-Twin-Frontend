@@ -14,8 +14,10 @@ import {
   loadSatelliteReferenceOverlay,
   setSatelliteReferenceVisibility,
   type SatelliteReferenceLayer,
+  type SatelliteReferenceOverlay,
   type SatelliteReferenceVisibility,
 } from "./satellite-reference-overlay";
+import type { MapThemeMode } from "./theme-basemap";
 
 export interface SatelliteTerrainInitialView {
   center: [longitude: number, latitude: number];
@@ -34,6 +36,8 @@ export interface SatelliteTerrainMapProps {
   terrainExaggeration?: number;
   satelliteVisible?: boolean;
   elevationEnabled?: boolean;
+  /** App theme used for imagery treatment and the reference overlay style. */
+  themeMode?: MapThemeMode;
   className?: string;
   ariaLabel?: string;
   onMapReady?: (map: maplibregl.Map | null) => void;
@@ -55,6 +59,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   terrainExaggeration = 1,
   satelliteVisible = true,
   elevationEnabled = true,
+  themeMode = "light",
   className,
   ariaLabel = "Satellite terrain map",
   onMapReady,
@@ -62,13 +67,17 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const referenceLayersRef = useRef<SatelliteReferenceLayer[]>([]);
+  const referenceOverlayRef = useRef<SatelliteReferenceOverlay | undefined>(undefined);
   const referenceOverlayVisibilityRef = useRef(referenceOverlayVisibility);
   const satelliteVisibleRef = useRef(satelliteVisible);
   const elevationEnabledRef = useRef(elevationEnabled);
+  const themeModeRef = useRef(themeMode);
+  const appliedThemeModeRef = useRef<MapThemeMode | null>(null);
   const onMapReadyRef = useRef(onMapReady);
   referenceOverlayVisibilityRef.current = referenceOverlayVisibility;
   satelliteVisibleRef.current = satelliteVisible;
   elevationEnabledRef.current = elevationEnabled;
+  themeModeRef.current = themeMode;
   onMapReadyRef.current = onMapReady;
 
   // Sources and camera are mount-time inputs. Changing datasets should remount
@@ -93,6 +102,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
     void (async () => {
+      const initialThemeMode = themeModeRef.current;
       let referenceOverlay;
       if (options.referenceOverlayStyleUrl) {
         try {
@@ -102,10 +112,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
           );
         } catch (error) {
           if (abortController.signal.aborted) return;
-          console.warn(
-            "Satellite reference overlay could not be loaded",
-            error
-          );
+          console.warn("Satellite reference overlay could not be loaded", error);
         }
       }
       if (disposed) return;
@@ -123,6 +130,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
           terrainExaggeration: options.terrainExaggeration,
           satelliteVisible: initialSatelliteVisible,
           elevationEnabled: initialElevationEnabled,
+          themeMode: initialThemeMode,
         }),
         center: options.initialView.center,
         zoom: options.initialView.zoom,
@@ -130,15 +138,19 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
         bearing: options.initialView.bearing ?? 0,
         maxPitch: 85,
         renderWorldCopies: false,
-        // Keep coarser in-flight tiles available as placeholders while a zoom
-        // requests the next level. This trades a small amount of short-lived
-        // work for continuous imagery instead of holes during navigation.
-        cancelPendingTileRequestsWhileZooming: false,
-        // Keep more previously visited levels available for fast camera moves.
-        maxTileCacheZoomLevels: 8,
+        canvasContextAttributes: { powerPreference: "low-power" },
+        // These basemaps are versioned/static. Do not wake the map back up to
+        // revalidate expired tiles while the workspace is open.
+        refreshExpiredTiles: false,
+        // The coarse fallback remains visible beneath the primary imagery, so
+        // obsolete requests can be canceled without exposing blank terrain.
+        cancelPendingTileRequestsWhileZooming: true,
+        maxTileCacheZoomLevels: 5,
         attributionControl: false,
       });
       mapRef.current = map;
+      appliedThemeModeRef.current = initialThemeMode;
+      referenceOverlayRef.current = referenceOverlay;
       referenceLayersRef.current = referenceOverlay?.layers ?? [];
       onMapReadyRef.current?.(map);
 
@@ -184,12 +196,52 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       abortController.abort();
       resizeObserver?.disconnect();
       if (resizeTimer !== null) clearTimeout(resizeTimer);
+      onMapReadyRef.current?.(null);
       mapRef.current?.remove();
       mapRef.current = null;
+      appliedThemeModeRef.current = null;
+      referenceOverlayRef.current = undefined;
       referenceLayersRef.current = [];
-      onMapReadyRef.current?.(null);
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || appliedThemeModeRef.current === themeMode) return;
+
+    const options = initialOptionsRef.current;
+    const handleStyleLoad = () => {
+      setSatelliteReferenceVisibility(
+        map,
+        referenceLayersRef.current,
+        referenceOverlayVisibilityRef.current
+      );
+      setTerrainGroundVisibility(
+        map,
+        satelliteVisibleRef.current,
+        elevationEnabledRef.current
+      );
+    };
+    map.once("style.load", handleStyleLoad);
+    map.setStyle(
+      buildSatelliteTerrainStyle({
+        satelliteSource: options.satelliteSource,
+        satelliteFallbackSource: options.satelliteFallbackSource,
+        referenceOverlay: referenceOverlayRef.current,
+        referenceOverlayVisibility: referenceOverlayVisibilityRef.current,
+        terrainSource: options.terrainSource,
+        terrainExaggeration: options.terrainExaggeration,
+        satelliteVisible: satelliteVisibleRef.current,
+        elevationEnabled: elevationEnabledRef.current,
+        themeMode,
+      })
+    );
+    appliedThemeModeRef.current = themeMode;
+
+    return () => {
+      map.off("style.load", handleStyleLoad);
+    };
+  }, [themeMode]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -231,6 +283,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       role="region"
       aria-label={ariaLabel}
       data-testid="satellite-terrain-map"
+      data-map-theme={themeMode}
     />
   );
 });

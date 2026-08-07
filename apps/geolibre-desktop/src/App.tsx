@@ -18,6 +18,7 @@ import { useUndoRedoShortcuts } from "./hooks/useUndoRedoShortcuts";
 import { languageDirection } from "./i18n/languages";
 import { AdministrationLanding } from "./product-modes/digital-twin/AdministrationLanding";
 import { DigitalTwinAccessBoundary } from "./product-modes/digital-twin/DigitalTwinAccessBoundary";
+import { DigitalTwinMapWorkspace } from "./product-modes/digital-twin/ui/DigitalTwinMapWorkspace";
 import type {
   AuthorizedLocationResolution,
   DigitalTwinAccessContext,
@@ -27,6 +28,21 @@ interface AuthorizedApplicationProps {
   access: DigitalTwinAccessContext;
   navigate: (location: string, options?: { replace?: boolean }) => void;
   route: Extract<AuthorizedLocationResolution, { kind: "allowed" }>;
+}
+
+function displayNameInitials(displayName: string): string {
+  const initials = displayName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  return initials || "DT";
+}
+
+function roleLabel(role: string | undefined): string {
+  if (!role) return "Digital Twin operator";
+  return role.replaceAll("-", " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
 function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationProps) {
@@ -44,8 +60,48 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
   useUndoRedoShortcuts();
   useBeforeUnloadGuard();
 
-  return (
-    <>
+  const activeRegionId = route.regionId ?? access.regions[0]?.id ?? "";
+  const workspace =
+    route.mode === "digital-twin" ? (
+      <DigitalTwinMapWorkspace
+        activeDestination={route.view}
+        activeRegionId={activeRegionId}
+        operator={{
+          initials: displayNameInitials(access.displayName),
+          name: access.displayName,
+          role: roleLabel(access.roles[0]),
+        }}
+        organizationName={access.organization.name}
+        regions={access.regions.map((region) => ({
+          ...region,
+          description: `${region.name} operational area`,
+        }))}
+        showLidar
+        showWeather
+        themeMode={themeMode}
+        onNavigate={(view) =>
+          navigate(`/regions/${encodeURIComponent(activeRegionId)}/${view}`)
+        }
+        onOpenAdministration={
+          access.capabilities.includes("administration")
+            ? () => navigate("/admin")
+            : undefined
+        }
+        onOpenDiagnostics={() => navigate("/diagnostics")}
+        onOpenExpertWorkspace={
+          access.capabilities.includes("expert-gis")
+            ? () =>
+                navigate(
+                  `/workspace?returnTo=${encodeURIComponent(route.location)}`,
+                )
+            : undefined
+        }
+        onSelectRegion={(regionId) =>
+          navigate(`/regions/${encodeURIComponent(regionId)}/${route.view}`)
+        }
+        onToggleTheme={toggleThemeMode}
+      />
+    ) : (
       <DesktopShell
         access={access}
         layoutOptions={layoutOptions}
@@ -55,6 +111,11 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
         themeMode={themeMode}
         onToggleThemeMode={toggleThemeMode}
       />
+    );
+
+  return (
+    <>
+      {workspace}
       <OnboardingDialog open={showOnboarding} onClose={dismissOnboarding} />
       <UpdateNotificationModal
         pending={pendingUpdate}

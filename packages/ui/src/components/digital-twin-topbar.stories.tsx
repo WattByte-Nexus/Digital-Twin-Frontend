@@ -6,26 +6,7 @@ import {
 } from "./digital-twin-map-toolbar";
 import { DigitalTwinTopbar } from "./digital-twin-topbar";
 
-const regions = [
-  {
-    id: "boulder",
-    name: "Boulder County",
-    description: "Foothills assets and wildfire exposure",
-  },
-  {
-    id: "foothills",
-    name: "North Foothills",
-    description: "Mountain corridor operations and monitoring",
-  },
-  {
-    id: "sandbox",
-    name: "Qualification Sandbox",
-    description: "Isolated workspace for model validation",
-  },
-];
-
 const defaultArgs = {
-  activeRegionId: "boulder",
   alertsCount: 7,
   operator: {
     name: "Maya Chen",
@@ -33,7 +14,6 @@ const defaultArgs = {
     initials: "MC",
   },
   organizationName: "Front Range Electric",
-  regions,
   themeMode: "dark" as const,
   onOpenAdministration: fn(),
   onOpenAlerts: fn(),
@@ -41,7 +21,6 @@ const defaultArgs = {
   onOpenExpertWorkspace: fn(),
   onOpenHelp: fn(),
   onOpenSearch: fn(),
-  onSelectRegion: fn(),
   onSignOut: fn(),
   onToggleTheme: fn(),
 };
@@ -60,20 +39,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const OperationsDesktop: Story = {};
-
-export const RegionMenuOpen: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(
-      canvas.getByRole("button", {
-        name: /change assigned region/i,
-      })
-    );
-    await expect(
-      within(document.body).getByText("Qualification Sandbox")
-    ).toBeVisible();
-  },
-};
 
 export const OperatorMenuOpen: Story = {
   play: async ({ canvasElement }) => {

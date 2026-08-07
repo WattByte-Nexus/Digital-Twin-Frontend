@@ -16,6 +16,7 @@
     "build:storybook": "npm run build-storybook -w geolibre-desktop",
     "build:jupyterlite": "node scripts/build-jupyterlite.mjs",
     "build:embed": "node scripts/build-embed.mjs",
+    "build:lidar:golden": "UV_CACHE_DIR=.uv-cache uv run --python 3.12 scripts/build-usgs-lidar-tiles.py",
     "seed:digital-twin:boulder": "node scripts/seed-boulder-region.mjs",
     "typecheck": "npm run build",
     "lint": "eslint apps packages workers tests",

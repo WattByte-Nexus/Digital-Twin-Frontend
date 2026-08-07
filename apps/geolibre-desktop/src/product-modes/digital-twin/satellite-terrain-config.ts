@@ -24,7 +24,7 @@ const DRAPP_2022_BOUNDS: [number, number, number, number] = [
   -105.939624, 39.104426, -103.668018, 40.321386,
 ];
 
-export const SATELLITE_TERRAIN_STORY_ARGS = {
+export const DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG = {
   satelliteFallbackSource: {
     tiles: [USGS_IMAGERY_TILE_URL],
     tileSize: 256,
@@ -49,8 +49,8 @@ export const SATELLITE_TERRAIN_STORY_ARGS = {
   },
   initialView: {
     center: [-105.2211, 39.7555],
-    zoom: 15.5,
-    pitch: 55,
+    zoom: 17.2,
+    pitch: 60,
     bearing: -18,
   },
   terrainExaggeration: 1,

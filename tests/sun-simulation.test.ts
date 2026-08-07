@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  createSunSimulationController,
   DEFAULT_SUN_SETTINGS,
   advanceSunClock,
   getSunSettings,
+  isSunPanelVisible,
   normalizeSunSettings,
   setSunSettings,
   SUN_SHADE_MAX,
@@ -13,6 +15,26 @@ import {
   sunEquatorialPosition,
   sunPositionAt,
 } from "../packages/plugins/src/plugins/maplibre-sun";
+
+function installCanvasStub() {
+  const previousDocument = globalThis.document;
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: () => null,
+      }),
+    },
+  });
+  return () => {
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: previousDocument,
+    });
+  };
+}
 
 describe("normalizeSunSettings", () => {
   it("fills defaults for missing/invalid fields", () => {
@@ -101,5 +123,58 @@ describe("advanceSunClock", () => {
     assert.equal(next.getMinutes(), 1);
 
     setSunSettings(DEFAULT_SUN_SETTINGS);
+  });
+});
+
+describe("createSunSimulationController", () => {
+  it("drives the existing sun renderer without opening the Sun panel", () => {
+    const restoreDocument = installCanvasStub();
+    const sources = new Map<string, unknown>();
+    const layers = new Set<string>();
+    const listeners = new Map<string, Set<() => void>>();
+    const lights: unknown[] = [];
+    const map = {
+      addLayer: (layer: { id: string }) => layers.add(layer.id),
+      addSource: (id: string, source: unknown) => sources.set(id, source),
+      getCenter: () => ({ lat: 40, lng: -105 }),
+      getLayer: (id: string) => (layers.has(id) ? { id } : undefined),
+      getLight: () => ({ anchor: "viewport", intensity: 0.5 }),
+      getSource: (id: string) => sources.get(id),
+      isStyleLoaded: () => true,
+      off: (event: string, listener: () => void) => listeners.get(event)?.delete(listener),
+      on: (event: string, listener: () => void) => {
+        const eventListeners = listeners.get(event) ?? new Set();
+        eventListeners.add(listener);
+        listeners.set(event, eventListeners);
+      },
+      removeLayer: (id: string) => layers.delete(id),
+      removeSource: (id: string) => sources.delete(id),
+      setLight: (light: unknown) => lights.push(light),
+    };
+
+    try {
+      const controller = createSunSimulationController(
+        map as never,
+        { ...DEFAULT_SUN_SETTINGS, dateMs: Date.UTC(2024, 5, 21, 18) },
+      );
+
+      assert.equal(layers.has("geolibre-sun-night-layer"), true);
+      assert.equal(sources.has("geolibre-sun-night-source"), true);
+      assert.equal(lights.length, 1);
+      assert.equal(controller.getSettings().dateMs, Date.UTC(2024, 5, 21, 18));
+      assert.equal(
+        controller.setSettings({ dateMs: Date.UTC(2024, 5, 21, 19) }),
+        true,
+      );
+      assert.equal(lights.length, 2);
+      assert.equal(isSunPanelVisible(), false);
+
+      controller.destroy();
+      assert.equal(layers.has("geolibre-sun-night-layer"), false);
+      assert.equal(sources.has("geolibre-sun-night-source"), false);
+      assert.equal(listeners.get("styledata")?.size, 0);
+    } finally {
+      restoreDocument();
+    }
   });
 });

@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SatelliteTerrainMap } from "@geolibre/map";
-import { SATELLITE_TERRAIN_STORY_ARGS } from "./satellite-terrain-story-config";
+import { DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG } from "../../product-modes/digital-twin/satellite-terrain-config";
 
 const meta = {
   title: "Digital Twin/Main Map",
   component: SatelliteTerrainMap,
-  args: SATELLITE_TERRAIN_STORY_ARGS,
+  args: DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG,
   parameters: {
     layout: "fullscreen",
     controls: { disable: true },

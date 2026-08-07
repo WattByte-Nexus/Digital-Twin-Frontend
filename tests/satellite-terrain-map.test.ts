@@ -15,6 +15,7 @@ import {
 } from "../packages/map/src/satellite-terrain-style";
 import {
   DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
+  loadSatelliteReferenceOverlay,
   SATELLITE_REFERENCE_SOURCE_ID,
   setSatelliteReferenceVisibility,
 } from "../packages/map/src/satellite-reference-overlay";
@@ -161,6 +162,99 @@ test("satellite terrain style renders an atmospheric sky above the horizon", () 
   });
 });
 
+test("satellite terrain style uses a dark map treatment in dark mode", () => {
+  const style = buildSatelliteTerrainStyle({
+    satelliteFallbackSource: {
+      tiles: ["https://fallback.example/{z}/{x}/{y}.jpg"],
+      tileSize: 256,
+    },
+    satelliteSource: {
+      tiles: ["https://imagery.example/{z}/{x}/{y}.jpg"],
+      tileSize: 256,
+    },
+    terrainSource: {
+      tiles: ["https://terrain.example/{z}/{x}/{y}.png"],
+      tileSize: 256,
+    },
+    themeMode: "dark",
+  });
+
+  const rasterPaint = {
+    "raster-brightness-min": 0.02,
+    "raster-brightness-max": 0.42,
+    "raster-saturation": -0.2,
+    "raster-contrast": 0.15,
+  };
+  assert.deepEqual(
+    style.layers.find((layer) => layer.id === TERRAIN_BACKGROUND_LAYER_ID)?.paint,
+    { "background-color": "#07111f" }
+  );
+  assert.deepEqual(
+    style.layers.find((layer) => layer.id === SATELLITE_FALLBACK_LAYER_ID)?.paint,
+    rasterPaint
+  );
+  assert.deepEqual(
+    style.layers.find((layer) => layer.id === SATELLITE_LAYER_ID)?.paint,
+    rasterPaint
+  );
+  assert.deepEqual(style.sky, {
+    "sky-color": "#07111f",
+    "horizon-color": "#111827",
+    "fog-color": "#111827",
+    "fog-ground-blend": 0.9,
+    "horizon-fog-blend": 0.8,
+    "sky-horizon-blend": 0.8,
+  });
+});
+
+test("dark mode preserves every reference overlay layer", () => {
+  const referenceOverlay = {
+    source: {
+      type: "vector" as const,
+      tiles: ["https://reference.example/{z}/{x}/{y}.pbf"],
+    },
+    layers: [
+      {
+        category: "roads" as const,
+        layer: {
+          id: "digital-twin-reference-road",
+          type: "line" as const,
+          source: SATELLITE_REFERENCE_SOURCE_ID,
+          "source-layer": "transportation",
+        },
+      },
+      {
+        category: "buildings" as const,
+        layer: {
+          id: "digital-twin-reference-building",
+          type: "fill" as const,
+          source: SATELLITE_REFERENCE_SOURCE_ID,
+          "source-layer": "building",
+        },
+      },
+    ],
+  };
+  const style = buildSatelliteTerrainStyle({
+    satelliteSource: {
+      tiles: ["https://imagery.example/{z}/{x}/{y}.jpg"],
+      tileSize: 256,
+    },
+    referenceOverlay,
+    terrainSource: {
+      tiles: ["https://terrain.example/{z}/{x}/{y}.png"],
+      tileSize: 256,
+    },
+    themeMode: "dark",
+  });
+
+  assert.deepEqual(
+    style.layers
+      .filter((layer) => layer.id.startsWith("digital-twin-reference-"))
+      .map((layer) => layer.id),
+    referenceOverlay.layers.map(({ layer }) => layer.id)
+  );
+});
+
 test("satellite reference categories toggle independently", () => {
   const calls: Array<[string, string, string]> = [];
   const map = {
@@ -246,6 +340,73 @@ test("fallback imagery remains beneath the primary while detailed tiles load", (
       },
     ]
   );
+});
+
+test("reference overlay preserves bridge, tunnel, and 3D building layers", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        version: 8,
+        sources: {
+          liberty: {
+            type: "vector",
+            tiles: ["https://reference.example/{z}/{x}/{y}.pbf"],
+          },
+        },
+        layers: [
+          {
+            id: "road_motorway",
+            type: "line",
+            source: "liberty",
+            "source-layer": "transportation",
+          },
+          {
+            id: "bridge_motorway",
+            type: "line",
+            source: "liberty",
+            "source-layer": "transportation",
+          },
+          {
+            id: "tunnel_motorway",
+            type: "line",
+            source: "liberty",
+            "source-layer": "transportation",
+          },
+          {
+            id: "building-footprint",
+            type: "fill",
+            source: "liberty",
+            "source-layer": "building",
+          },
+          {
+            id: "building-3d",
+            type: "fill-extrusion",
+            source: "liberty",
+            "source-layer": "building",
+          },
+        ],
+      })
+    );
+
+  try {
+    const overlay = await loadSatelliteReferenceOverlay(
+      "https://reference.example/style.json"
+    );
+
+    assert.deepEqual(
+      overlay.layers.map(({ layer }) => layer.id),
+      [
+        "digital-twin-reference-road_motorway",
+        "digital-twin-reference-bridge_motorway",
+        "digital-twin-reference-tunnel_motorway",
+        "digital-twin-reference-building-footprint",
+        "digital-twin-reference-building-3d",
+      ]
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("satellite imagery toggles independently from elevation", () => {

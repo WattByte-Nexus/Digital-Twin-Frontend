@@ -17,6 +17,8 @@ export {
   type WeatherSummaryBarProps,
 } from "./weather-summary-bar";
 export {
+  DEFAULT_WEATHER_EVENTS,
+  DEFAULT_WEATHER_SETTINGS,
   type TimeFormat,
   type WeatherEventKey,
   type WeatherMode,

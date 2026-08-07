@@ -244,6 +244,7 @@ export {
 export {
   advanceSunClock,
   closeSunPanel,
+  createSunSimulationController,
   DEFAULT_SUN_SETTINGS,
   getSunSettings,
   getSunSettingsSnapshot,
@@ -261,6 +262,7 @@ export {
   SUN_SPEED_MAX,
   SUN_SPEED_MIN,
   type SunSettings,
+  type SunSimulationController,
   subsolarPoint,
   subscribeSunPanel,
   subscribeSunSettings,

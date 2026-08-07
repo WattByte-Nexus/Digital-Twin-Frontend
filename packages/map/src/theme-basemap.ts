@@ -12,16 +12,22 @@ const OPENFREEMAP_LIGHT_STYLES = new Set<string>(
   ),
 );
 
+const LIGHT_PRESENTATION_STYLES = new Set<string>([
+  ...OPENFREEMAP_LIGHT_STYLES,
+  "geolibre://basemap/earth-usgs-imagery",
+]);
+
 /**
  * Resolves the displayed basemap for the app theme without changing the
- * project's saved basemap selection. Built-in OpenFreeMap styles have a known
- * dark equivalent; custom, offline, and planetary styles are left untouched.
+ * project's saved basemap selection. Built-in light presentation styles have
+ * a known dark equivalent; custom, offline, and other planetary styles are
+ * left untouched.
  */
 export function resolveThemeBasemapStyle(
   styleUrl: string,
   themeMode: MapThemeMode,
 ): string {
-  if (themeMode === "dark" && OPENFREEMAP_LIGHT_STYLES.has(styleUrl)) {
+  if (themeMode === "dark" && LIGHT_PRESENTATION_STYLES.has(styleUrl)) {
     return OPENFREEMAP_DARK_STYLE;
   }
   return styleUrl;

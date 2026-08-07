@@ -5,7 +5,6 @@ import {
   CircleHelp,
   ExternalLink,
   LogOut,
-  MapPin,
   Moon,
   Search,
   Settings,
@@ -23,8 +22,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
@@ -35,12 +32,6 @@ import {
   TooltipTrigger,
 } from "./tooltip";
 
-export interface DigitalTwinRegion {
-  id: string;
-  name: string;
-  description: string;
-}
-
 export interface DigitalTwinOperator {
   name: string;
   role: string;
@@ -48,12 +39,10 @@ export interface DigitalTwinOperator {
 }
 
 export interface DigitalTwinTopbarProps {
-  activeRegionId: string;
   alertsCount?: number;
   mapToolbar?: ReactNode;
   operator: DigitalTwinOperator;
   organizationName: string;
-  regions: DigitalTwinRegion[];
   sidebarTrigger?: ReactNode;
   themeMode?: "light" | "dark";
   onOpenAdministration?: () => void;
@@ -62,7 +51,6 @@ export interface DigitalTwinTopbarProps {
   onOpenExpertWorkspace?: () => void;
   onOpenHelp?: () => void;
   onOpenSearch?: () => void;
-  onSelectRegion?: (regionId: string) => void;
   onSignOut?: () => void;
   onToggleTheme?: () => void;
 }
@@ -115,12 +103,10 @@ function MenuAction({
 }
 
 export function DigitalTwinTopbar({
-  activeRegionId,
   alertsCount = 0,
   mapToolbar,
   operator,
   organizationName,
-  regions,
   sidebarTrigger,
   themeMode = "dark",
   onOpenAdministration,
@@ -129,12 +115,9 @@ export function DigitalTwinTopbar({
   onOpenExpertWorkspace,
   onOpenHelp,
   onOpenSearch,
-  onSelectRegion,
   onSignOut,
   onToggleTheme,
 }: DigitalTwinTopbarProps) {
-  const activeRegion =
-    regions.find((region) => region.id === activeRegionId) ?? regions[0];
   const themeLabel =
     themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode";
   const ThemeIcon = themeMode === "dark" ? Sun : Moon;
@@ -155,20 +138,6 @@ export function DigitalTwinTopbar({
             {sidebarTrigger}
           </div>
         ) : null}
-        <Button
-          asChild
-          className="h-11 shrink-0 px-2 text-sm font-semibold"
-          variant="ghost"
-        >
-          <a href="#digital-twin">
-            <span>WattByte Nexus</span>
-          </a>
-        </Button>
-
-        <span
-          aria-hidden="true"
-          className="mx-1 h-7 w-px shrink-0 bg-border @sm/topbar:mx-2"
-        />
         {mapToolbar ? (
           <div className="ms-1 min-w-0 shrink overflow-hidden">
             {mapToolbar}
@@ -176,63 +145,6 @@ export function DigitalTwinTopbar({
         ) : null}
 
         <div className="ms-auto flex min-w-0 items-center gap-1 @sm/topbar:gap-1.5">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                aria-label={`Change assigned region. Current region: ${
-                  activeRegion?.name ?? "Unassigned"
-                }`}
-                className="hidden h-11 min-w-0 max-w-60 gap-2.5 px-2.5 @3xl/topbar:inline-flex"
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                <MapPin
-                  aria-hidden="true"
-                  className="h-4 w-4 shrink-0 text-muted-foreground"
-                />
-                <span className="min-w-0 text-start">
-                  <span className="block truncate text-xs font-medium">
-                    {activeRegion?.name ?? "Unassigned"}
-                  </span>
-                </span>
-                <ChevronDown
-                  aria-hidden="true"
-                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className={cn(
-                overlayClassName,
-                "w-72 min-w-[var(--radix-dropdown-menu-trigger-width)]"
-              )}
-            >
-              <DropdownMenuLabel>Assigned region</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup
-                value={activeRegionId}
-                onValueChange={onSelectRegion}
-              >
-                {regions.map((region) => (
-                  <DropdownMenuRadioItem
-                    className="px-2 py-2 data-[state=checked]:bg-accent/60 [&>span:first-child]:hidden"
-                    key={region.id}
-                    value={region.id}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate">{region.name}</span>
-                      <span className="block whitespace-normal text-xs leading-4 text-muted-foreground">
-                        {region.description}
-                      </span>
-                    </span>
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

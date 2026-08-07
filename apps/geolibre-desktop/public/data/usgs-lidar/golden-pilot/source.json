@@ -1,0 +1,23 @@
+{
+  "title": "Golden USGS 3DEP LiDAR pilot",
+  "project": "CO DRCOG 2 2020",
+  "source": "U.S. Geological Survey 3D Elevation Program",
+  "sourceUrl": "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/CO_DRCOG_2_2020",
+  "rights": "Public domain; free of charge and without use restrictions",
+  "center": [
+    -105.2211,
+    39.7555
+  ],
+  "querySizeMeters": 200,
+  "queryBoundsEpsg3857": [
+    -11713259.272708118,
+    4830375.558569922,
+    -11713059.272708118,
+    4830575.558569922
+  ],
+  "geoidModel": "GEOID18",
+  "geoidHeightMeters": -15.588,
+  "pointCount": 108762,
+  "classifications": null,
+  "mapWorkspacePointCloud": "points.bin"
+}

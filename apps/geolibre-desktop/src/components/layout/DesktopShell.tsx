@@ -808,11 +808,16 @@ export function DesktopShell({
   const diagnostics = useDiagnosticsSnapshot();
   const projectBasemapStyleUrl = useAppStore((state) => state.basemapStyleUrl);
   const projectDisplayBasemap = resolveThemeBasemapStyle(projectBasemapStyleUrl, themeMode);
+  const digitalTwinPresentationBasemap = resolveThemeBasemapStyle(
+    DIGITAL_TWIN_IMAGERY_BASEMAP,
+    themeMode,
+  );
   const projectDisplayBasemapRef = useRef(projectDisplayBasemap);
   projectDisplayBasemapRef.current = projectDisplayBasemap;
   const presentationStyleRequestRef = useRef<{
     controller: MapController;
     projectDisplayBasemap: string;
+    presentationBasemap: string;
   } | null>(null);
   const presentationStyleLoadCleanupRef = useRef<(() => void) | null>(null);
 
@@ -864,7 +869,7 @@ export function DesktopShell({
       presentationStyleRequestRef.current = null;
       if (!request) return;
       const restoreStyle = projectDisplayBasemapRef.current;
-      if (restoreStyle !== DIGITAL_TWIN_IMAGERY_BASEMAP) {
+      if (restoreStyle !== request.presentationBasemap) {
         applyPresentationMapStyle(restoreStyle);
       }
     };
@@ -881,24 +886,27 @@ export function DesktopShell({
       const previous = presentationStyleRequestRef.current;
       if (
         previous?.controller === controller &&
-        previous.projectDisplayBasemap === projectDisplayBasemap
+        previous.projectDisplayBasemap === projectDisplayBasemap &&
+        previous.presentationBasemap === digitalTwinPresentationBasemap
       ) {
         return;
       }
 
       if (
-        projectDisplayBasemap === DIGITAL_TWIN_IMAGERY_BASEMAP ||
-        applyPresentationMapStyle(DIGITAL_TWIN_IMAGERY_BASEMAP)
+        projectDisplayBasemap === digitalTwinPresentationBasemap ||
+        applyPresentationMapStyle(digitalTwinPresentationBasemap)
       ) {
         presentationStyleRequestRef.current = {
           controller,
           projectDisplayBasemap,
+          presentationBasemap: digitalTwinPresentationBasemap,
         };
       }
     });
     return () => window.cancelAnimationFrame(frame);
   }, [
     applyPresentationMapStyle,
+    digitalTwinPresentationBasemap,
     mapReadyGeneration,
     projectDisplayBasemap,
     workspaceMode,
