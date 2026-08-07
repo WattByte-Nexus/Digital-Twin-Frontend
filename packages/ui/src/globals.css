@@ -240,7 +240,12 @@
   }
 }
 
-:root {
+/* Rebind sidebar aliases at every explicit theme boundary. Custom properties
+   resolve references where they are declared, so defining these only on
+   :root would freeze nested dark surfaces to the light theme values. */
+:root,
+.theme-light,
+.dark {
   --sidebar: hsl(var(--surface-panel));
   --sidebar-foreground: hsl(var(--surface-panel-foreground));
   --sidebar-primary: hsl(var(--primary));
