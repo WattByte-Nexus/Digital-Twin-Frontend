@@ -1,6 +1,20 @@
 export { MapCanvas, type MapCanvasProps, type MapDiagnosticEvent } from "./MapCanvas";
 export { SecondaryMapCanvas, type SecondaryMapCanvasProps } from "./SecondaryMapCanvas";
 export {
+  SatelliteTerrainMap,
+  type SatelliteTerrainInitialView,
+  type SatelliteTerrainMapProps,
+} from "./SatelliteTerrainMap";
+export {
+  buildSatelliteTerrainStyle,
+  SATELLITE_LAYER_ID,
+  SATELLITE_SOURCE_ID,
+  TERRAIN_SOURCE_ID,
+  type SatelliteRasterSource,
+  type SatelliteTerrainStyleOptions,
+  type TerrainRasterSource,
+} from "./satellite-terrain-style";
+export {
   resolveThemeBasemapStyle,
   type MapThemeMode,
 } from "./theme-basemap";
