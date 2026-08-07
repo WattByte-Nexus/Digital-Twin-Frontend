@@ -332,6 +332,7 @@ export function DigitalTwinMapWorkspace({
         />
         <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
           <DigitalTwinTopbar
+            alerts={WORKSPACE_ALERTS}
             alertsCount={7}
             mapToolbar={
               <DigitalTwinMapToolbar
@@ -353,6 +354,7 @@ export function DigitalTwinMapWorkspace({
             onOpenAdministration={onOpenAdministration}
             onOpenDiagnostics={onOpenDiagnostics}
             onOpenExpertWorkspace={onOpenExpertWorkspace}
+            onOpenAlerts={() => navigateTo("live")}
             onOpenSearch={() => setSearchOpen(true)}
             onToggleTheme={toggleTheme}
           />

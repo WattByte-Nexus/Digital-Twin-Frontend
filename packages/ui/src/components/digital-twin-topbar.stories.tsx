@@ -7,6 +7,18 @@ import {
 import { DigitalTwinTopbar } from "./digital-twin-topbar";
 
 const defaultArgs = {
+  alerts: [
+    {
+      description: "High · Boulder Creek Substation · 8 min ago",
+      id: "alert-vegetation-clearance",
+      name: "Vegetation clearance risk",
+    },
+    {
+      description: "Medium · Denver Feeder 12 · 21 min ago",
+      id: "alert-transformer-loading",
+      name: "Transformer loading anomaly",
+    },
+  ],
   alertsCount: 7,
   operator: {
     name: "Maya Chen",
@@ -49,6 +61,23 @@ export const OperatorMenuOpen: Story = {
     await expect(
       within(document.body).getByText("Open Expert GIS workspace")
     ).toBeVisible();
+  },
+};
+
+export const AlertsMenuOpen: Story = {
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole("button", { name: /open alerts, 7 alerts awaiting review/i })
+    );
+    await expect(
+      within(document.body).getByText("Vegetation clearance risk")
+    ).toBeVisible();
+    await expect(
+      within(document.body).getByText("View all alerts")
+    ).toBeVisible();
+    await userEvent.click(within(document.body).getByText("View all alerts"));
+    await expect(args.onOpenAlerts).toHaveBeenCalledOnce();
   },
 };
 

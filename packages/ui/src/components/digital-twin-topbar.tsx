@@ -1,6 +1,5 @@
 import {
   Activity,
-  Bell,
   ChevronDown,
   CircleHelp,
   ExternalLink,
@@ -15,8 +14,11 @@ import {
 import type { ReactNode } from "react";
 import { cn } from "../lib/utils";
 import { Avatar, AvatarFallback } from "./avatar";
-import { Badge } from "./badge";
 import { Button } from "./button";
+import {
+  DigitalTwinAlertsDropdown,
+  type DigitalTwinAlertSummary,
+} from "./digital-twin-alerts-dropdown";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +41,7 @@ export interface DigitalTwinOperator {
 }
 
 export interface DigitalTwinTopbarProps {
+  alerts?: readonly DigitalTwinAlertSummary[];
   alertsCount?: number;
   mapToolbar?: ReactNode;
   operator: DigitalTwinOperator;
@@ -103,6 +106,7 @@ function MenuAction({
 }
 
 export function DigitalTwinTopbar({
+  alerts = [],
   alertsCount = 0,
   mapToolbar,
   operator,
@@ -183,33 +187,12 @@ export function DigitalTwinTopbar({
             overlayClassName={overlayClassName}
           />
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label={`Open alerts${
-                  alertsCount > 0 ? `, ${alertsCount} awaiting review` : ""
-                }`}
-                className="relative h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground"
-                onClick={onOpenAlerts}
-                size="icon"
-                type="button"
-                variant="ghost"
-              >
-                <Bell aria-hidden="true" className="h-4 w-4" />
-                {alertsCount > 0 ? (
-                  <Badge
-                    className="absolute end-0 top-0 h-4 min-w-4 rounded-full px-1 text-[9px] font-bold leading-4"
-                    variant="destructive"
-                  >
-                    {alertsCount > 99 ? "99+" : alertsCount}
-                  </Badge>
-                ) : null}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className={overlayClassName}>
-              Open alert inbox
-            </TooltipContent>
-          </Tooltip>
+          <DigitalTwinAlertsDropdown
+            alerts={alerts}
+            alertsCount={alertsCount}
+            onOpenAlerts={onOpenAlerts}
+            overlayClassName={overlayClassName}
+          />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

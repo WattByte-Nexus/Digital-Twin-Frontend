@@ -187,6 +187,11 @@ export {
   DropdownMenuTrigger,
 } from "./components/dropdown-menu";
 export {
+  DigitalTwinAlertsDropdown,
+  type DigitalTwinAlertsDropdownProps,
+  type DigitalTwinAlertSummary,
+} from "./components/digital-twin-alerts-dropdown";
+export {
   DigitalTwinTopbar,
   type DigitalTwinOperator,
   type DigitalTwinTopbarProps,
