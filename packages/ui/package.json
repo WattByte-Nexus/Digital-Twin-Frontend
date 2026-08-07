@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./globals.css": "./src/globals.css",
     "./components/*": "./src/components/*.tsx",
+    "./hooks/*": "./src/hooks/*.ts",
     "./lib/*": "./src/lib/*.ts"
   },
   "dependencies": {
