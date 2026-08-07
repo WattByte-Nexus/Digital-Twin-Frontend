@@ -66,7 +66,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       bearing: options.initialView.bearing ?? 0,
       maxPitch: 85,
       renderWorldCopies: false,
-      attributionControl: { compact: false },
+      attributionControl: false,
     });
 
     const resizeObserver = new ResizeObserver(() => map.resize());
