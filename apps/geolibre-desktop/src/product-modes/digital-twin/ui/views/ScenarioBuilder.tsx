@@ -13,6 +13,7 @@ import {
   Input,
   Label,
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
   ScrollArea,
@@ -23,15 +24,14 @@ import {
   SelectMenuValue,
   Separator,
   Slider,
-  WeatherSettingsFloatingPanel,
   WeatherSettingsPanel,
+  type FloatingPanelAnchor,
   surfaceThemeClassName,
   type SurfaceTheme,
   type WeatherSettingsValue,
 } from "@geolibre/ui";
 import {
   ArrowLeft,
-  CloudSun,
   Crosshair,
   LocateFixed,
   MapPin,
@@ -226,6 +226,10 @@ export function ScenarioBuilder({
     () => initialRequest?.ignitionPoints.map((point) => ({ ...point })) ?? []
   );
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const [runSetupAnchor, setRunSetupAnchor] = useState<FloatingPanelAnchor>({
+    edge: "right",
+    offset: 0,
+  });
   const [weather, setWeather] = useState<WeatherSettingsValue>(() => {
     const initialWeather = initialRequest?.weather ?? {
       ...DEFAULT_WEATHER_SETTINGS,
@@ -249,6 +253,12 @@ export function ScenarioBuilder({
 
   const selectedPoint =
     points.find((point) => point.id === selectedPointId) ?? null;
+  const weatherEditorSide =
+    runSetupAnchor.edge === "left" ||
+    ((runSetupAnchor.edge === "top" || runSetupAnchor.edge === "bottom") &&
+      runSetupAnchor.offset < 0.5)
+      ? "right"
+      : "left";
   const runLabel = `Run ${durationHours}-hour simulation`;
   const weatherSummary = useMemo(
     () =>
@@ -282,36 +292,18 @@ export function ScenarioBuilder({
         <ArrowLeft aria-hidden="true" />
       </Button>
 
-      <div className="pointer-events-none absolute inset-y-0 left-0 right-[432px] z-10 hidden md:block">
-        <WeatherSettingsFloatingPanel
-          location={location}
-          onValueChange={setWeather}
-          theme={theme}
-          value={weather}
-          trigger={
-            <Button
-              aria-label="Open weather settings"
-              className="border bg-background/95 text-foreground shadow-lg backdrop-blur"
-              size="icon"
-              title="Weather settings"
-              type="button"
-              variant="secondary"
-            >
-              <CloudSun aria-hidden="true" />
-            </Button>
-          }
-        />
-      </div>
-
-      <FloatingMapPanel
-        aria-label="Simulation run setup"
-        defaultSize={{ width: 416, height: 820 }}
-        fitToBounds
-      >
-        <Card
-          className="relative h-full gap-0 overflow-hidden rounded-[10px] py-0 shadow-xl"
-          surface="panel"
+      <Popover>
+        <FloatingMapPanel
+          aria-label="Simulation run setup"
+          defaultSize={{ width: 416, height: 820 }}
+          fitToBounds
+          onAnchorChange={setRunSetupAnchor}
         >
+          <PopoverAnchor asChild>
+            <Card
+              className="relative h-full gap-0 overflow-hidden rounded-[10px] py-0 shadow-xl"
+              surface="panel"
+            >
           <FloatingMapPanelDragHandle className="absolute inset-x-0 top-0 z-10 h-[54px] rounded-t-[10px]" />
           <CardHeader className="border-b px-5 py-5">
             <div className="flex items-start justify-between gap-4">
@@ -493,28 +485,11 @@ export function ScenarioBuilder({
                         {weatherSummary}
                       </p>
                     </div>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button size="sm" variant="outline">
-                          Edit
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        align="center"
-                        className={`${surfaceThemeClassName(
-                          theme
-                        )} w-auto border-0 bg-transparent p-0 shadow-none`}
-                        side="left"
-                        sideOffset={12}
-                      >
-                        <WeatherSettingsPanel
-                          location={location}
-                          onValueChange={setWeather}
-                          theme={theme}
-                          value={weather}
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <PopoverTrigger asChild>
+                      <Button size="sm" variant="outline">
+                        Edit
+                      </Button>
+                    </PopoverTrigger>
                   </div>
                 </Card>
               </section>
@@ -587,8 +562,26 @@ export function ScenarioBuilder({
               </p>
             ) : null}
           </CardFooter>
-        </Card>
-      </FloatingMapPanel>
+            </Card>
+          </PopoverAnchor>
+        </FloatingMapPanel>
+        <PopoverContent
+          align="center"
+          avoidCollisions={false}
+          className={`${surfaceThemeClassName(
+            theme
+          )} w-auto border-0 bg-transparent p-0 shadow-none`}
+          side={weatherEditorSide}
+          sideOffset={12}
+        >
+          <WeatherSettingsPanel
+            location={location}
+            onValueChange={setWeather}
+            theme={theme}
+            value={weather}
+          />
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

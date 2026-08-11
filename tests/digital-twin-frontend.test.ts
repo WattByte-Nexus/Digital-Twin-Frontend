@@ -103,19 +103,25 @@ describe("Digital Twin frontend composition", () => {
   it("keeps the scenario map interactive behind draggable floating panels", () => {
     assert.match(
       scenarioBuilderSource,
-      /className="pointer-events-none absolute inset-y-0 left-0 right-\[432px\]/
-    );
-    assert.match(
-      scenarioBuilderSource,
       /<FloatingMapPanel\s+aria-label="Simulation run setup"/
     );
     assert.match(scenarioBuilderSource, /<FloatingMapPanelDragHandle/);
+    assert.doesNotMatch(scenarioBuilderSource, /<WeatherSettingsFloatingPanel/);
+    assert.doesNotMatch(scenarioBuilderSource, /Open weather settings/);
   });
 
   it("opens scenario weather editing beside the run setup panel", () => {
     assert.match(
       scenarioBuilderSource,
-      /<PopoverContent[\s\S]*?align="center"[\s\S]*?side="left"[\s\S]*?sideOffset=\{12\}[\s\S]*?<WeatherSettingsPanel/
+      /<Popover>\s*<FloatingMapPanel[\s\S]*?<PopoverAnchor asChild>\s*<Card/
+    );
+    assert.match(
+      scenarioBuilderSource,
+      /<FloatingMapPanel[\s\S]*?onAnchorChange=\{setRunSetupAnchor\}/
+    );
+    assert.match(
+      scenarioBuilderSource,
+      /<\/FloatingMapPanel>\s*<PopoverContent[\s\S]*?avoidCollisions=\{false\}[\s\S]*?side=\{weatherEditorSide\}[\s\S]*?sideOffset=\{12\}[\s\S]*?<WeatherSettingsPanel/
     );
   });
 
