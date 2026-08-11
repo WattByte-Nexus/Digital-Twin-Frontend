@@ -1,5 +1,6 @@
 import { CloudSun, X } from "lucide-react";
 import * as React from "react";
+import { flushSync } from "react-dom";
 import { Button } from "../button";
 import { cn } from "../../lib/utils";
 import {
@@ -36,9 +37,9 @@ export function WeatherSettingsFloatingPanel({
   });
   const [panelPresent, setPanelPresent] = React.useState(isOpen);
   React.useEffect(() => {
-    if (isOpen) return;
-    const timeout = window.setTimeout(() => setPanelPresent(false), 200);
-    return () => window.clearTimeout(timeout);
+    if (!isOpen && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setPanelPresent(false);
+    }
   }, [isOpen]);
   const setOpen = (nextOpen: boolean) => {
     if (nextOpen) setPanelPresent(true);
@@ -82,6 +83,15 @@ export function WeatherSettingsFloatingPanel({
                 : "pointer-events-none animate-out fade-out-0 zoom-out-95",
             )}
             data-state={isOpen ? "open" : "closed"}
+            onAnimationEnd={(event) => {
+              if (
+                !isOpen &&
+                event.currentTarget === event.target &&
+                event.animationName === "exit"
+              ) {
+                flushSync(() => setPanelPresent(false));
+              }
+            }}
             style={{
               transformOrigin:
                 anchor.edge === "left" || anchor.edge === "right"
