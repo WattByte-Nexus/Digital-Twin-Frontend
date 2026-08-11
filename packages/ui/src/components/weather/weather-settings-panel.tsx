@@ -133,7 +133,7 @@ export function WeatherSettingsPanel({
                   <SelectTrigger id="weather-season" className="w-full">
                     <SelectValue placeholder="Select season" />
                   </SelectTrigger>
-                  <SelectContent className={theme === "dark" ? "dark" : undefined}>
+                  <SelectContent className={surfaceThemeClassName(theme)}>
                     <SelectItem value="Spring">Spring</SelectItem>
                     <SelectItem value="Summer">Summer</SelectItem>
                     <SelectItem value="Autumn">Autumn</SelectItem>

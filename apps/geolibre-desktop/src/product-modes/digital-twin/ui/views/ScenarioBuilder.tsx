@@ -301,7 +301,9 @@ export function ScenarioBuilder({
         >
           <PopoverAnchor asChild>
             <Card
-              className="relative h-full gap-0 overflow-hidden rounded-[10px] py-0 shadow-xl"
+              className={`${surfaceThemeClassName(
+                theme
+              )} relative h-full gap-0 overflow-hidden rounded-[10px] py-0 shadow-xl`}
               surface="panel"
             >
           <FloatingMapPanelDragHandle className="absolute inset-x-0 top-0 z-10 h-[54px] rounded-t-[10px]" />
@@ -356,9 +358,7 @@ export function ScenarioBuilder({
                     >
                       <SelectMenuValue />
                     </SelectMenuTrigger>
-                    <SelectMenuContent
-                      className={theme === "dark" ? "dark" : undefined}
-                    >
+                    <SelectMenuContent className={surfaceThemeClassName(theme)}>
                       <SelectMenuItem value="Boulder Foothills">
                         Boulder Foothills
                       </SelectMenuItem>
