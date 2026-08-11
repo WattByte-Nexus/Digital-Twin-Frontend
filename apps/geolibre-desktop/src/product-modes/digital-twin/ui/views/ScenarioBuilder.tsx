@@ -295,7 +295,7 @@ export function ScenarioBuilder({
       <Popover>
         <FloatingMapPanel
           aria-label="Simulation run setup"
-          defaultSize={{ width: 416, height: 820 }}
+          defaultSize={{ width: 416, height: 831 }}
           fitToBounds
           onAnchorChange={setRunSetupAnchor}
         >
@@ -570,7 +570,7 @@ export function ScenarioBuilder({
           avoidCollisions={false}
           className={`${surfaceThemeClassName(
             theme
-          )} w-auto border-0 bg-transparent p-0 shadow-none`}
+          )} z-10 w-auto border-0 bg-transparent p-0 shadow-none`}
           side={weatherEditorSide}
           sideOffset={12}
         >

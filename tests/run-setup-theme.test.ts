@@ -32,4 +32,15 @@ describe("Run setup theme", () => {
       /<SelectContent className=\{surfaceThemeClassName\(theme\)\}>/
     );
   });
+
+  it("matches the Weather panel height without painting its shadow over Run setup", () => {
+    assert.match(
+      scenarioBuilderSource,
+      /defaultSize=\{\{ width: 416, height: 831 \}\}/
+    );
+    assert.match(
+      scenarioBuilderSource,
+      /<PopoverContent[\s\S]*?className=\{`\$\{surfaceThemeClassName\([\s\S]*?\)\} z-10/
+    );
+  });
 });
