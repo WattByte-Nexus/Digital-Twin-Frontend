@@ -136,7 +136,7 @@ export function DigitalTwinTopbar({
         aria-label="Digital Twin application header"
         className={cn(
           themeClassName,
-          "surface-glass-subtle @container/topbar flex h-16 w-full min-w-0 shrink-0 items-center border-x-0 border-t-0 border-b border-sidebar-border px-4 text-card-foreground"
+          "@container/topbar flex h-16 w-full min-w-0 shrink-0 items-center border-b border-separator bg-card px-4 text-card-foreground shadow-none"
         )}
       >
         {sidebarTrigger ? (
@@ -271,7 +271,7 @@ export function DigitalTwinTopbar({
           aria-label="Map controls"
           className={cn(
             themeClassName,
-            "surface-glass-subtle flex h-12 w-full min-w-0 shrink-0 items-center overflow-x-auto border-x-0 border-t-0 border-b border-sidebar-border px-4 text-card-foreground"
+            "flex h-12 w-full min-w-0 shrink-0 items-center overflow-x-auto border-b border-separator bg-card px-4 text-card-foreground shadow-none"
           )}
         >
           {mapToolbar}

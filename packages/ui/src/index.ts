@@ -83,6 +83,16 @@ export {
   tabsListVariants,
 } from "./components/tabs";
 export { Input } from "./components/input";
+export {
+  FilterButton,
+  FilterChip,
+  FilterSearch,
+  FilterSelectTrigger,
+  FilterToolbar,
+  FilterToolbarRow,
+  type FilterChipProps,
+  type FilterSearchProps,
+} from "./components/filter-toolbar";
 export { DatePicker, type DatePickerProps } from "./components/date-picker";
 export { Calendar, CalendarDayButton } from "./components/calendar";
 export {
@@ -130,6 +140,7 @@ export {
   TooltipTrigger,
 } from "./components/tooltip";
 export { ScrollArea, type ScrollAreaProps } from "./components/scroll-area";
+export { Skeleton } from "./components/skeleton";
 export {
   Command,
   CommandDialog,

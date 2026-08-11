@@ -6,11 +6,12 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  Input,
+  FilterButton,
+  FilterChip,
+  FilterSearch,
+  FilterSelectTrigger,
+  FilterToolbar,
+  FilterToolbarRow,
   Label,
   Popover,
   PopoverContent,
@@ -19,107 +20,118 @@ import {
   SelectMenu,
   SelectMenuContent,
   SelectMenuItem,
-  SelectMenuTrigger,
   SelectMenuValue,
   Separator,
-  Slider,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Tabs,
-  TabsList,
-  TabsTrigger,
   surfaceThemeClassName,
   type SurfaceTheme,
 } from "@geolibre/ui";
 import {
-  Download,
-  ExternalLink,
-  Filter,
+  AlertCircle,
   Flame,
+  LoaderCircle,
   MapPinned,
-  MoreHorizontal,
   Plus,
-  RotateCcw,
-  Search,
-  X,
+  RefreshCw,
+  SlidersHorizontal,
 } from "lucide-react";
-import { type ReactNode, type RefObject, useMemo, useState } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { type ReactNode, type RefObject, useMemo, useState } from "react";
 import {
-  DEFAULT_RUN_FILTERS,
-  filterRuns,
-  runIdFromLocation,
-  type RunFilters,
-  type RunStatus,
-  type SimulationRun,
-} from "../simulation-flow";
+  DEFAULT_DIGITAL_TWIN_RUN_FILTERS,
+  digitalTwinRunStatusLabel,
+  filterDigitalTwinRuns,
+  type DigitalTwinRegionRecord,
+  type DigitalTwinRunFilters,
+  type DigitalTwinRunRecord,
+  type DigitalTwinRunStatus,
+} from "../../../../lib/digital-twin-runs";
+import { runIdFromLocation } from "../simulation-flow";
 import { RunDetailView } from "./RunDetailView";
 
 interface RunsViewProps {
+  apiUrl: string;
+  error: Error | null;
+  isLoading: boolean;
   location: string;
   mapControllerRef: RefObject<{ getMap: () => MapLibreMap | null } | null>;
   mapSlot: ReactNode;
   onCreateScenario: () => void;
   onOpenRun: (runId: string) => void;
+  onRefresh: () => void;
   onReturnToRuns: () => void;
-  runs: SimulationRun[];
+  regions: DigitalTwinRegionRecord[];
+  runs: DigitalTwinRunRecord[];
   theme: SurfaceTheme;
 }
 
-function RunStatusBadge({ status }: Pick<SimulationRun, "status">) {
+const RUN_STATUSES: DigitalTwinRunStatus[] = [
+  "STARTED",
+  "QUEUED",
+  "COMPLETED",
+  "FAILED",
+  "CANCEL_REQUESTED",
+  "CANCELLED",
+];
+
+function RunStatusBadge({ status }: Pick<DigitalTwinRunRecord, "status">) {
   const variant =
-    status === "Failed"
+    status === "FAILED"
       ? "destructive"
-      : status === "Completed"
+      : status === "COMPLETED"
         ? "outline"
-        : status === "Queued"
+        : status === "QUEUED" || status === "CANCELLED"
           ? "secondary"
           : "default";
-  return <Badge variant={variant}>{status}</Badge>;
+  return <Badge variant={variant}>{digitalTwinRunStatusLabel(status)}</Badge>;
 }
 
-function ActiveFilter({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <Badge className="gap-1 pl-2.5 pr-1" variant="secondary">
-      {label}
-      <Button
-        aria-label={`Remove ${label} filter`}
-        className="size-5 rounded-full p-0"
-        onClick={onRemove}
-        size="icon"
-        variant="ghost"
-      >
-        <X aria-hidden="true" className="size-3" />
-      </Button>
-    </Badge>
-  );
+function formatHours(value: number | null): string {
+  return value === null ? "Not reported" : `${value.toLocaleString()} h`;
 }
 
 export function RunsView({
+  apiUrl,
+  error,
+  isLoading,
   location,
   mapControllerRef,
   mapSlot,
   onCreateScenario,
   onOpenRun,
+  onRefresh,
   onReturnToRuns,
+  regions,
   runs,
   theme,
 }: RunsViewProps) {
   const selectedRunId = runIdFromLocation(location);
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null;
-  const [filters, setFilters] = useState<RunFilters>(DEFAULT_RUN_FILTERS);
-
-  const visibleRuns = useMemo(() => filterRuns(runs, filters), [filters, runs]);
-  const locations = useMemo(() => [...new Set(runs.map((run) => run.location))], [runs]);
-  const scenarios = useMemo(() => [...new Set(runs.map((run) => run.scenario))], [runs]);
+  const [filters, setFilters] = useState<DigitalTwinRunFilters>(
+    DEFAULT_DIGITAL_TWIN_RUN_FILTERS,
+  );
+  const visibleRuns = useMemo(() => filterDigitalTwinRuns(runs, filters), [filters, runs]);
+  const scenarios = useMemo(
+    () =>
+      [...new Set(runs.flatMap((run) => (run.scenarioId ? [run.scenarioId] : [])))].sort(
+        (left, right) => left.localeCompare(right),
+      ),
+    [runs],
+  );
+  const regionNames = useMemo(
+    () => new Map(regions.map((region) => [region.id, region.name])),
+    [regions],
+  );
 
   if (selectedRun) {
     return (
       <RunDetailView
+        apiUrl={apiUrl}
         mapControllerRef={mapControllerRef}
         mapSlot={mapSlot}
         onBack={onReturnToRuns}
@@ -128,20 +140,18 @@ export function RunsView({
     );
   }
 
-  if (selectedRunId) {
+  if (selectedRunId && !isLoading) {
     return (
       <div className="grid h-full min-h-0 place-items-center bg-background p-6">
         <Card className="w-full max-w-md text-center">
           <CardHeader>
             <CardTitle>Run not found</CardTitle>
             <CardDescription>
-              The run may have expired from this session or the link may be incorrect.
+              The Digital Twin API did not return a run with this identifier.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={onReturnToRuns} variant="outline">
-              Return to runs
-            </Button>
+            <Button onClick={onReturnToRuns} variant="outline">Return to runs</Button>
           </CardContent>
         </Card>
       </div>
@@ -150,29 +160,31 @@ export function RunsView({
 
   const activeFilterCount = [
     filters.status !== "all",
-    filters.location !== "all",
-    filters.scenario !== "all",
-    filters.timeRange !== "all",
-    filters.minimumBurnedArea > 0,
-    filters.minimumSpreadRate > 0,
+    filters.regionId !== "all",
+    filters.scenarioId !== "all",
   ].filter(Boolean).length;
-
-  const setFilter = <Key extends keyof RunFilters>(key: Key, value: RunFilters[Key]) => {
-    setFilters((current) => ({ ...current, [key]: value }));
-  };
+  const menuFilterCount = [
+    filters.status !== "all",
+    filters.scenarioId !== "all",
+  ].filter(Boolean).length;
+  const setFilter = <Key extends keyof DigitalTwinRunFilters>(
+    key: Key,
+    value: DigitalTwinRunFilters[Key],
+  ) => setFilters((current) => ({ ...current, [key]: value }));
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-4 lg:px-7">
+      <header className="flex flex-wrap items-center justify-between gap-4 px-5 pb-2 pt-5 lg:px-7">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Runs</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Monitor simulations, inspect results, and replay fire behavior.
+            Authoritative simulation runs from the Digital Twin API.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
-            <Download aria-hidden="true" /> Export
+          <Button disabled={isLoading} onClick={onRefresh} variant="outline">
+            <RefreshCw aria-hidden="true" className={isLoading ? "animate-spin" : undefined} />
+            Refresh
           </Button>
           <Button onClick={onCreateScenario}>
             <Plus aria-hidden="true" /> New simulation
@@ -180,148 +192,172 @@ export function RunsView({
         </div>
       </header>
 
-      <div className="border-b px-5 py-4 lg:px-7">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[220px] flex-1 lg:max-w-sm">
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              className="pl-9"
-              onChange={(event) => setFilter("query", event.target.value)}
-              placeholder="Search runs"
-              type="search"
+      <div className="px-5 pb-5 pt-2 lg:px-7">
+        <FilterToolbar>
+          <FilterToolbarRow>
+            <FilterSearch
+              aria-label="Search runs"
+              onValueChange={(value) => setFilter("query", value)}
+              placeholder="Search runs…"
               value={filters.query}
             />
-          </div>
-          <SelectMenu onValueChange={(value) => setFilter("location", value)} value={filters.location}>
-            <SelectMenuTrigger className="w-[185px]">
-              <MapPinned aria-hidden="true" />
-              <SelectMenuValue placeholder="All locations" />
-            </SelectMenuTrigger>
-            <SelectMenuContent className={theme === "dark" ? "dark" : undefined}>
-              <SelectMenuItem value="all">All locations</SelectMenuItem>
-              {locations.map((runLocation) => (
-                <SelectMenuItem key={runLocation} value={runLocation}>{runLocation}</SelectMenuItem>
-              ))}
-            </SelectMenuContent>
-          </SelectMenu>
-          <SelectMenu onValueChange={(value) => setFilter("scenario", value)} value={filters.scenario}>
-            <SelectMenuTrigger className="w-[210px]">
-              <SelectMenuValue placeholder="All scenarios" />
-            </SelectMenuTrigger>
-            <SelectMenuContent className={theme === "dark" ? "dark" : undefined}>
-              <SelectMenuItem value="all">All scenarios</SelectMenuItem>
-              {scenarios.map((scenario) => (
-                <SelectMenuItem key={scenario} value={scenario}>{scenario}</SelectMenuItem>
-              ))}
-            </SelectMenuContent>
-          </SelectMenu>
           <SelectMenu
-            onValueChange={(value) => setFilter("timeRange", value as RunFilters["timeRange"])}
-            value={filters.timeRange}
+            onValueChange={(value) => setFilter("regionId", value)}
+            value={filters.regionId}
           >
-            <SelectMenuTrigger className="w-[150px]">
-              <SelectMenuValue placeholder="Any time" />
-            </SelectMenuTrigger>
-            <SelectMenuContent className={theme === "dark" ? "dark" : undefined}>
-              <SelectMenuItem value="all">Any time</SelectMenuItem>
-              <SelectMenuItem value="today">Today</SelectMenuItem>
-              <SelectMenuItem value="week">Last 7 days</SelectMenuItem>
+            <FilterSelectTrigger className="w-48">
+              <MapPinned aria-hidden="true" />
+              <SelectMenuValue placeholder="All regions" />
+            </FilterSelectTrigger>
+            <SelectMenuContent
+              className={`${surfaceThemeClassName(theme)} surface-glass-overlay min-w-[var(--radix-select-trigger-width)]`}
+              position="popper"
+            >
+              <SelectMenuItem value="all">All regions</SelectMenuItem>
+              {regions.map((region) => (
+                <SelectMenuItem key={region.id} value={region.id}>{region.name}</SelectMenuItem>
+              ))}
             </SelectMenuContent>
           </SelectMenu>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline">
-                <Filter aria-hidden="true" />
-                More filters
-                {activeFilterCount > 0 ? <Badge variant="secondary">{activeFilterCount}</Badge> : null}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              align="end"
-              className={`${surfaceThemeClassName(theme)} w-[340px] p-4`}
-            >
-              <div className="space-y-5">
-                <div>
-                  <p className="font-medium text-foreground">Analytical filters</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Narrow runs by observed fire behavior.
-                  </p>
+            <Popover>
+              <PopoverTrigger asChild>
+                <FilterButton aria-label="Open run filters">
+                  <SlidersHorizontal aria-hidden="true" className="size-3.5" />
+                  Filters
+                  {menuFilterCount > 0 ? (
+                    <Badge className="ml-0.5 h-4 min-w-4 px-1 text-[10px]" variant="secondary">
+                      {menuFilterCount}
+                    </Badge>
+                  ) : null}
+                </FilterButton>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className={`${surfaceThemeClassName(theme)} surface-glass-overlay w-72 p-0`}
+              >
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Filter runs</p>
+                    <p className="text-xs text-muted-foreground">Narrow the simulation history.</p>
+                  </div>
+                  {menuFilterCount > 0 ? (
+                    <Button
+                      className="h-7 px-2 text-xs"
+                      onClick={() =>
+                        setFilters((current) => ({ ...current, scenarioId: "all", status: "all" }))
+                      }
+                      size="sm"
+                      variant="ghost"
+                    >
+                      Clear
+                    </Button>
+                  ) : null}
                 </div>
                 <Separator />
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label htmlFor="burned-area-filter">Minimum burned area</Label>
-                    <Badge variant="outline">{filters.minimumBurnedArea} acres</Badge>
+                <div className="space-y-3 p-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Status</Label>
+                    <SelectMenu
+                      onValueChange={(value) =>
+                        setFilter("status", value as DigitalTwinRunStatus | "all")
+                      }
+                      value={filters.status}
+                    >
+                      <FilterSelectTrigger className="w-full">
+                        <SelectMenuValue placeholder="Any status" />
+                      </FilterSelectTrigger>
+                      <SelectMenuContent
+                        className={`${surfaceThemeClassName(theme)} surface-glass-overlay min-w-[var(--radix-select-trigger-width)]`}
+                        position="popper"
+                      >
+                        <SelectMenuItem value="all">Any status</SelectMenuItem>
+                        {RUN_STATUSES.map((status) => (
+                          <SelectMenuItem key={status} value={status}>
+                            {digitalTwinRunStatusLabel(status)}
+                            <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                              {runs.filter((run) => run.status === status).length}
+                            </span>
+                          </SelectMenuItem>
+                        ))}
+                      </SelectMenuContent>
+                    </SelectMenu>
                   </div>
-                  <Slider
-                    aria-label="Minimum burned area"
-                    id="burned-area-filter"
-                    max={1_500}
-                    onValueChange={([value]) => setFilter("minimumBurnedArea", value ?? 0)}
-                    step={100}
-                    value={[filters.minimumBurnedArea]}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label htmlFor="spread-rate-filter">Minimum spread rate</Label>
-                    <Badge variant="outline">{filters.minimumSpreadRate.toFixed(1)} mph</Badge>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Scenario</Label>
+                    <SelectMenu
+                      onValueChange={(value) => setFilter("scenarioId", value)}
+                      value={filters.scenarioId}
+                    >
+                      <FilterSelectTrigger className="w-full">
+                        <SelectMenuValue placeholder="All scenarios" />
+                      </FilterSelectTrigger>
+                      <SelectMenuContent
+                        className={`${surfaceThemeClassName(theme)} surface-glass-overlay min-w-[var(--radix-select-trigger-width)]`}
+                        position="popper"
+                      >
+                        <SelectMenuItem value="all">All scenarios</SelectMenuItem>
+                        {scenarios.map((scenarioId) => (
+                          <SelectMenuItem key={scenarioId} value={scenarioId}>{scenarioId}</SelectMenuItem>
+                        ))}
+                      </SelectMenuContent>
+                    </SelectMenu>
                   </div>
-                  <Slider
-                    aria-label="Minimum spread rate"
-                    id="spread-rate-filter"
-                    max={4}
-                    onValueChange={([value]) => setFilter("minimumSpreadRate", value ?? 0)}
-                    step={0.5}
-                    value={[filters.minimumSpreadRate]}
-                  />
                 </div>
-                <Button className="w-full" onClick={() => setFilters(DEFAULT_RUN_FILTERS)} variant="outline">
-                  <RotateCcw aria-hidden="true" /> Reset filters
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
-        </div>
+              </PopoverContent>
+            </Popover>
+          </FilterToolbarRow>
 
-        <Tabs
-          className="mt-4"
-          onValueChange={(value) => setFilter("status", value as RunStatus | "all")}
-          value={filters.status}
-        >
-          <TabsList variant="line">
-            {(["all", "Running", "Completed", "Queued", "Failed"] as const).map((status) => (
-              <TabsTrigger key={status} value={status}>
-                {status === "all" ? "All" : status}
-                <Badge className="ml-1" variant="secondary">
-                  {status === "all" ? runs.length : runs.filter((run) => run.status === status).length}
-                </Badge>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-
-        {activeFilterCount > 0 ? (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">Active filters</span>
-            {filters.location !== "all" ? <ActiveFilter label={filters.location} onRemove={() => setFilter("location", "all")} /> : null}
-            {filters.scenario !== "all" ? <ActiveFilter label={filters.scenario} onRemove={() => setFilter("scenario", "all")} /> : null}
-            {filters.timeRange !== "all" ? <ActiveFilter label={filters.timeRange === "today" ? "Today" : "Last 7 days"} onRemove={() => setFilter("timeRange", "all")} /> : null}
-            {filters.minimumBurnedArea > 0 ? <ActiveFilter label={`≥ ${filters.minimumBurnedArea} acres`} onRemove={() => setFilter("minimumBurnedArea", 0)} /> : null}
-            {filters.minimumSpreadRate > 0 ? <ActiveFilter label={`≥ ${filters.minimumSpreadRate.toFixed(1)} mph`} onRemove={() => setFilter("minimumSpreadRate", 0)} /> : null}
-          </div>
-        ) : null}
+          {activeFilterCount > 0 ? (
+            <FilterToolbarRow aria-label="Active run filters">
+            {filters.regionId !== "all" ? (
+              <FilterChip
+                label={`Region: ${regionNames.get(filters.regionId) ?? filters.regionId}`}
+                onRemove={() => setFilter("regionId", "all")}
+              />
+            ) : null}
+            {filters.scenarioId !== "all" ? (
+              <FilterChip
+                label={`Scenario: ${filters.scenarioId}`}
+                onRemove={() => setFilter("scenarioId", "all")}
+              />
+            ) : null}
+            {filters.status !== "all" ? (
+              <FilterChip
+                label={`Status: ${digitalTwinRunStatusLabel(filters.status)}`}
+                onRemove={() => setFilter("status", "all")}
+              />
+            ) : null}
+              <Button
+                className="h-7 px-2 text-[11px] text-muted-foreground"
+                onClick={() => setFilters(DEFAULT_DIGITAL_TWIN_RUN_FILTERS)}
+                size="sm"
+                variant="ghost"
+              >
+                Clear all
+              </Button>
+            </FilterToolbarRow>
+          ) : null}
+        </FilterToolbar>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="p-5 lg:p-7">
+        <div className="px-5 pb-5 lg:px-7 lg:pb-7">
+          {error ? (
+            <Card className="mb-4 bg-destructive/5">
+              <CardContent className="flex flex-wrap items-center gap-3 px-5">
+                <AlertCircle aria-hidden="true" className="size-5 text-destructive" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground">Runs could not be loaded</p>
+                  <p className="text-sm text-muted-foreground">{error.message}</p>
+                </div>
+                <Button onClick={onRefresh} variant="outline">Try again</Button>
+              </CardContent>
+            </Card>
+          ) : null}
           <Card className="gap-0 overflow-hidden py-0">
-            <CardHeader className="border-b px-5 py-4">
+            <CardHeader className="px-5 py-4">
               <CardTitle className="text-base">Simulation history</CardTitle>
-              <CardDescription>{visibleRuns.length} of {runs.length} runs</CardDescription>
+              <CardDescription>{visibleRuns.length} of {runs.length} API runs</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -329,13 +365,12 @@ export function RunsView({
                   <TableRow>
                     <TableHead>Status</TableHead>
                     <TableHead>Scenario</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Started</TableHead>
+                    <TableHead>Region</TableHead>
+                    <TableHead>Run</TableHead>
+                    <TableHead>Trigger</TableHead>
+                    <TableHead>Horizon</TableHead>
                     <TableHead>Ignitions</TableHead>
-                    <TableHead>Burned area</TableHead>
-                    <TableHead>Peak spread</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead className="w-12"><span className="sr-only">Actions</span></TableHead>
+                    <TableHead>Snapshots</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -343,55 +378,55 @@ export function RunsView({
                     <TableRow key={run.id}>
                       <TableCell><RunStatusBadge status={run.status} /></TableCell>
                       <TableCell>
-                        <div className="min-w-[230px]">
-                          <Button
-                            className="h-auto justify-start p-0 text-left font-semibold"
-                            onClick={() => onOpenRun(run.id)}
-                            variant="link"
-                          >
-                            {run.scenario}
-                          </Button>
-                          <p className="mt-1 font-mono text-xs text-muted-foreground">{run.id}</p>
-                        </div>
+                        <Button
+                          className="h-auto justify-start p-0 text-left font-medium"
+                          onClick={() => onOpenRun(run.id)}
+                          variant="link"
+                        >
+                          {run.scenarioId ?? "—"}
+                        </Button>
                       </TableCell>
-                      <TableCell>{run.location}</TableCell>
-                      <TableCell className="whitespace-nowrap">{run.started}</TableCell>
-                      <TableCell className="tabular-nums">{run.ignitionSources}</TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums">{run.burnedArea.toLocaleString()} acres</TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums">{run.spreadRate.toFixed(1)} mph</TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums">{run.duration}</TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button aria-label={`Actions for ${run.id}`} size="icon" variant="ghost">
-                              <MoreHorizontal aria-hidden="true" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className={theme === "dark" ? "dark" : undefined}>
-                            <DropdownMenuItem onSelect={() => onOpenRun(run.id)}>
-                              <ExternalLink aria-hidden="true" /> View results
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Download aria-hidden="true" /> Export run
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <div>{run.regionName}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{run.regionId}</div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{run.id}</TableCell>
+                      <TableCell className="capitalize">{run.triggerKind}</TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {formatHours(run.durationHours)}
+                      </TableCell>
+                      <TableCell className="tabular-nums">{run.ignitionPoints.length}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {run.completedTicks}{run.expectedTicks === null ? "" : ` / ${run.expectedTicks}`}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-              {visibleRuns.length === 0 ? (
+              {isLoading && runs.length === 0 ? (
+                <div className="grid min-h-64 place-items-center p-6 text-center">
+                  <div>
+                    <LoaderCircle aria-hidden="true" className="mx-auto size-7 animate-spin text-muted-foreground" />
+                    <p className="mt-3 font-medium text-foreground">Loading API runs</p>
+                  </div>
+                </div>
+              ) : visibleRuns.length === 0 ? (
                 <div className="grid min-h-64 place-items-center p-6 text-center">
                   <div>
                     <Flame aria-hidden="true" className="mx-auto size-7 text-muted-foreground" />
-                    <p className="mt-3 font-medium text-foreground">No matching runs</p>
+                    <p className="mt-3 font-medium text-foreground">No matching API runs</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Adjust the filters or start a new simulation.
+                      Adjust the filters or refresh the Digital Twin API.
                     </p>
-                    <Button className="mt-4" onClick={() => setFilters(DEFAULT_RUN_FILTERS)} variant="outline">
-                      Reset filters
-                    </Button>
+                    {activeFilterCount > 0 ? (
+                      <Button
+                        className="mt-4"
+                        onClick={() => setFilters(DEFAULT_DIGITAL_TWIN_RUN_FILTERS)}
+                        variant="outline"
+                      >
+                        Reset filters
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

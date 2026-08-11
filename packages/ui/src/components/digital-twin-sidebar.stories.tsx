@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { CSSProperties } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { DigitalTwinSidebar } from "./digital-twin-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "./sidebar";
@@ -22,14 +23,21 @@ const meta = {
   args: {
     activeDestination: "live",
     activeRegionId: "boulder",
+    appVersion: "v2.2.0",
     onNavigate: fn(),
+    onOpenAlerts: fn(),
+    onOpenData: fn(),
+    onOpenSettings: fn(),
     onSelectRegion: fn(),
     regions,
     themeMode: "light",
   },
   decorators: [
     (Story, context) => (
-      <SidebarProvider defaultOpen={context.parameters.sidebarDefaultOpen !== false}>
+      <SidebarProvider
+        defaultOpen={context.parameters.sidebarDefaultOpen !== false}
+        style={{ "--sidebar-width": "12rem" } as CSSProperties}
+      >
         <Story />
         <SidebarInset>
           <header className="flex h-16 items-center gap-3 border-b px-4">
@@ -54,6 +62,12 @@ export const Default: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: /Scenarios/i }));
     await expect(args.onNavigate).toHaveBeenCalledWith("scenarios");
+    await userEvent.click(canvas.getByRole("button", { name: "Alerts" }));
+    await expect(args.onOpenAlerts).toHaveBeenCalled();
+    await userEvent.click(canvas.getByRole("button", { name: "Data" }));
+    await expect(args.onOpenData).toHaveBeenCalled();
+    await userEvent.click(canvas.getByRole("button", { name: "Settings" }));
+    await expect(args.onOpenSettings).toHaveBeenCalled();
   },
 };
 

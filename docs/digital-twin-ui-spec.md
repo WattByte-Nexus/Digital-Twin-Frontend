@@ -581,8 +581,17 @@ code-like values—not whole panels.
 - Alert row: minimum 64 pixels.
 - Radius: existing `sm`, `md`, and `lg` tokens; no pill-shaped containers except
   short status badges and the Plan/3D segmented control.
-- Borders: one pixel and low contrast; use separators instead of nested cards.
-- Shadows: only popovers, dialogs, floating map controls, and overlay panels.
+- Surface hierarchy: light-mode structural surfaces use a white `background`,
+  `card`, and `surface`. `surface-subtle` is limited to compact summaries,
+  selected navigation, and small related-control groups rather than broad
+  toolbars or table headers. Hover uses `surface-hover`.
+- Borders are reserved for form controls, keyboard focus/selection, one true
+  region seam, white toolbar edges, table-header edges, scroll cutoffs, and
+  optional faint table-row separators. Page headers, filter strips, and
+  embedded card headers do not receive their own rules.
+- Embedded cards are flat and gain separation through spacing and typography.
+  Shadows and stronger strokes are only for popovers, dialogs, floating map
+  controls, and overlay panels.
 
 Avoid a card for every field. Prefer labeled rows, grouped sections, and one
 dominant surface per panel.

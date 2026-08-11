@@ -1,18 +1,11 @@
 [data-digital-twin-shell] {
-  --dt-nexus-text: #0b0c0b;
-  --dt-nexus-muted: #686d68;
-  --dt-nexus-border: rgb(216 219 215 / 82%);
-  --dt-nexus-glass: rgb(232 245 255 / 62%);
-  --dt-nexus-glass-strong: rgb(242 247 255 / 76%);
-  --dt-nexus-stroke: rgb(255 255 255 / 78%);
-  --dt-nexus-shadow: 0 14px 34px -20px rgb(31 46 77 / 34%);
-  --background: 204 100% 98% / 0.72;
-  --card: 204 100% 98% / 0.68;
-  --popover: 204 100% 99% / 0.96;
-  --muted: 205 55% 94% / 0.68;
-  --accent: 205 48% 91% / 0.82;
-  --border: 120 5% 85% / 0.78;
-  --input: 120 5% 81% / 0.78;
+  --dt-nexus-text: hsl(var(--foreground));
+  --dt-nexus-muted: hsl(var(--muted-foreground));
+  --dt-nexus-border: hsl(var(--separator));
+  --dt-nexus-glass: hsl(var(--surface) / 0.78);
+  --dt-nexus-glass-strong: hsl(var(--surface) / 0.92);
+  --dt-nexus-stroke: hsl(var(--input) / 0.52);
+  --dt-nexus-shadow: 0 14px 34px -20px hsl(var(--foreground) / 0.22);
 
   isolation: isolate;
   padding-inline-start: 94px;
@@ -27,20 +20,6 @@
 }
 
 .dark [data-digital-twin-shell] {
-  --dt-nexus-text: #edf6f3;
-  --dt-nexus-muted: #aebbb7;
-  --dt-nexus-border: rgb(221 235 230 / 20%);
-  --dt-nexus-glass: rgb(17 35 43 / 61%);
-  --dt-nexus-glass-strong: rgb(14 29 38 / 76%);
-  --dt-nexus-stroke: rgb(231 250 245 / 17%);
-  --dt-nexus-shadow: 0 18px 40px -20px rgb(0 7 12 / 72%);
-  --background: 190 34% 12% / 0.72;
-  --card: 196 35% 13% / 0.68;
-  --popover: 196 34% 12% / 0.97;
-  --muted: 190 24% 19% / 0.72;
-  --accent: 187 30% 23% / 0.84;
-  --border: 164 19% 71% / 0.2;
-  --input: 164 19% 71% / 0.28;
   background: radial-gradient(
       circle at 33% 6%,
       rgb(61 111 139 / 38%),

@@ -1,3 +1,5 @@
+import type { Layer } from "@deck.gl/core";
+import { MapboxOverlay } from "@deck.gl/mapbox";
 import { memo, useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -10,6 +12,7 @@ import {
   type TerrainRasterSource,
 } from "./satellite-terrain-style";
 import {
+  addSatelliteReferenceOverlay,
   DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
   loadSatelliteReferenceOverlay,
   setSatelliteReferenceVisibility,
@@ -40,6 +43,8 @@ export interface SatelliteTerrainMapProps {
   themeMode?: MapThemeMode;
   className?: string;
   ariaLabel?: string;
+  /** Ordered analytical layers rendered in this map's shared WebGL2 context. */
+  deckLayers?: Layer[];
   onMapReady?: (map: maplibregl.Map | null) => void;
 }
 
@@ -62,10 +67,13 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   themeMode = "light",
   className,
   ariaLabel = "Satellite terrain map",
+  deckLayers = [],
   onMapReady,
 }: SatelliteTerrainMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const deckOverlayRef = useRef<MapboxOverlay | null>(null);
+  const deckLayersRef = useRef(deckLayers);
   const referenceLayersRef = useRef<SatelliteReferenceLayer[]>([]);
   const referenceOverlayRef = useRef<SatelliteReferenceOverlay | undefined>(undefined);
   const referenceOverlayVisibilityRef = useRef(referenceOverlayVisibility);
@@ -79,6 +87,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   elevationEnabledRef.current = elevationEnabled;
   themeModeRef.current = themeMode;
   onMapReadyRef.current = onMapReady;
+  deckLayersRef.current = deckLayers;
 
   // Sources and camera are mount-time inputs. Changing datasets should remount
   // the component with a new key rather than diffing the foundational style.
@@ -101,95 +110,115 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     let resizeObserver: ResizeObserver | null = null;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
-    void (async () => {
-      const initialThemeMode = themeModeRef.current;
-      let referenceOverlay;
-      if (options.referenceOverlayStyleUrl) {
-        try {
-          referenceOverlay = await loadSatelliteReferenceOverlay(
-            options.referenceOverlayStyleUrl,
-            abortController.signal
-          );
-        } catch (error) {
+    const initialThemeMode = themeModeRef.current;
+    const initialSatelliteVisible = satelliteVisibleRef.current;
+    const initialElevationEnabled = elevationEnabledRef.current;
+    const map = new maplibregl.Map({
+      container,
+      style: buildSatelliteTerrainStyle({
+        satelliteSource: options.satelliteSource,
+        satelliteFallbackSource: options.satelliteFallbackSource,
+        referenceOverlayVisibility: referenceOverlayVisibilityRef.current,
+        terrainSource: options.terrainSource,
+        terrainExaggeration: options.terrainExaggeration,
+        satelliteVisible: initialSatelliteVisible,
+        elevationEnabled: initialElevationEnabled,
+        themeMode: initialThemeMode,
+      }),
+      center: options.initialView.center,
+      zoom: options.initialView.zoom,
+      pitch: options.initialView.pitch ?? 0,
+      bearing: options.initialView.bearing ?? 0,
+      maxPitch: 85,
+      renderWorldCopies: false,
+      // Prefer the broadly available adapter. A single interleaved MapLibre +
+      // deck.gl context is the performance win; forcing a discrete adapter can
+      // fail entirely on remote/software-rendered Chromium and some laptops.
+      canvasContextAttributes: { powerPreference: "low-power" },
+      // These basemaps are versioned/static. Do not wake the map back up to
+      // revalidate expired tiles while the workspace is open.
+      refreshExpiredTiles: false,
+      // The coarse fallback remains visible beneath the primary imagery, so
+      // obsolete requests can be canceled without exposing blank terrain.
+      cancelPendingTileRequestsWhileZooming: true,
+      maxTileCacheZoomLevels: 5,
+      attributionControl: false,
+    });
+    mapRef.current = map;
+    appliedThemeModeRef.current = initialThemeMode;
+    onMapReadyRef.current?.(map);
+
+    const handleLoad = () => {
+      const deckOverlay = new MapboxOverlay({
+        interleaved: true,
+        layers: deckLayersRef.current,
+      });
+      map.addControl(deckOverlay);
+      deckOverlayRef.current = deckOverlay;
+      setSatelliteReferenceVisibility(
+        map,
+        referenceLayersRef.current,
+        referenceOverlayVisibilityRef.current
+      );
+      if (satelliteVisibleRef.current !== initialSatelliteVisible) {
+        setSatelliteVisibility(map, satelliteVisibleRef.current);
+      }
+      if (elevationEnabledRef.current !== initialElevationEnabled) {
+        setElevationEnabled(
+          map,
+          elevationEnabledRef.current,
+          options.terrainExaggeration
+        );
+      }
+      setTerrainGroundVisibility(
+        map,
+        satelliteVisibleRef.current,
+        elevationEnabledRef.current
+      );
+    };
+    map.once("load", handleLoad);
+
+    if (options.referenceOverlayStyleUrl) {
+      void loadSatelliteReferenceOverlay(
+        options.referenceOverlayStyleUrl,
+        abortController.signal,
+      )
+        .then((referenceOverlay) => {
+          if (disposed) return;
+          referenceOverlayRef.current = referenceOverlay;
+          referenceLayersRef.current = referenceOverlay.layers;
+          const applyReferenceOverlay = () => {
+            if (disposed) return;
+            try {
+              addSatelliteReferenceOverlay(
+                map,
+                referenceOverlay,
+                referenceOverlayVisibilityRef.current,
+              );
+            } catch (error) {
+              console.warn("Satellite reference overlay could not be applied", error);
+            }
+          };
+          if (map.isStyleLoaded()) applyReferenceOverlay();
+          else map.once("style.load", applyReferenceOverlay);
+        })
+        .catch((error: unknown) => {
           if (abortController.signal.aborted) return;
           console.warn("Satellite reference overlay could not be loaded", error);
-        }
-      }
-      if (disposed) return;
+        });
+    }
 
-      const initialSatelliteVisible = satelliteVisibleRef.current;
-      const initialElevationEnabled = elevationEnabledRef.current;
-      const map = new maplibregl.Map({
-        container,
-        style: buildSatelliteTerrainStyle({
-          satelliteSource: options.satelliteSource,
-          satelliteFallbackSource: options.satelliteFallbackSource,
-          referenceOverlay,
-          referenceOverlayVisibility: referenceOverlayVisibilityRef.current,
-          terrainSource: options.terrainSource,
-          terrainExaggeration: options.terrainExaggeration,
-          satelliteVisible: initialSatelliteVisible,
-          elevationEnabled: initialElevationEnabled,
-          themeMode: initialThemeMode,
-        }),
-        center: options.initialView.center,
-        zoom: options.initialView.zoom,
-        pitch: options.initialView.pitch ?? 0,
-        bearing: options.initialView.bearing ?? 0,
-        maxPitch: 85,
-        renderWorldCopies: false,
-        canvasContextAttributes: { powerPreference: "low-power" },
-        // These basemaps are versioned/static. Do not wake the map back up to
-        // revalidate expired tiles while the workspace is open.
-        refreshExpiredTiles: false,
-        // The coarse fallback remains visible beneath the primary imagery, so
-        // obsolete requests can be canceled without exposing blank terrain.
-        cancelPendingTileRequestsWhileZooming: true,
-        maxTileCacheZoomLevels: 5,
-        attributionControl: false,
-      });
-      mapRef.current = map;
-      appliedThemeModeRef.current = initialThemeMode;
-      referenceOverlayRef.current = referenceOverlay;
-      referenceLayersRef.current = referenceOverlay?.layers ?? [];
-      onMapReadyRef.current?.(map);
-
-      const handleLoad = () => {
-        setSatelliteReferenceVisibility(
-          map,
-          referenceLayersRef.current,
-          referenceOverlayVisibilityRef.current
-        );
-        if (satelliteVisibleRef.current !== initialSatelliteVisible) {
-          setSatelliteVisibility(map, satelliteVisibleRef.current);
-        }
-        if (elevationEnabledRef.current !== initialElevationEnabled) {
-          setElevationEnabled(
-            map,
-            elevationEnabledRef.current,
-            options.terrainExaggeration
-          );
-        }
-        setTerrainGroundVisibility(
-          map,
-          satelliteVisibleRef.current,
-          elevationEnabledRef.current
-        );
-      };
-      map.once("load", handleLoad);
-
-      resizeObserver = new ResizeObserver(() => {
-        if (resizeTimer !== null) clearTimeout(resizeTimer);
-        // Animated panels can report a new width every frame. Resizing the
-        // WebGL drawing buffer for each report causes visible flashes, so let
-        // the layout settle and resize the map once at its final dimensions.
-        resizeTimer = setTimeout(() => {
-          resizeTimer = null;
-          map.resize();
-        }, 80);
-      });
-      resizeObserver.observe(container);
-    })();
+    resizeObserver = new ResizeObserver(() => {
+      if (resizeTimer !== null) clearTimeout(resizeTimer);
+      // Animated panels can report a new width every frame. Resizing the
+      // WebGL drawing buffer for each report causes visible flashes, so let
+      // the layout settle and resize the map once at its final dimensions.
+      resizeTimer = setTimeout(() => {
+        resizeTimer = null;
+        map.resize();
+      }, 80);
+    });
+    resizeObserver.observe(container);
 
     return () => {
       disposed = true;
@@ -197,6 +226,11 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       resizeObserver?.disconnect();
       if (resizeTimer !== null) clearTimeout(resizeTimer);
       onMapReadyRef.current?.(null);
+      const deckOverlay = deckOverlayRef.current;
+      if (deckOverlay && map.hasControl(deckOverlay)) {
+        map.removeControl(deckOverlay);
+      }
+      deckOverlayRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       appliedThemeModeRef.current = null;
@@ -204,6 +238,10 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       referenceLayersRef.current = [];
     };
   }, []);
+
+  useEffect(() => {
+    deckOverlayRef.current?.setProps({ layers: deckLayers });
+  }, [deckLayers]);
 
   useEffect(() => {
     const map = mapRef.current;

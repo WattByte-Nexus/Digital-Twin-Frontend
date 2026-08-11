@@ -190,7 +190,7 @@ export function DigitalTwinHeader({
         id: "digital-twin.open-expert-workspace",
         title: t("digitalTwin.header.openExpertWorkspace"),
         group: t("digitalTwin.commands.workspaceGroup"),
-        keywords: "GeoLibre advanced workspace GIS",
+        keywords: "WattByte Nexus advanced workspace GIS",
         icon: Wrench,
         run: onOpenExpertWorkspace,
       });

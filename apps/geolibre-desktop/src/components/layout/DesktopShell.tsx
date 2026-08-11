@@ -2003,7 +2003,7 @@ export function DesktopShell({
           `page-has-heading-one` check) expect, without altering the
           chrome-free visual layout. Placed inside the main landmark so it
           is not flagged as content outside a landmark. */}
-      <h1 className="sr-only">GeoLibre map workspace</h1>
+      <h1 className="sr-only">WattByte Nexus map workspace</h1>
       <SectionErrorBoundary label="Map" fallbackClassName="h-full w-full">
         <MapGrid themeMode={themeMode}>
           <MapCanvas
@@ -2186,6 +2186,7 @@ export function DesktopShell({
             mapHost
           ) : (
             <DigitalTwinWorkspace
+              activeRegionId={route.regionId ?? access.regions[0]?.id ?? ""}
               activeView={digitalTwinWorkspaceView}
               location={route.location}
               mapControllerRef={mapControllerRef}
@@ -2194,6 +2195,10 @@ export function DesktopShell({
               onNavigate={handleDigitalTwinNavigate}
               onOpenRealSettings={() => openSettingsSection("interface")}
               pluginContentEl={dockContentEl}
+              regions={access.regions.map((region) => ({
+                ...region,
+                description: `${region.name} operational area`,
+              }))}
               theme={themeMode}
             />
           )

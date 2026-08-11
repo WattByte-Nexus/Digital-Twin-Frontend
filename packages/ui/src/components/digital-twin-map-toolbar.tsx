@@ -95,7 +95,7 @@ export function DigitalTwinMapToolbar({
   return (
     <Menubar
       aria-label="Map display toolbar"
-      className={`h-11 gap-0.5 rounded-xl border-border bg-background p-1 shadow-xl ${
+      className={`h-11 gap-0.5 rounded-none border-0 bg-transparent p-1 shadow-none ${
         className ?? ""
       }`}
     >

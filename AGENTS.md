@@ -17,6 +17,8 @@ printf '%s' '{"queue":"<queue>","title":"Short task title","instructions":"Compl
 
 Inside an agentq-managed run, `AGENTQ_QUEUE`, `AGENTQ_TASK_ID`, and `AGENTQ_RUN_ID` are set. Tasks created there are automatically linked to their parent task. Do not enqueue duplicates or recursively enqueue the current task.
 
+Do not index a transient AgentQ worktree with codebase-memory-mcp by default. Use the canonical repository graph for stable code discovery and direct file reads for worktree-only changes. Index the transient worktree only when its uncommitted changes specifically require graph analysis.
+
 <!-- agentq:end -->
 
 ## UI component system

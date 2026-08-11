@@ -62,6 +62,19 @@ export interface SatelliteReferenceLayer {
   layer: LayerSpecification;
 }
 
+type SatelliteReferenceMap = Pick<
+  MapLibreMap,
+  | "addLayer"
+  | "addSource"
+  | "addSprite"
+  | "getGlyphs"
+  | "getLayer"
+  | "getSource"
+  | "getSprite"
+  | "setGlyphs"
+  | "setSprite"
+>;
+
 function sourceLayer(layer: LayerSpecification): string | undefined {
   return "source-layer" in layer ? layer["source-layer"] : undefined;
 }
@@ -201,6 +214,49 @@ export async function loadSatelliteReferenceOverlay(
     sprite: style.sprite,
     layers,
   };
+}
+
+export function addSatelliteReferenceOverlay(
+  map: SatelliteReferenceMap,
+  overlay: SatelliteReferenceOverlay,
+  visibility: SatelliteReferenceVisibility,
+): void {
+  if (overlay.glyphs && map.getGlyphs() !== overlay.glyphs) {
+    map.setGlyphs(overlay.glyphs);
+  }
+
+  if (overlay.sprite) {
+    const currentSprites = map.getSprite();
+    if (typeof overlay.sprite === "string") {
+      if (
+        !currentSprites.some(
+          ({ id, url }) => id === "default" && url === overlay.sprite,
+        )
+      ) {
+        map.setSprite(overlay.sprite);
+      }
+    } else {
+      for (const sprite of overlay.sprite) {
+        if (!currentSprites.some(({ id }) => id === sprite.id)) {
+          map.addSprite(sprite.id, sprite.url);
+        }
+      }
+    }
+  }
+
+  if (!map.getSource(SATELLITE_REFERENCE_SOURCE_ID)) {
+    map.addSource(SATELLITE_REFERENCE_SOURCE_ID, overlay.source);
+  }
+  for (const { category, layer } of overlay.layers) {
+    if (map.getLayer(layer.id)) continue;
+    map.addLayer({
+      ...layer,
+      layout: {
+        ...layer.layout,
+        visibility: visibility[category] ? "visible" : "none",
+      },
+    });
+  }
 }
 
 export function setSatelliteReferenceVisibility(

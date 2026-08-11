@@ -18,6 +18,48 @@ const REGION = {
   bounds: { west: -105.35, south: 39.95, east: -105.15, north: 40.1 },
 };
 
+const COMPLETED_RUN = {
+  simulation_id: "simulation-1",
+  run_id: "run-1",
+  region_id: "boulder-co",
+  status: "COMPLETED",
+  trigger: {
+    kind: "scenario",
+    scenario_id: "scenario-1",
+    ignition_points: [{ lat: 40.02, lon: -105.24 }],
+    duration_hours: 2,
+    delta_t_hours: 1,
+  },
+  grid_geometry: { resolution_m: 30 },
+  tick_refs: [
+    { tick: 1, world_state_ref: "state://tick-1" },
+    { tick: 2, world_state_ref: "state://tick-2" },
+  ],
+  final_result_ref: "state://final",
+  failure: null,
+};
+
+function resultForTick(tick: number) {
+  const radius = tick === 1 ? 0.003 : 0.012;
+  return {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      properties: { tick, active_cell_count: tick * 12 },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [-105.24 - radius, 40.02 - radius],
+          [-105.24 + radius, 40.02 - radius],
+          [-105.24 + radius, 40.02 + radius],
+          [-105.24 - radius, 40.02 + radius],
+          [-105.24 - radius, 40.02 - radius],
+        ]],
+      },
+    }],
+  };
+}
+
 const ASSETS = {
   type: "FeatureCollection",
   features: [
@@ -62,7 +104,12 @@ async function fulfillEngineRoute(route: Route): Promise<void> {
     json = { status: "empty" };
   else if (path.endsWith("/api/v1/regions/boulder-co/earth-engine/map-layers"))
     json = [];
-  else if (path.endsWith("/api/v1/simulation-runs")) json = { items: [] };
+  else if (path.endsWith("/api/v1/simulation-runs/run-1")) json = COMPLETED_RUN;
+  else if (path.endsWith("/api/v1/simulation-runs/run-1/ticks/1/result.geojson"))
+    json = resultForTick(1);
+  else if (path.endsWith("/api/v1/simulation-runs/run-1/ticks/2/result.geojson"))
+    json = resultForTick(2);
+  else if (path.endsWith("/api/v1/simulation-runs")) json = { items: [COMPLETED_RUN] };
   else json = { items: [] };
 
   await route.fulfill({
@@ -170,6 +217,28 @@ test.describe("WattByte Nexus Figma workspace", () => {
     await expect(page.getByRole("heading", { name: "Something went wrong" })).toHaveCount(0);
   });
 
+  test("run playback changes the map for each durable tick", async ({ page }) => {
+    await installDigitalTwinMocks(page);
+    await page.goto(process.env.DIGITAL_TWIN_E2E_URL ?? "/");
+    await page.getByRole("button", { name: /Runs:/ }).click();
+    await page.getByRole("button", { name: "scenario-1" }).click();
+
+    const slider = page.getByRole("slider", { name: "Simulation playback tick" });
+    await expect(slider).toBeEnabled();
+    await slider.focus();
+    await page.keyboard.press("Home");
+    await expect(page.getByText("Tick 1", { exact: true })).toBeVisible();
+    await page.waitForTimeout(250);
+    const firstFrame = await page.locator(".maplibregl-canvas").screenshot();
+
+    await page.getByRole("button", { name: "Play playback" }).click();
+    await expect(page.getByText("Tick 2", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Play playback" })).toBeVisible();
+    await page.waitForTimeout(250);
+    const secondFrame = await page.locator(".maplibregl-canvas").screenshot();
+
+    expect(Buffer.compare(firstFrame, secondFrame)).not.toBe(0);
+  });
 
   test("keeps one connected WebGL map while visiting non-map pages", async ({
     page,

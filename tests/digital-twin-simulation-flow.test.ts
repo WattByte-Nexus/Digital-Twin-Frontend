@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DEFAULT_WEATHER_SETTINGS } from "@geolibre/ui";
 import {
+  DEFAULT_FIRE_MODEL_SETTINGS,
   DEFAULT_RUN_FILTERS,
   SIMULATION_RUNS,
   analyticsForRun,
@@ -53,6 +54,11 @@ test("createSimulationRun carries scenario inputs into the new run", () => {
         ...DEFAULT_WEATHER_SETTINGS,
         events: { ...DEFAULT_WEATHER_SETTINGS.events, wind: 24 },
       },
+      modelSettings: {
+        ...DEFAULT_FIRE_MODEL_SETTINGS,
+        fuelMoisture: "very-dry",
+        cellSizeMeters: 10,
+      },
     },
     7,
   );
@@ -67,6 +73,11 @@ test("createSimulationRun carries scenario inputs into the new run", () => {
   assert.equal(run.windSpeed, 24);
   assert.equal(run.windDirection, DEFAULT_WEATHER_SETTINGS.events.windDirection);
   assert.equal(run.durationHours, 4);
+  assert.deepEqual(run.modelSettings, {
+    ...DEFAULT_FIRE_MODEL_SETTINGS,
+    fuelMoisture: "very-dry",
+    cellSizeMeters: 10,
+  });
   assert.equal(run.status, "Running");
 });
 
@@ -112,13 +123,32 @@ test("ignition helpers preserve every point and center the run perimeter", () =>
 
 test("analytics stay monotonic for area and share the replay clock", () => {
   const samples = analyticsForRun(SIMULATION_RUNS[1]);
-  assert.equal(samples.length, 13);
+  assert.equal(samples.length, 17);
   assert.equal(samples[0].burnedArea, 0);
   assert.equal(samples.at(-1)?.burnedArea, SIMULATION_RUNS[1].burnedArea);
   assert.ok(
     samples.every((sample, index) => index === 0 || sample.burnedArea >= samples[index - 1].burnedArea),
   );
   assert.equal(formatSimulationTime(samples.at(-1)?.minute ?? 0), "04:00");
+});
+
+test("fire-model assumptions change behavior and replay sampling", () => {
+  const baselineRun = SIMULATION_RUNS[1];
+  const baseline = analyticsForRun(baselineRun);
+  const drySpottingRun = {
+    ...baselineRun,
+    modelSettings: {
+      ...baselineRun.modelSettings,
+      fuelMoisture: "very-dry" as const,
+      spotting: "extended" as const,
+      outputIntervalMinutes: 5 as const,
+    },
+  };
+  const drySpotting = analyticsForRun(drySpottingRun);
+
+  assert.ok((drySpotting.at(-1)?.burnedArea ?? 0) > (baseline.at(-1)?.burnedArea ?? 0));
+  assert.ok((drySpotting.at(-1)?.spreadRate ?? 0) > (baseline.at(-1)?.spreadRate ?? 0));
+  assert.equal(drySpotting.length, 49);
 });
 
 test("run replay honors duration, direction, progress, and persisted run shape", () => {

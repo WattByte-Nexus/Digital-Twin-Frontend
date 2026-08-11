@@ -7,37 +7,41 @@
   :root,
   .theme-light {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 222 47% 11%;
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
+    --secondary: 210 24% 95%;
     --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
+    --muted: 210 24% 95%;
     /* Darkened from 46.9% L so secondary text meets WCAG AA (4.5:1) even on the
        muted/secondary backgrounds it is paired with (e.g. kbd badges). */
     --muted-foreground: 215.4 16.3% 40%;
-    --accent: 210 40% 96.1%;
+    --accent: 210 24% 94%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --border: 214 24% 90%;
+    --input: 214 24% 82%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+    --surface: 0 0% 100%;
+    --surface-subtle: 210 24% 95%;
+    --surface-hover: 210 24% 93.5%;
+    --separator: 214 24% 91.5%;
     --glass: 0 0% 100%;
     --glass-foreground: 222.2 84% 4.9%;
     --glass-border: 215 20% 65%;
     --glass-muted: 215 16% 47%;
     --glass-shadow: 222.2 47.4% 11.2%;
     --surface-panel: 0 0% 100%;
-    --surface-panel-muted: 210 40% 96.1%;
-    --surface-panel-foreground: 222.2 84% 4.9%;
+    --surface-panel-muted: 210 24% 95%;
+    --surface-panel-foreground: 222 47% 11%;
     --surface-panel-muted-foreground: 215.4 16.3% 40%;
-    --surface-panel-border: 214.3 31.8% 86%;
+    --surface-panel-border: 214 24% 82%;
     --surface-panel-shadow: 222.2 47.4% 11.2%;
     --warning: 38 92% 50%;
     --map-callout: 0 0% 100%;
@@ -55,35 +59,39 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 222 38% 8%;
     --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+    --card: 222 34% 11%;
     --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
+    --popover: 222 34% 11%;
     --popover-foreground: 210 40% 98%;
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 220 24% 16%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
+    --muted: 220 24% 16%;
     --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --accent: 220 24% 18%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 72.2% 50.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --border: 220 22% 21%;
+    --input: 218 20% 30%;
     --ring: 224.3 76.3% 48%;
-    --glass: 222.2 50% 5%;
+    --surface: 222 34% 11%;
+    --surface-subtle: 220 24% 15%;
+    --surface-hover: 220 24% 18%;
+    --separator: 220 22% 19%;
+    --glass: 222 34% 11%;
     --glass-foreground: 210 40% 98%;
     --glass-border: 210 40% 98%;
     --glass-muted: 215 20.2% 65.1%;
     --glass-shadow: 222.2 84% 2%;
-    --surface-panel: 222.2 84% 4.9%;
-    --surface-panel-muted: 217.2 32.6% 17.5%;
+    --surface-panel: 222 34% 11%;
+    --surface-panel-muted: 220 24% 16%;
     --surface-panel-foreground: 210 40% 98%;
     --surface-panel-muted-foreground: 215 20.2% 65.1%;
-    --surface-panel-border: 217.2 32.6% 24%;
+    --surface-panel-border: 218 20% 30%;
     --surface-panel-shadow: 222.2 84% 2%;
     --warning: 38 92% 50%;
     --map-callout: 0 0% 100%;
@@ -209,10 +217,8 @@
   }
 
   .surface-glass-subtle {
-    border: 1px solid hsl(var(--surface-panel-border));
     background-color: hsl(var(--surface-panel));
     color: hsl(var(--surface-panel-foreground));
-    box-shadow: inset 0 1px 0 hsl(var(--surface-panel-border) / 0.3);
   }
 
   .surface-glass-overlay {
@@ -262,6 +268,10 @@
 
 @theme inline {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-surface: hsl(var(--surface));
+  --color-surface-subtle: hsl(var(--surface-subtle));
+  --color-surface-hover: hsl(var(--surface-hover));
+  --color-separator: hsl(var(--separator));
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

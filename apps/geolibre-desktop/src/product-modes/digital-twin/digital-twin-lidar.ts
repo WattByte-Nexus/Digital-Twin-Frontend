@@ -44,28 +44,17 @@ export class GaussianSurfelPointCloudLayer extends PointCloudLayer {
   }
 }
 
-export const DIGITAL_TWIN_LIDAR_OVERLAY_PROPS = {
-  interleaved: true,
-} as const;
-
-export const DIGITAL_TWIN_POSITION_ONLY_POINT_COLOR: [
-  number,
-  number,
-  number,
-  number,
-] = [82, 168, 255, 255];
-
 export const POINT_CLOUD_TILESET_LOAD_OPTIONS = {
   tileset: {
-    // Four pixels preserves native detail near the camera without attempting
-    // to hold the full 167-million-point hierarchy in memory.
-    maximumScreenSpaceError: 4,
-    maximumMemoryUsage: 256,
+    // Start with the hierarchy's previews and refine only after the camera
+    // settles. Native leaves remain available without blocking interaction.
+    maximumScreenSpaceError: 16,
+    maximumMemoryUsage: 512,
     memoryAdjustedScreenSpaceError: true,
     throttleRequests: true,
-    maxRequests: 8,
+    maxRequests: 12,
     // Camera motion can otherwise trigger a traversal for every input event.
-    debounceTime: 75,
+    debounceTime: 100,
     // Engine tiles are georeferenced once and remain stationary.
     updateTransforms: false,
   },
@@ -101,7 +90,7 @@ interface DigitalTwinPointCloudLayerCallbacks {
 }
 
 function pointSizeForSpacing(minimumSpacingMeters: number): number {
-  return Math.min(2.5, Math.max(0.5, minimumSpacingMeters * 1.5));
+  return Math.min(3, Math.max(1.5, minimumSpacingMeters * 3));
 }
 
 /**
@@ -145,7 +134,6 @@ export function createDigitalTwinPointCloudLayer(
     id: `digital-twin-point-cloud-${dataset.datasetId}`,
     data: dataset.tilesetUrl,
     pointSize: pointSizeForSpacing(dataset.minimumSpacingMeters),
-    getPointColor: DIGITAL_TWIN_POSITION_ONLY_POINT_COLOR,
     pickable: false,
     operation: "draw",
     loadOptions: POINT_CLOUD_TILESET_LOAD_OPTIONS,
@@ -155,7 +143,7 @@ export function createDigitalTwinPointCloudLayer(
           renderMode === "gaussian"
             ? GaussianSurfelPointCloudLayer
             : PointCloudLayer,
-        sizeUnits: "meters",
+        sizeUnits: "pixels",
       },
     },
     onTilesetLoad: (loadedTileset) => {

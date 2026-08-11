@@ -1,12 +1,16 @@
 import {
+  Bell,
   ChevronDown,
-  FlaskConical,
-  History,
+  CirclePlay,
+  FolderClosed,
+  Layers3,
   MapPin,
   Radio,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "../lib/utils";
+import { Badge } from "./badge";
 import { Button } from "./button";
 import {
   DropdownMenu,
@@ -20,13 +24,14 @@ import {
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
 } from "./sidebar";
 
 interface DestinationDefinition {
@@ -55,57 +60,109 @@ const destinations: DestinationDefinition[] = [
     id: "scenarios",
     label: "Scenarios",
     description: "Bounded what-if studies",
-    icon: FlaskConical,
+    icon: FolderClosed,
   },
   {
     id: "runs",
     label: "Runs",
     description: "Run status, history, and replay",
-    icon: History,
+    icon: CirclePlay,
+  },
+];
+
+interface UtilityDefinition {
+  id: "alerts" | "data" | "settings";
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}
+
+const utilities: UtilityDefinition[] = [
+  {
+    id: "alerts",
+    label: "Alerts",
+    description: "Open the operational alert inbox",
+    icon: Bell,
+  },
+  {
+    id: "data",
+    label: "Data",
+    description: "Open the Expert GIS data workspace",
+    icon: Layers3,
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    description: "Open Digital Twin administration",
+    icon: Settings,
   },
 ];
 
 export interface DigitalTwinSidebarProps {
   activeDestination?: DigitalTwinDestination;
   activeRegionId: string;
+  appVersion?: string;
   className?: string;
   regions: DigitalTwinRegion[];
   themeMode?: "light" | "dark";
   onNavigate?: (destination: DigitalTwinDestination) => void;
+  onOpenAlerts?: () => void;
+  onOpenData?: () => void;
+  onOpenSettings?: () => void;
   onSelectRegion?: (regionId: string) => void;
 }
 
 export function DigitalTwinSidebar({
   activeDestination = "live",
   activeRegionId,
+  appVersion,
   className,
   regions,
   themeMode = "dark",
   onNavigate,
+  onOpenAlerts,
+  onOpenData,
+  onOpenSettings,
   onSelectRegion,
 }: DigitalTwinSidebarProps) {
   const activeRegion =
     regions.find((region) => region.id === activeRegionId) ?? regions[0];
   const themeClassName = themeMode === "dark" ? "dark" : "theme-light";
+  const utilityActions = {
+    alerts: onOpenAlerts,
+    data: onOpenData,
+    settings: onOpenSettings,
+  };
 
   return (
     <Sidebar
       aria-label="Digital Twin navigation"
       className={cn(
         themeClassName,
-        "surface-glass-subtle border-y-0 border-l-0 border-sidebar-border [&_[data-slot=sidebar-inner]]:bg-transparent",
+        "border-y-0 border-l-0 border-sidebar-border bg-card shadow-none [&_[data-slot=sidebar-inner]]:bg-transparent",
         className
       )}
       collapsible="icon"
     >
-      <SidebarHeader className="h-16 shrink-0 justify-center border-b border-sidebar-border px-2 py-0">
+      <SidebarHeader className="grid h-28 shrink-0 grid-rows-[minmax(0,1fr)_auto] gap-1.5 px-3 py-3 group-data-[collapsible=icon]:px-2">
+        <div className="flex h-10 items-center gap-2.5 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+          <img
+            alt=""
+            aria-hidden="true"
+            className="h-6 w-6 shrink-0 object-contain"
+            src={`${import.meta.env.BASE_URL}maskable-icon-512x512.png`}
+          />
+          <span className="truncate text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+            WattByte Nexus
+          </span>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               aria-label={`Change assigned region. Current region: ${
                 activeRegion?.name ?? "Unassigned"
               }`}
-              className="h-11 w-full min-w-0 justify-start gap-2.5 px-2.5 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2"
+              className="h-11 w-full min-w-0 justify-start gap-2.5 px-2.5 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2"
               size="sm"
               type="button"
               variant="ghost"
@@ -154,9 +211,8 @@ export function DigitalTwinSidebar({
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+      <SidebarContent className="pt-2">
+        <SidebarGroup className="px-3 py-2 group-data-[collapsible=icon]:px-2">
           <SidebarGroupContent>
             <SidebarMenu>
               {destinations.map(({ description, icon: Icon, id, label }) => (
@@ -164,20 +220,15 @@ export function DigitalTwinSidebar({
                   <SidebarMenuButton
                     aria-label={`${label}: ${description}`}
                     aria-current={activeDestination === id ? "page" : undefined}
-                    className="h-auto min-h-12 items-start py-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:min-h-8 group-data-[collapsible=icon]:p-2"
+                    className="h-11 gap-3 px-3 text-sm group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-2"
                     isActive={activeDestination === id}
                     onClick={() => onNavigate?.(id)}
                     tooltip={`${label} — ${description}`}
                     type="button"
                   >
-                    <Icon aria-hidden="true" className="mt-0.5" />
-                    <span className="min-w-0 max-w-48 overflow-hidden opacity-100 transition-[max-width,opacity,transform] duration-200 ease-out motion-reduce:transition-none group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:max-w-0 group-data-[collapsible=icon]:-translate-x-1 group-data-[collapsible=icon]:opacity-0">
-                      <span className="block font-medium leading-5">
-                        {label}
-                      </span>
-                      <span className="block whitespace-normal text-xs leading-4 text-muted-foreground">
-                        {description}
-                      </span>
+                    <Icon aria-hidden="true" className="h-5 w-5" />
+                    <span className="font-medium group-data-[collapsible=icon]:hidden">
+                      {label}
                     </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -186,6 +237,41 @@ export function DigitalTwinSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="gap-2 px-3 pb-3 pt-2 group-data-[collapsible=icon]:px-2">
+        <SidebarMenu>
+          {utilities.map(({ description, icon: Icon, id, label }) => {
+            const action = utilityActions[id];
+            return (
+              <SidebarMenuItem key={id}>
+                <SidebarMenuButton
+                  aria-label={label}
+                  className="h-10 gap-3 px-3 text-sm group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-2"
+                  disabled={!action}
+                  onClick={action}
+                  tooltip={`${label} — ${description}`}
+                  type="button"
+                >
+                  <Icon aria-hidden="true" className="h-5 w-5" />
+                  <span className="group-data-[collapsible=icon]:hidden">
+                    {label}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+        <SidebarSeparator className="mx-0 my-1" />
+        {appVersion ? (
+          <div className="flex h-8 items-center justify-center group-data-[collapsible=icon]:hidden">
+            <Badge
+              className="font-mono text-[10px] font-normal text-muted-foreground"
+              variant="outline"
+            >
+              {appVersion}
+            </Badge>
+          </div>
+        ) : null}
+      </SidebarFooter>
     </Sidebar>
   );
 }

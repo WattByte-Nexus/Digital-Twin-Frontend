@@ -9,6 +9,22 @@ export interface IgnitionPoint {
   latitude: number;
 }
 
+export interface FireModelSettings {
+  fuelMoisture: "observed" | "dry" | "very-dry";
+  spotting: "off" | "standard" | "extended";
+  crownFire: "enabled" | "disabled";
+  cellSizeMeters: 10 | 30 | 90;
+  outputIntervalMinutes: 5 | 15 | 30;
+}
+
+export const DEFAULT_FIRE_MODEL_SETTINGS: FireModelSettings = {
+  fuelMoisture: "observed",
+  spotting: "standard",
+  crownFire: "enabled",
+  cellSizeMeters: 30,
+  outputIntervalMinutes: 15,
+};
+
 export interface SimulationRun {
   id: string;
   scenario: string;
@@ -28,6 +44,7 @@ export interface SimulationRun {
   windSpeed: number;
   windDirection: number;
   modelVersion: string;
+  modelSettings: FireModelSettings;
 }
 
 export interface RunFilters {
@@ -46,6 +63,7 @@ export interface ScenarioRunRequest {
   durationHours: number;
   ignitionPoints: IgnitionPoint[];
   weather: WeatherSettingsValue;
+  modelSettings: FireModelSettings;
 }
 
 export interface RunSample {
@@ -92,6 +110,7 @@ export const SIMULATION_RUNS: SimulationRun[] = [
     windSpeed: 18,
     windDirection: 90,
     modelVersion: "FireSim 4.8",
+    modelSettings: { ...DEFAULT_FIRE_MODEL_SETTINGS },
   },
   {
     id: "RUN-2026-08-11-0958",
@@ -115,6 +134,7 @@ export const SIMULATION_RUNS: SimulationRun[] = [
     windSpeed: 16,
     windDirection: 45,
     modelVersion: "FireSim 4.8",
+    modelSettings: { ...DEFAULT_FIRE_MODEL_SETTINGS },
   },
   {
     id: "RUN-2026-08-11-0915",
@@ -137,6 +157,7 @@ export const SIMULATION_RUNS: SimulationRun[] = [
     windSpeed: 12,
     windDirection: 180,
     modelVersion: "FireSim 4.8",
+    modelSettings: { ...DEFAULT_FIRE_MODEL_SETTINGS },
   },
   {
     id: "RUN-2026-08-11-0840",
@@ -159,6 +180,7 @@ export const SIMULATION_RUNS: SimulationRun[] = [
     windSpeed: 9,
     windDirection: 270,
     modelVersion: "FireSim 4.7",
+    modelSettings: { ...DEFAULT_FIRE_MODEL_SETTINGS },
   },
   {
     id: "RUN-2026-08-10-1642",
@@ -184,6 +206,7 @@ export const SIMULATION_RUNS: SimulationRun[] = [
     windSpeed: 31,
     windDirection: 270,
     modelVersion: "FireSim 4.8",
+    modelSettings: { ...DEFAULT_FIRE_MODEL_SETTINGS },
   },
   {
     id: "RUN-2026-08-10-1510",
@@ -207,6 +230,7 @@ export const SIMULATION_RUNS: SimulationRun[] = [
     windSpeed: 14,
     windDirection: 225,
     modelVersion: "FireSim 4.8",
+    modelSettings: { ...DEFAULT_FIRE_MODEL_SETTINGS },
   },
 ];
 
@@ -270,6 +294,7 @@ export function createSimulationRun(
     windSpeed: request.weather.events.wind,
     windDirection: request.weather.events.windDirection,
     modelVersion: "FireSim 4.8",
+    modelSettings: { ...request.modelSettings },
   };
 }
 
@@ -347,9 +372,31 @@ export function ignitionBounds(
 }
 
 export function analyticsForRun(run: SimulationRun): RunSample[] {
-  const sampleCount = 13;
-  const finalArea = Math.max(run.burnedArea, run.status === "Queued" ? 0 : 640);
-  const finalRate = Math.max(run.spreadRate, run.status === "Queued" ? 0 : 1.8);
+  const sampleCount = Math.min(
+    241,
+    Math.max(
+      2,
+      Math.ceil((run.durationHours * 60) / run.modelSettings.outputIntervalMinutes) + 1,
+    ),
+  );
+  const fuelFactor =
+    run.modelSettings.fuelMoisture === "very-dry"
+      ? 1.3
+      : run.modelSettings.fuelMoisture === "dry"
+        ? 1.15
+        : 1;
+  const spottingFactor =
+    run.modelSettings.spotting === "extended"
+      ? 1.15
+      : run.modelSettings.spotting === "off"
+        ? 0.9
+        : 1;
+  const crownFactor = run.modelSettings.crownFire === "enabled" ? 1 : 0.85;
+  const behaviorFactor = fuelFactor * spottingFactor * crownFactor;
+  const finalArea =
+    Math.max(run.burnedArea, run.status === "Queued" ? 0 : 640) * behaviorFactor;
+  const finalRate =
+    Math.max(run.spreadRate, run.status === "Queued" ? 0 : 1.8) * behaviorFactor;
   return Array.from({ length: sampleCount }, (_, index) => {
     const ratio = index / (sampleCount - 1);
     const eased = ratio * ratio * (3 - 2 * ratio);
@@ -357,7 +404,7 @@ export function analyticsForRun(run: SimulationRun): RunSample[] {
       minute: Math.round((index * run.durationHours * 60) / (sampleCount - 1)),
       burnedArea: Math.round(finalArea * eased),
       spreadRate: Number((finalRate * Math.sin(ratio * Math.PI * 0.78)).toFixed(1)),
-      intensity: Math.round(18 + 76 * Math.sin(ratio * Math.PI * 0.72)),
+      intensity: Math.round((18 + 76 * Math.sin(ratio * Math.PI * 0.72)) * behaviorFactor),
       exposedAssets: Math.round(18 * eased),
     };
   });
@@ -413,7 +460,13 @@ function isSimulationRun(value: unknown): value is SimulationRun {
     typeof run.spreadRate === "number" &&
     typeof run.windSpeed === "number" &&
     typeof run.windDirection === "number" &&
-    typeof run.modelVersion === "string"
+    typeof run.modelVersion === "string" &&
+    !!run.modelSettings &&
+    ["observed", "dry", "very-dry"].includes(run.modelSettings.fuelMoisture) &&
+    ["off", "standard", "extended"].includes(run.modelSettings.spotting) &&
+    ["enabled", "disabled"].includes(run.modelSettings.crownFire) &&
+    [10, 30, 90].includes(run.modelSettings.cellSizeMeters) &&
+    [5, 15, 30].includes(run.modelSettings.outputIntervalMinutes)
   );
 }
 

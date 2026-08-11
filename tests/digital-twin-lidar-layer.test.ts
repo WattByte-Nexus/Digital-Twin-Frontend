@@ -3,8 +3,6 @@ import { describe, it } from "node:test";
 import { PointCloudLayer } from "@deck.gl/layers";
 import {
   createDigitalTwinPointCloudLayer,
-  DIGITAL_TWIN_POSITION_ONLY_POINT_COLOR,
-  DIGITAL_TWIN_LIDAR_OVERLAY_PROPS,
   GAUSSIAN_SURFEL_FRAGMENT_INJECTION,
   GAUSSIAN_SURFEL_VERTEX_INJECTION,
   GaussianSurfelPointCloudLayer,
@@ -25,7 +23,7 @@ const DATASET: DigitalTwinReadyPointCloudDataset = {
   pointCount: 167_621_127,
   sourcePointCount: 167_621_127,
   minimumSpacingMeters: 0.5,
-  attributes: ["position"],
+  attributes: ["position", "rgb"],
   version: "sha256-a1",
   attribution: "U.S. Geological Survey 3DEP",
   updatedAt: "2026-08-11T18:00:00Z",
@@ -37,30 +35,25 @@ describe("Digital Twin LiDAR fusion layer", () => {
     assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.pointClouds, true);
   });
 
-  it("streams the full-resolution position-only dataset within the interactive scene budget", () => {
+  it("streams the full-resolution RGB dataset within the interactive scene budget", () => {
     const layer = createDigitalTwinPointCloudLayer(DATASET, {
       onError: () => {},
       onReady: () => {},
     });
 
-    assert.equal(DIGITAL_TWIN_LIDAR_OVERLAY_PROPS.interleaved, true);
     assert.equal(layer.props.id, "digital-twin-point-cloud-golden-lidar");
     assert.equal(layer.props.data, DATASET.tilesetUrl);
-    assert.equal(layer.props.pointSize, 0.75);
+    assert.equal(layer.props.pointSize, 1.5);
     assert.equal(layer.props.pickable, false);
     assert.equal(layer.props.operation, "draw");
-    assert.deepEqual(
-      layer.props.getPointColor,
-      DIGITAL_TWIN_POSITION_ONLY_POINT_COLOR,
-    );
     assert.equal(layer.props.loadOptions, POINT_CLOUD_TILESET_LOAD_OPTIONS);
     assert.equal(
       layer.props.loadOptions?.tileset?.maximumScreenSpaceError,
-      4,
+      16,
     );
-    assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 256);
-    assert.equal(layer.props.loadOptions?.tileset?.maxRequests, 8);
-    assert.equal(layer.props.loadOptions?.tileset?.debounceTime, 75);
+    assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 512);
+    assert.equal(layer.props.loadOptions?.tileset?.maxRequests, 12);
+    assert.equal(layer.props.loadOptions?.tileset?.debounceTime, 100);
     assert.equal(layer.props.loadOptions?.tileset?.updateTransforms, false);
     assert.equal(layer.props.loadOptions?.tileset?.memoryAdjustedScreenSpaceError, true);
     assert.equal(layer.props.loadOptions?.tileset?.throttleRequests, true);
@@ -68,7 +61,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
       layer.props._subLayerProps?.pointcloud?.type,
       PointCloudLayer,
     );
-    assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "meters");
+    assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "pixels");
   });
 
   it("enables Gaussian surfels only when the quality mode is requested", () => {

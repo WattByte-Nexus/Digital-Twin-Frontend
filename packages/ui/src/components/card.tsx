@@ -4,11 +4,12 @@ import * as React from "react";
 import { cn } from "@geolibre/ui/lib/utils";
 
 const cardVariants = cva(
-  "flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
+  "flex flex-col gap-6 rounded-xl bg-card py-6 text-card-foreground",
   {
     variants: {
       surface: {
         default: "",
+        subtle: "bg-surface-subtle",
         glass: "surface-glass bg-transparent text-glass-foreground",
         panel: "surface-panel",
       },

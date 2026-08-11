@@ -1,5 +1,5 @@
 import type { MapController } from "@geolibre/map";
-import { SimulationPopover, type SurfaceTheme } from "@geolibre/ui";
+import { SimulationPopover, type DigitalTwinRegion, type SurfaceTheme } from "@geolibre/ui";
 import {
   type ReactNode,
   type RefObject,
@@ -9,13 +9,17 @@ import {
   useState,
 } from "react";
 import type { DigitalTwinView } from "../access";
+import { defaultDigitalTwinApiUrl } from "../../../lib/digital-twin-earth-engine";
+import {
+  fetchDigitalTwinRunCatalog,
+  type DigitalTwinRunCatalog,
+} from "../../../lib/digital-twin-runs";
 import { LiveView } from "./LiveView";
 import { RunsView } from "./views/RunsView";
 import { ScenariosView } from "./views/ScenariosView";
 import { SettingsView } from "./views/SettingsView";
 import { SimulationAreaChart, type SimulationAreaSample } from "./SimulationAreaChart";
 import {
-  SIMULATION_RUNS,
   createSimulationRun,
   loadLaunchedSimulationRuns,
   persistLaunchedSimulationRuns,
@@ -27,6 +31,7 @@ import "./digital-twin-workspace.css";
 export type DigitalTwinWorkspaceView = DigitalTwinView | "settings";
 
 interface DigitalTwinWorkspaceProps {
+  activeRegionId: string;
   activeView: DigitalTwinWorkspaceView;
   location: string;
   mapControllerRef: RefObject<MapController | null>;
@@ -35,6 +40,7 @@ interface DigitalTwinWorkspaceProps {
   onNavigate: (view: DigitalTwinView, resourceId?: string) => void;
   onOpenRealSettings: () => void;
   pluginContentEl: HTMLElement;
+  regions: readonly DigitalTwinRegion[];
   theme: SurfaceTheme;
 }
 
@@ -54,6 +60,7 @@ function PluginContentHost({ contentEl }: { contentEl: HTMLElement }) {
  * resets MapLibre, a running simulation, replay state, or plugin form state.
  */
 export function DigitalTwinWorkspace({
+  activeRegionId,
   activeView,
   location,
   mapControllerRef,
@@ -62,6 +69,7 @@ export function DigitalTwinWorkspace({
   onNavigate,
   onOpenRealSettings,
   pluginContentEl,
+  regions,
   theme,
 }: DigitalTwinWorkspaceProps) {
   const simulationOpenerRef = useRef<HTMLElement | null>(null);
@@ -71,10 +79,40 @@ export function DigitalTwinWorkspace({
   const [launchedRuns, setLaunchedRuns] = useState<SimulationRun[]>(loadLaunchedSimulationRuns);
   const [scenarioCreationRequest, setScenarioCreationRequest] = useState(0);
   const runSequenceRef = useRef(1);
+  const [runCatalog, setRunCatalog] = useState<DigitalTwinRunCatalog>({
+    regions: [],
+    runs: [],
+  });
+  const [runCatalogError, setRunCatalogError] = useState<Error | null>(null);
+  const [runCatalogLoading, setRunCatalogLoading] = useState(true);
+  const [runCatalogRequest, setRunCatalogRequest] = useState(0);
 
   useEffect(() => {
     persistLaunchedSimulationRuns(launchedRuns);
   }, [launchedRuns]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setRunCatalogLoading(true);
+    setRunCatalogError(null);
+    void fetchDigitalTwinRunCatalog(defaultDigitalTwinApiUrl(), {
+      signal: controller.signal,
+    }).then(
+      (catalog) => {
+        if (controller.signal.aborted) return;
+        setRunCatalog(catalog);
+        setRunCatalogLoading(false);
+      },
+      (cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setRunCatalogError(
+          cause instanceof Error ? cause : new Error("Digital Twin runs request failed."),
+        );
+        setRunCatalogLoading(false);
+      },
+    );
+    return () => controller.abort();
+  }, [runCatalogRequest]);
 
   useEffect(() => {
     const handleAreaSeries = (event: Event) => {
@@ -149,11 +187,13 @@ export function DigitalTwinWorkspace({
         role={activeView === "scenarios" ? "main" : undefined}
       >
         <ScenariosView
+          activeRegionId={activeRegionId}
           creationRequest={scenarioCreationRequest}
           mapControllerRef={mapControllerRef}
           mapSlot={activeView === "scenarios" ? mapSlot : null}
           onBuilderOpenChange={() => undefined}
           onRun={launchSimulation}
+          regions={regions}
           theme={theme}
         />
       </div>
@@ -165,6 +205,9 @@ export function DigitalTwinWorkspace({
         role={activeView === "runs" ? "main" : undefined}
       >
         <RunsView
+          apiUrl={defaultDigitalTwinApiUrl()}
+          error={runCatalogError}
+          isLoading={runCatalogLoading}
           location={location}
           mapControllerRef={mapControllerRef}
           mapSlot={activeView === "runs" ? mapSlot : null}
@@ -173,8 +216,10 @@ export function DigitalTwinWorkspace({
             onNavigate("scenarios");
           }}
           onOpenRun={(runId) => onNavigate("runs", runId)}
+          onRefresh={() => setRunCatalogRequest((request) => request + 1)}
           onReturnToRuns={() => onNavigate("runs")}
-          runs={[...launchedRuns, ...SIMULATION_RUNS]}
+          regions={runCatalog.regions}
+          runs={runCatalog.runs}
           theme={theme}
         />
       </div>

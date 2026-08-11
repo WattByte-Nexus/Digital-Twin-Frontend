@@ -21,19 +21,19 @@ export function AdministrationLanding({
   const diagnostics = screen === "diagnostics";
   return (
     <main className="min-h-screen bg-background p-6 text-foreground">
-      <header className="mx-auto flex max-w-5xl items-center gap-3 border-b pb-4">
+      <header className="mx-auto flex max-w-5xl items-center gap-3 pb-4">
         <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
           <Map aria-hidden="true" className="h-4 w-4" />
         </span>
         <div>
-          <p className="text-xs font-semibold text-primary">GeoLibre · Digital Twin</p>
+          <p className="text-xs font-semibold text-primary">WattByte Nexus · Digital Twin</p>
           <h1 className="text-xl font-semibold">
             {diagnostics ? "Diagnostics" : "Administration"}
           </h1>
         </div>
         <span className="ms-auto text-sm text-muted-foreground">{access.displayName}</span>
       </header>
-      <section className="mx-auto mt-8 max-w-5xl rounded-lg border bg-card p-6 shadow-sm">
+      <section className="mx-auto mt-8 max-w-5xl rounded-xl bg-card p-6">
         <p className="text-sm font-medium">{access.organization.name}</p>
         <h2 className="mt-1 text-lg font-semibold">
           {diagnostics

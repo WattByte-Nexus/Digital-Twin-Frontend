@@ -3,10 +3,7 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
   DEFAULT_WEATHER_SETTINGS,
   FloatingMapPanel,
   FloatingMapPanelDragHandle,
@@ -22,9 +19,9 @@ import {
   SelectMenuItem,
   SelectMenuTrigger,
   SelectMenuValue,
-  Separator,
   Slider,
   WeatherSettingsPanel,
+  type DigitalTwinRegion,
   type FloatingPanelAnchor,
   surfaceThemeClassName,
   type SurfaceTheme,
@@ -32,16 +29,23 @@ import {
 } from "@geolibre/ui";
 import {
   ArrowLeft,
+  ArrowRight,
+  Check,
+  CircleCheck,
+  Clock3,
+  CloudSun,
   Crosshair,
-  LocateFixed,
+  FileText,
+  Flame,
   MapPin,
-  Play,
+  Redo2,
   RotateCcw,
+  SlidersHorizontal,
   Trash2,
   Undo2,
-  Wind,
+  X,
 } from "lucide-react";
-import maplibregl, { LngLatBounds } from "maplibre-gl";
+import maplibregl from "maplibre-gl";
 import {
   type Dispatch,
   type ReactNode,
@@ -52,21 +56,37 @@ import {
   useState,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import type { IgnitionPoint, ScenarioRunRequest } from "../simulation-flow";
+import {
+  DEFAULT_FIRE_MODEL_SETTINGS,
+  type FireModelSettings,
+  type IgnitionPoint,
+  type ScenarioRunRequest,
+} from "../simulation-flow";
 
 interface ScenarioBuilderProps {
-  initialLocation: string;
+  activeRegionId: string;
   initialRequest?: ScenarioRunRequest;
   mapControllerRef: RefObject<ScenarioMapController | null>;
   mapSlot: ReactNode;
   onClose: () => void;
   onRun: (request: ScenarioRunRequest) => void;
+  regions: readonly DigitalTwinRegion[];
   theme: SurfaceTheme;
 }
 
 export interface ScenarioMapController {
   getMap: () => maplibregl.Map | null;
 }
+
+type SetupStep = "area" | "ignitions" | "weather" | "model" | "review";
+
+const SETUP_STEPS = [
+  { id: "area", label: "Area", Icon: MapPin },
+  { id: "ignitions", label: "Ignitions", Icon: Flame },
+  { id: "weather", label: "Weather", Icon: CloudSun },
+  { id: "model", label: "Model", Icon: SlidersHorizontal },
+  { id: "review", label: "Review", Icon: FileText },
+] as const;
 
 function pointId(): string {
   return `ignition-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -78,6 +98,7 @@ function useIgnitionMap({
   points,
   selectedPointId,
   setPoints,
+  setRedoPoints,
   setSelectedPointId,
 }: {
   enabled: boolean;
@@ -85,6 +106,7 @@ function useIgnitionMap({
   points: IgnitionPoint[];
   selectedPointId: string | null;
   setPoints: Dispatch<SetStateAction<IgnitionPoint[]>>;
+  setRedoPoints: Dispatch<SetStateAction<IgnitionPoint[]>>;
   setSelectedPointId: Dispatch<SetStateAction<string | null>>;
 }) {
   useEffect(() => {
@@ -154,6 +176,7 @@ function useIgnitionMap({
           latitude: event.lngLat.lat,
         };
         setPoints((current) => [...current, nextPoint]);
+        setRedoPoints([]);
         setSelectedPointId(nextPoint.id);
       };
       map.on("click", handleMapClick);
@@ -161,7 +184,7 @@ function useIgnitionMap({
       cleanup = () => {
         map.off("click", handleMapClick);
         markers.forEach((marker) => marker.remove());
-        markerRoots.forEach((root) => root.unmount());
+        queueMicrotask(() => markerRoots.forEach((root) => root.unmount()));
         canvas.style.cursor = previousCursor;
       };
     };
@@ -180,51 +203,45 @@ function useIgnitionMap({
     points,
     selectedPointId,
     setPoints,
+    setRedoPoints,
     setSelectedPointId,
   ]);
 }
 
-function zoomToPoints(
-  mapControllerRef: RefObject<ScenarioMapController | null>,
-  points: IgnitionPoint[]
-) {
-  const map = mapControllerRef.current?.getMap();
-  if (!map || points.length === 0) return;
-  if (points.length === 1) {
-    map.easeTo({
-      center: [points[0].longitude, points[0].latitude],
-      zoom: Math.max(map.getZoom(), 14),
-      duration: 400,
-    });
-    return;
-  }
-  const bounds = new LngLatBounds();
-  points.forEach((point) => bounds.extend([point.longitude, point.latitude]));
-  map.fitBounds(bounds, { padding: 96, duration: 400, maxZoom: 15 });
-}
-
 export function ScenarioBuilder({
-  initialLocation,
+  activeRegionId,
   initialRequest,
   mapControllerRef,
   mapSlot,
   onClose,
   onRun,
+  regions,
   theme,
 }: ScenarioBuilderProps) {
   const [scenarioName, setScenarioName] = useState(
-    initialRequest?.scenario ?? "Boulder Foothills — Wind East"
+    initialRequest?.scenario ?? ""
   );
-  const [location, setLocation] = useState(
-    initialRequest?.location ?? initialLocation
+  const [regionId, setRegionId] = useState(
+    () =>
+      regions.find((region) => region.name === initialRequest?.location)?.id ??
+      (regions.some((region) => region.id === activeRegionId)
+        ? activeRegionId
+        : regions[0]?.id ?? "")
   );
   const [durationHours, setDurationHours] = useState(
     initialRequest?.durationHours ?? 4
+  );
+  const [modelSettings, setModelSettings] = useState<FireModelSettings>(() => ({
+    ...(initialRequest?.modelSettings ?? DEFAULT_FIRE_MODEL_SETTINGS),
+  }));
+  const [activeStep, setActiveStep] = useState<SetupStep>(
+    initialRequest ? "ignitions" : "area"
   );
   const [placementActive, setPlacementActive] = useState(true);
   const [points, setPoints] = useState<IgnitionPoint[]>(
     () => initialRequest?.ignitionPoints.map((point) => ({ ...point })) ?? []
   );
+  const [redoPoints, setRedoPoints] = useState<IgnitionPoint[]>([]);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [runSetupAnchor, setRunSetupAnchor] = useState<FloatingPanelAnchor>({
     edge: "right",
@@ -243,37 +260,66 @@ export function ScenarioBuilder({
   });
 
   useIgnitionMap({
-    enabled: placementActive,
+    enabled: placementActive && activeStep === "ignitions",
     mapControllerRef,
     points,
     selectedPointId,
     setPoints,
+    setRedoPoints,
     setSelectedPointId,
   });
 
-  const selectedPoint =
-    points.find((point) => point.id === selectedPointId) ?? null;
+  const activeRegion = regions.find((region) => region.id === regionId);
+  const location = activeRegion?.name ?? "";
   const weatherEditorSide =
     runSetupAnchor.edge === "left" ||
     ((runSetupAnchor.edge === "top" || runSetupAnchor.edge === "bottom") &&
       runSetupAnchor.offset < 0.5)
       ? "right"
       : "left";
-  const runLabel = `Run ${durationHours}-hour simulation`;
   const weatherSummary = useMemo(
     () =>
-      `NWS · ${weather.events.wind.toFixed(0)} mph · ${
-        weather.temperature
-      }°C · Updated 8 min ago`,
+      `NWS · ${weather.events.wind.toFixed(0)} mph · ${weather.temperature}°C`,
     [weather.events.wind, weather.temperature]
   );
 
-  const removeSelectedPoint = () => {
-    if (!selectedPointId) return;
-    setPoints((current) =>
-      current.filter((point) => point.id !== selectedPointId)
-    );
-    setSelectedPointId(null);
+  const areaComplete = Boolean(scenarioName.trim() && location);
+  const ignitionsComplete = points.length > 0;
+  const readyToRun = areaComplete && ignitionsComplete;
+  const stepComplete = (step: SetupStep) => {
+    if (step === "area") return areaComplete;
+    if (step === "ignitions") return ignitionsComplete;
+    if (step === "weather" || step === "model") return true;
+    return readyToRun;
+  };
+  const activeStepIndex = SETUP_STEPS.findIndex((step) => step.id === activeStep);
+  const previousStep = SETUP_STEPS[activeStepIndex - 1];
+  const nextStep = SETUP_STEPS[activeStepIndex + 1];
+  const nextDisabled =
+    (activeStep === "area" && !areaComplete) ||
+    (activeStep === "ignitions" && !ignitionsComplete) ||
+    (activeStep === "review" && !readyToRun);
+
+  const removePoint = (pointId: string) => {
+    const removedPoint = points.find((point) => point.id === pointId);
+    if (removedPoint) setRedoPoints((current) => [...current, removedPoint]);
+    setPoints((current) => current.filter((point) => point.id !== pointId));
+    if (selectedPointId === pointId) setSelectedPointId(null);
+  };
+
+  const handleNext = () => {
+    if (nextStep) {
+      setActiveStep(nextStep.id);
+      return;
+    }
+    onRun({
+      scenario: scenarioName,
+      location,
+      durationHours,
+      ignitionPoints: points,
+      weather,
+      modelSettings,
+    });
   };
 
   return (
@@ -306,262 +352,646 @@ export function ScenarioBuilder({
               )} relative h-full gap-0 overflow-hidden rounded-[10px] py-0 shadow-xl`}
               surface="panel"
             >
-          <FloatingMapPanelDragHandle className="absolute inset-x-0 top-0 z-10 h-[54px] rounded-t-[10px]" />
-          <CardHeader className="border-b px-5 py-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <CardTitle>Run setup</CardTitle>
-                <CardDescription className="mt-1">
-                  Define the area, ignition sources, weather, and model
-                  duration.
-                </CardDescription>
-              </div>
-              <Badge variant="secondary">Draft</Badge>
-            </div>
-          </CardHeader>
-
-          <ScrollArea className="min-h-0 flex-1">
-            <CardContent className="space-y-6 px-5 py-5">
-              <section className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Badge
-                    className="size-6 justify-center rounded-full p-0"
-                    variant="outline"
-                  >
-                    1
-                  </Badge>
-                  Area
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="scenario-name">Scenario name</Label>
-                  <Input
-                    id="scenario-name"
-                    onChange={(event) => setScenarioName(event.target.value)}
-                    value={scenarioName}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="scenario-location">Simulation area</Label>
-                  <SelectMenu
-                    onValueChange={(nextLocation) => {
-                      if (nextLocation !== location) {
-                        setPoints([]);
-                        setSelectedPointId(null);
-                      }
-                      setLocation(nextLocation);
-                    }}
-                    value={location}
-                  >
-                    <SelectMenuTrigger
-                      className="w-full"
-                      id="scenario-location"
-                    >
-                      <SelectMenuValue />
-                    </SelectMenuTrigger>
-                    <SelectMenuContent className={surfaceThemeClassName(theme)}>
-                      <SelectMenuItem value="Boulder Foothills">
-                        Boulder Foothills
-                      </SelectMenuItem>
-                      <SelectMenuItem value="East County">
-                        East County
-                      </SelectMenuItem>
-                      <SelectMenuItem value="Boulder North">
-                        Boulder North
-                      </SelectMenuItem>
-                      <SelectMenuItem value="Front Range">
-                        Front Range
-                      </SelectMenuItem>
-                    </SelectMenuContent>
-                  </SelectMenu>
-                </div>
-              </section>
-
-              <Separator />
-
-              <section className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Badge
-                      className="size-6 justify-center rounded-full p-0"
-                      variant="outline"
-                    >
-                      2
-                    </Badge>
-                    Ignition sources
-                  </div>
-                  <Badge variant={points.length > 0 ? "default" : "secondary"}>
-                    {points.length} selected
-                  </Badge>
+              <FloatingMapPanelDragHandle className="absolute inset-x-0 top-0 z-10 h-[58px] rounded-t-[10px]" />
+              <header className="relative flex min-h-[58px] items-start bg-surface-subtle/60 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-card-foreground">
+                    Run setup
+                  </h2>
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                    <CircleCheck aria-hidden="true" className="size-3 text-primary" />
+                    Draft autosaved just now
+                  </p>
                 </div>
                 <Button
-                  aria-pressed={placementActive}
-                  className="w-full"
-                  onClick={() => setPlacementActive((active) => !active)}
-                  variant={placementActive ? "default" : "outline"}
+                  aria-label="Close run setup"
+                  className="relative z-20 -mr-2 -mt-1"
+                  onClick={onClose}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
                 >
-                  <Crosshair aria-hidden="true" />
-                  {placementActive
-                    ? "Click the map to place points"
-                    : "Add ignition sources"}
+                  <X aria-hidden="true" />
                 </Button>
-                <div className="grid grid-cols-3 gap-2">
-                  <Button
-                    disabled={points.length === 0}
-                    onClick={() => {
-                      setPoints((current) => current.slice(0, -1));
-                      setSelectedPointId(null);
-                    }}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <Undo2 aria-hidden="true" /> Undo
-                  </Button>
-                  <Button
-                    disabled={points.length === 0}
-                    onClick={() => zoomToPoints(mapControllerRef, points)}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <LocateFixed aria-hidden="true" /> Zoom
-                  </Button>
-                  <Button
-                    disabled={points.length === 0}
-                    onClick={() => {
-                      setPoints([]);
-                      setSelectedPointId(null);
-                    }}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <RotateCcw aria-hidden="true" /> Clear
-                  </Button>
-                </div>
-                {selectedPoint ? (
-                  <Card className="gap-3 rounded-lg px-3 py-3" surface="glass">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">
-                          Selected ignition source
-                        </p>
-                        <p className="mt-1 truncate text-xs tabular-nums text-muted-foreground">
-                          {selectedPoint.latitude.toFixed(5)},{" "}
-                          {selectedPoint.longitude.toFixed(5)}
-                        </p>
-                      </div>
-                      <Button
-                        aria-label="Remove selected ignition source"
-                        onClick={removeSelectedPoint}
-                        size="icon"
-                        variant="ghost"
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </Card>
-                ) : null}
-              </section>
+              </header>
 
-              <Separator />
+              <nav aria-label="Run setup steps" className="px-3 py-3">
+                <ol className="grid grid-cols-5">
+                  {SETUP_STEPS.map(({ id, label, Icon }, index) => {
+                    const complete = stepComplete(id);
+                    const active = activeStep === id;
+                    return (
+                      <li className="relative" key={id}>
+                        {index > 0 ? (
+                          <span
+                            aria-hidden="true"
+                            className="absolute right-1/2 top-3 h-px w-full bg-border"
+                          />
+                        ) : null}
+                        <button
+                          aria-current={active ? "step" : undefined}
+                          className="relative z-10 flex w-full flex-col items-center gap-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          onClick={() => setActiveStep(id)}
+                          type="button"
+                        >
+                          <span
+                            className={`flex size-6 items-center justify-center rounded-full border bg-background ${
+                              active
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : complete
+                                  ? "border-primary text-primary"
+                                  : "text-muted-foreground"
+                            }`}
+                          >
+                            {active ? (
+                              index + 1
+                            ) : complete ? (
+                              <Check aria-hidden="true" className="size-3.5" />
+                            ) : (
+                              <Icon aria-hidden="true" className="size-3.5" />
+                            )}
+                          </span>
+                          <span className={active ? "text-foreground" : undefined}>
+                            {label}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </nav>
 
-              <section className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Badge
-                    className="size-6 justify-center rounded-full p-0"
-                    variant="outline"
-                  >
-                    3
-                  </Badge>
-                  Weather
-                </div>
-                <Card className="gap-3 rounded-lg px-3 py-3" surface="glass">
-                  <div className="flex items-start gap-3">
-                    <Wind
-                      aria-hidden="true"
-                      className="mt-0.5 size-4 text-muted-foreground"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">Current inputs</p>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        {weatherSummary}
+              <ScrollArea className="min-h-0 flex-1">
+                <CardContent className="space-y-4 px-3 py-4">
+                  {activeStep === "area" ? (
+                  <section className="space-y-4">
+                    <div>
+                      <h3 className="text-[16px] font-semibold">Area</h3>
+                      <p className="mt-1 text-xs leading-4 text-muted-foreground">
+                        Name the scenario and choose its simulation region.
                       </p>
                     </div>
-                    <PopoverTrigger asChild>
-                      <Button size="sm" variant="outline">
-                        Edit
+                    <div className="space-y-2">
+                      <Label htmlFor="scenario-name">Scenario name</Label>
+                      <Input
+                        id="scenario-name"
+                        onChange={(event) =>
+                          setScenarioName(event.target.value)
+                        }
+                        placeholder="Name this scenario"
+                        value={scenarioName}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="scenario-location">Simulation area</Label>
+                      <SelectMenu
+                        onValueChange={(nextRegionId) => {
+                          if (nextRegionId !== regionId) {
+                            setPoints([]);
+                            setRedoPoints([]);
+                            setSelectedPointId(null);
+                          }
+                          setRegionId(nextRegionId);
+                        }}
+                        value={regionId}
+                      >
+                        <SelectMenuTrigger
+                          className="w-full"
+                          disabled={regions.length === 0}
+                          id="scenario-location"
+                        >
+                          <SelectMenuValue placeholder="No simulation areas available" />
+                        </SelectMenuTrigger>
+                        <SelectMenuContent
+                          className={surfaceThemeClassName(theme)}
+                        >
+                          {regions.map((region) => (
+                            <SelectMenuItem key={region.id} value={region.id}>
+                              {region.name}
+                            </SelectMenuItem>
+                          ))}
+                        </SelectMenuContent>
+                      </SelectMenu>
+                    </div>
+                    <div className="rounded-md bg-muted/50 px-3 py-3">
+                      <div className="flex items-start gap-3">
+                        <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium">Selected region</p>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            {activeRegion?.description || "Choose a simulation area to review its coverage."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                  ) : null}
+
+                  {activeStep === "ignitions" ? (
+                  <section className="space-y-3">
+                    <div>
+                      <h3 className="text-[16px] font-semibold">Ignitions</h3>
+                      <p className="mt-1 text-xs leading-4 text-muted-foreground">
+                        Add one or more ignition sources to start the simulation.
+                      </p>
+                    </div>
+                    <Button
+                      aria-pressed={placementActive}
+                      className="w-full"
+                      onClick={() => setPlacementActive((active) => !active)}
+                      variant={placementActive ? "secondary" : "outline"}
+                    >
+                      <Crosshair aria-hidden="true" />
+                      {placementActive
+                        ? "Click the map to place points"
+                        : "Add ignition sources"}
+                    </Button>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="font-medium">
+                        {points.length} ignition {points.length === 1 ? "source" : "sources"}
+                      </span>
+                      <Badge variant="outline">Point mode</Badge>
+                    </div>
+                    {points.length > 0 ? (
+                      <div className="space-y-1 rounded-md bg-surface-subtle p-1">
+                        {points.map((point, index) => (
+                          <div
+                            className={`flex items-start gap-2.5 rounded-sm px-2.5 py-2.5 ${
+                              selectedPointId === point.id ? "bg-surface-hover" : "bg-card"
+                            }`}
+                            key={point.id}
+                          >
+                            <button
+                              aria-label={`Select ignition source ${index + 1}`}
+                              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-destructive text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              onClick={() => setSelectedPointId(point.id)}
+                              type="button"
+                            >
+                              <Flame aria-hidden="true" className="size-3" />
+                            </button>
+                            <span className="pt-0.5 text-xs font-semibold">{index + 1}</span>
+                            <button
+                              className="min-w-0 flex-1 text-left"
+                              onClick={() => setSelectedPointId(point.id)}
+                              type="button"
+                            >
+                              <span className="block truncate text-xs font-medium tabular-nums">
+                                {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
+                              </span>
+                              <span className="mt-1 block text-[10px] text-muted-foreground">
+                                Point source
+                              </span>
+                            </button>
+                            <Button
+                              aria-label={`Remove ignition source ${index + 1}`}
+                              className="-mr-1 -mt-1"
+                              onClick={() => removePoint(point.id)}
+                              size="icon"
+                              variant="ghost"
+                            >
+                              <Trash2 aria-hidden="true" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-md border border-dashed px-3 py-5 text-center text-xs text-muted-foreground">
+                        No ignition sources placed yet.
+                      </div>
+                    )}
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        disabled={points.length === 0}
+                        onClick={() => {
+                          setPoints((current) => {
+                            const removedPoint = current.at(-1);
+                            if (removedPoint) {
+                              setRedoPoints((redo) => [...redo, removedPoint]);
+                            }
+                            return current.slice(0, -1);
+                          });
+                          setSelectedPointId(null);
+                        }}
+                        size="sm"
+                        variant="outline"
+                      >
+                        <Undo2 aria-hidden="true" /> Undo
                       </Button>
-                    </PopoverTrigger>
-                  </div>
-                </Card>
+                      <Button
+                        disabled={redoPoints.length === 0}
+                        onClick={() => {
+                          const restoredPoint = redoPoints.at(-1);
+                          if (!restoredPoint) return;
+                          setRedoPoints((current) => current.slice(0, -1));
+                          setPoints((current) => [...current, restoredPoint]);
+                          setSelectedPointId(restoredPoint.id);
+                        }}
+                        size="sm"
+                        variant="outline"
+                      >
+                        <Redo2 aria-hidden="true" /> Redo
+                      </Button>
+                      <Button
+                        disabled={points.length === 0}
+                        onClick={() => {
+                          setRedoPoints((current) => [...current, ...points]);
+                          setPoints([]);
+                          setSelectedPointId(null);
+                        }}
+                        size="sm"
+                        variant="outline"
+                      >
+                        <RotateCcw aria-hidden="true" /> Clear all
+                      </Button>
+                    </div>
+                  </section>
+                  ) : null}
+
+                  {activeStep === "weather" ? (
+                    <section className="space-y-4">
+                      <div>
+                        <h3 className="text-[16px] font-semibold">Weather</h3>
+                        <p className="mt-1 text-xs leading-4 text-muted-foreground">
+                          Review the atmospheric inputs used by the model.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-3">
+                        <CloudSun aria-hidden="true" className="size-5 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium">
+                            {weather.mode === "auto" ? "Automatic weather" : "Manual weather"}
+                          </p>
+                          <p className="mt-1 truncate text-xs text-muted-foreground">{weatherSummary}</p>
+                        </div>
+                      <PopoverTrigger asChild>
+                        <Button size="sm" variant="outline">
+                          Edit
+                        </Button>
+                      </PopoverTrigger>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 rounded-md bg-surface-subtle p-1">
+                        <div className="rounded-sm bg-card px-3 py-2.5">
+                          <p className="text-[10px] text-muted-foreground">Valid date</p>
+                          <p className="mt-1 text-xs font-medium">{weather.date}</p>
+                        </div>
+                        <div className="rounded-sm bg-card px-3 py-2.5">
+                          <p className="text-[10px] text-muted-foreground">Local time</p>
+                          <p className="mt-1 text-xs font-medium tabular-nums">
+                            {String(weather.hour).padStart(2, "0")}:{String(weather.minute).padStart(2, "0")}
+                          </p>
+                        </div>
+                        <div className="rounded-sm bg-card px-3 py-2.5">
+                          <p className="text-[10px] text-muted-foreground">Season</p>
+                          <p className="mt-1 text-xs font-medium">{weather.season}</p>
+                        </div>
+                        <div className="rounded-sm bg-card px-3 py-2.5">
+                          <p className="text-[10px] text-muted-foreground">Temperature</p>
+                          <p className="mt-1 text-xs font-medium tabular-nums">{weather.temperature}°C</p>
+                        </div>
+                        <div className="rounded-sm bg-card px-3 py-2.5">
+                          <p className="text-[10px] text-muted-foreground">Wind</p>
+                          <p className="mt-1 text-xs font-medium tabular-nums">{weather.events.wind.toFixed(0)} mph</p>
+                        </div>
+                        <div className="rounded-sm bg-card px-3 py-2.5">
+                          <p className="text-[10px] text-muted-foreground">Direction</p>
+                          <p className="mt-1 text-xs font-medium tabular-nums">{weather.events.windDirection.toFixed(0)}°</p>
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-medium">Weather events</h4>
+                        <div className="mt-2 grid grid-cols-4 gap-2">
+                          {[
+                            ["Rain", weather.events.rain],
+                            ["Fog", weather.events.fog],
+                            ["Cloud", weather.events.cloudCoverage],
+                            ["Snow", weather.events.snow],
+                          ].map(([label, value]) => (
+                            <div className="rounded-md bg-muted/50 px-2 py-2 text-center" key={label}>
+                              <p className="text-[10px] text-muted-foreground">{label}</p>
+                              <p className="mt-1 text-xs font-medium tabular-nums">{value}%</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {activeStep === "model" ? (
+                  <section className="space-y-4">
+                    <div>
+                      <h3 className="text-[16px] font-semibold">Model</h3>
+                      <p className="mt-1 text-xs leading-4 text-muted-foreground">
+                        Set the simulation horizon for this run.
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label htmlFor="simulation-duration">Duration</Label>
+                        <Badge variant="outline">
+                          {durationHours}{" "}
+                          {durationHours === 1 ? "hour" : "hours"}
+                        </Badge>
+                      </div>
+                      <Slider
+                        aria-label="Simulation duration in hours"
+                        id="simulation-duration"
+                        max={100}
+                        min={1}
+                        onValueChange={([value]) =>
+                          setDurationHours(value ?? 1)
+                        }
+                        step={1}
+                        value={[durationHours]}
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>1 hour</span>
+                        <span>100 hours</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <h4 className="text-xs font-medium">Fire behavior</h4>
+                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                          Control the assumptions that drive spread and intensity.
+                        </p>
+                      </div>
+                      <div className="space-y-1 rounded-md bg-surface-subtle p-1">
+                        <div className="flex items-center justify-between gap-3 rounded-sm bg-card px-3 py-2.5">
+                          <div className="min-w-0">
+                            <Label className="text-xs" htmlFor="fuel-moisture">Fuel moisture</Label>
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">Moisture applied to live and dead fuels</p>
+                          </div>
+                          <SelectMenu
+                            onValueChange={(value) =>
+                              setModelSettings((current) => ({
+                                ...current,
+                                fuelMoisture: value as FireModelSettings["fuelMoisture"],
+                              }))
+                            }
+                            value={modelSettings.fuelMoisture}
+                          >
+                            <SelectMenuTrigger className="h-8 w-36" id="fuel-moisture">
+                              <SelectMenuValue />
+                            </SelectMenuTrigger>
+                            <SelectMenuContent>
+                              <SelectMenuItem value="observed">Observed</SelectMenuItem>
+                              <SelectMenuItem value="dry">Dry −10%</SelectMenuItem>
+                              <SelectMenuItem value="very-dry">Very dry −20%</SelectMenuItem>
+                            </SelectMenuContent>
+                          </SelectMenu>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 rounded-sm bg-card px-3 py-2.5">
+                          <div className="min-w-0">
+                            <Label className="text-xs" htmlFor="ember-spotting">Ember spotting</Label>
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">Allow new ignitions ahead of the front</p>
+                          </div>
+                          <SelectMenu
+                            onValueChange={(value) =>
+                              setModelSettings((current) => ({
+                                ...current,
+                                spotting: value as FireModelSettings["spotting"],
+                              }))
+                            }
+                            value={modelSettings.spotting}
+                          >
+                            <SelectMenuTrigger className="h-8 w-36" id="ember-spotting">
+                              <SelectMenuValue />
+                            </SelectMenuTrigger>
+                            <SelectMenuContent>
+                              <SelectMenuItem value="off">Off</SelectMenuItem>
+                              <SelectMenuItem value="standard">500 m</SelectMenuItem>
+                              <SelectMenuItem value="extended">2 km</SelectMenuItem>
+                            </SelectMenuContent>
+                          </SelectMenu>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 rounded-sm bg-card px-3 py-2.5">
+                          <div className="min-w-0">
+                            <Label className="text-xs" htmlFor="crown-fire">Crown fire</Label>
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">Model transition from surface to canopy</p>
+                          </div>
+                          <SelectMenu
+                            onValueChange={(value) =>
+                              setModelSettings((current) => ({
+                                ...current,
+                                crownFire: value as FireModelSettings["crownFire"],
+                              }))
+                            }
+                            value={modelSettings.crownFire}
+                          >
+                            <SelectMenuTrigger className="h-8 w-36" id="crown-fire">
+                              <SelectMenuValue />
+                            </SelectMenuTrigger>
+                            <SelectMenuContent>
+                              <SelectMenuItem value="enabled">Enabled</SelectMenuItem>
+                              <SelectMenuItem value="disabled">Disabled</SelectMenuItem>
+                            </SelectMenuContent>
+                          </SelectMenu>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <h4 className="text-xs font-medium">Computation</h4>
+                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                          Balance spatial detail, playback detail, and run time.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-md bg-surface-subtle p-2.5">
+                          <Label className="text-[10px] text-muted-foreground" htmlFor="grid-resolution">Grid resolution</Label>
+                          <SelectMenu
+                            onValueChange={(value) =>
+                              setModelSettings((current) => ({
+                                ...current,
+                                cellSizeMeters: Number(value) as FireModelSettings["cellSizeMeters"],
+                              }))
+                            }
+                            value={String(modelSettings.cellSizeMeters)}
+                          >
+                            <SelectMenuTrigger className="mt-2 h-8 w-full" id="grid-resolution">
+                              <SelectMenuValue />
+                            </SelectMenuTrigger>
+                            <SelectMenuContent>
+                              <SelectMenuItem value="10">10 m · Fine</SelectMenuItem>
+                              <SelectMenuItem value="30">30 m · Balanced</SelectMenuItem>
+                              <SelectMenuItem value="90">90 m · Fast</SelectMenuItem>
+                            </SelectMenuContent>
+                          </SelectMenu>
+                        </div>
+                        <div className="rounded-md bg-surface-subtle p-2.5">
+                          <Label className="text-[10px] text-muted-foreground" htmlFor="output-interval">Output interval</Label>
+                          <SelectMenu
+                            onValueChange={(value) =>
+                              setModelSettings((current) => ({
+                                ...current,
+                                outputIntervalMinutes: Number(value) as FireModelSettings["outputIntervalMinutes"],
+                              }))
+                            }
+                            value={String(modelSettings.outputIntervalMinutes)}
+                          >
+                            <SelectMenuTrigger className="mt-2 h-8 w-full" id="output-interval">
+                              <SelectMenuValue />
+                            </SelectMenuTrigger>
+                            <SelectMenuContent>
+                              <SelectMenuItem value="5">Every 5 min</SelectMenuItem>
+                              <SelectMenuItem value="15">Every 15 min</SelectMenuItem>
+                              <SelectMenuItem value="30">Every 30 min</SelectMenuItem>
+                            </SelectMenuContent>
+                          </SelectMenu>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                  ) : null}
+
+                  {activeStep === "review" ? (
+                    <section className="space-y-4">
+                      <div>
+                        <h3 className="text-[16px] font-semibold">Review</h3>
+                        <p className="mt-1 text-xs leading-4 text-muted-foreground">
+                          Confirm the scenario configuration before launching.
+                        </p>
+                      </div>
+                      {!readyToRun ? (
+                        <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                          Add a scenario name, area, and at least one ignition source.
+                        </p>
+                      ) : null}
+                      <div className="space-y-1 rounded-md bg-surface-subtle p-1">
+                        <button
+                          className="flex w-full items-center gap-3 rounded-sm bg-card px-3 py-3 text-left hover:bg-surface-hover"
+                          onClick={() => setActiveStep("area")}
+                          type="button"
+                        >
+                          <CircleCheck aria-hidden="true" className={`size-4 shrink-0 ${areaComplete ? "text-primary" : "text-muted-foreground"}`} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-medium">Scenario and area</span>
+                            <span className="mt-1 block truncate text-[10px] text-muted-foreground">
+                              {scenarioName.trim() || "Scenario name required"} · {location || "Area required"}
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">Edit</span>
+                        </button>
+                        <button
+                          className="flex w-full items-center gap-3 rounded-sm bg-card px-3 py-3 text-left hover:bg-surface-hover"
+                          onClick={() => setActiveStep("ignitions")}
+                          type="button"
+                        >
+                          <CircleCheck aria-hidden="true" className={`size-4 shrink-0 ${ignitionsComplete ? "text-primary" : "text-muted-foreground"}`} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-medium">Ignition sources</span>
+                            <span className="mt-1 block text-[10px] text-muted-foreground">
+                              {points.length} point {points.length === 1 ? "source" : "sources"} configured
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">Edit</span>
+                        </button>
+                        <button
+                          className="flex w-full items-center gap-3 rounded-sm bg-card px-3 py-3 text-left hover:bg-surface-hover"
+                          onClick={() => setActiveStep("weather")}
+                          type="button"
+                        >
+                          <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-medium">Weather inputs</span>
+                            <span className="mt-1 block truncate text-[10px] text-muted-foreground">{weatherSummary}</span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">Edit</span>
+                        </button>
+                        <button
+                          className="flex w-full items-center gap-3 rounded-sm bg-card px-3 py-3 text-left hover:bg-surface-hover"
+                          onClick={() => setActiveStep("model")}
+                          type="button"
+                        >
+                          <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-medium">Model runtime</span>
+                            <span className="mt-1 block text-[10px] text-muted-foreground">
+                              {modelSettings.cellSizeMeters} m grid · {modelSettings.outputIntervalMinutes} min outputs · {durationHours} hours
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">Edit</span>
+                        </button>
+                      </div>
+                    </section>
+                  ) : null}
+
+                </CardContent>
+              </ScrollArea>
+
+              <section
+                aria-label="Configuration summary"
+                className="grid grid-cols-4 bg-surface-subtle"
+              >
+                <button
+                  aria-label={`Area: ${location || "Not selected"}`}
+                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => setActiveStep("area")}
+                  title={location || "Choose an area"}
+                  type="button"
+                >
+                  <MapPin aria-hidden="true" className="size-3.5 text-muted-foreground" />
+                  <span className="max-w-full truncate text-[11px] font-medium">
+                    {location || "No area"}
+                  </span>
+                </button>
+                <button
+                  aria-label={`Weather: ${weatherSummary}`}
+                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => setActiveStep("weather")}
+                  title={weatherSummary}
+                  type="button"
+                >
+                  <CloudSun aria-hidden="true" className="size-3.5 text-muted-foreground" />
+                  <span className="max-w-full truncate text-[11px] font-medium">
+                    {weather.events.wind.toFixed(0)} mph · {weather.temperature}°
+                  </span>
+                </button>
+                <button
+                  aria-label={`Model: ${modelSettings.cellSizeMeters} meter grid`}
+                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => setActiveStep("model")}
+                  title={`${modelSettings.cellSizeMeters} meter grid, ${modelSettings.outputIntervalMinutes} minute outputs`}
+                  type="button"
+                >
+                  <SlidersHorizontal aria-hidden="true" className="size-3.5 text-muted-foreground" />
+                  <span className="max-w-full truncate text-[11px] font-medium">{modelSettings.cellSizeMeters} m grid</span>
+                </button>
+                <button
+                  aria-label={`Duration: ${durationHours} hours`}
+                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => setActiveStep("review")}
+                  title={`${durationHours}-hour duration`}
+                  type="button"
+                >
+                  <Clock3 aria-hidden="true" className="size-3.5 text-muted-foreground" />
+                  <span className="max-w-full truncate text-[11px] font-medium">{durationHours} hours</span>
+                </button>
               </section>
 
-              <Separator />
-
-              <section className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Badge
-                    className="size-6 justify-center rounded-full p-0"
-                    variant="outline"
-                  >
-                    4
-                  </Badge>
-                  Model settings
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label htmlFor="simulation-duration">Duration</Label>
-                    <Badge variant="outline">
-                      {durationHours} {durationHours === 1 ? "hour" : "hours"}
-                    </Badge>
-                  </div>
-                  <Slider
-                    aria-label="Simulation duration in hours"
-                    id="simulation-duration"
-                    max={100}
-                    min={1}
-                    onValueChange={([value]) => setDurationHours(value ?? 1)}
-                    step={1}
-                    value={[durationHours]}
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>1 hour</span>
-                    <span>100 hours</span>
-                  </div>
-                </div>
-              </section>
-            </CardContent>
-          </ScrollArea>
-
-          <CardFooter className="flex-col gap-3 border-t px-5 py-4">
-            <div className="flex w-full items-center justify-between text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <MapPin aria-hidden="true" className="size-3.5" />
-                {points.length} ignition{" "}
-                {points.length === 1 ? "source" : "sources"}
-              </span>
-              <span>{durationHours} hour model</span>
-            </div>
-            <Button
-              className="w-full"
-              disabled={points.length === 0 || !scenarioName.trim()}
-              onClick={() =>
-                onRun({
-                  scenario: scenarioName,
-                  location,
-                  durationHours,
-                  ignitionPoints: points,
-                  weather,
-                })
-              }
-            >
-              <Play aria-hidden="true" />
-              {runLabel}
-            </Button>
-            {points.length === 0 ? (
-              <p className="text-center text-xs text-muted-foreground">
-                Add at least one ignition source to start the simulation.
-              </p>
-            ) : null}
-          </CardFooter>
+              <CardFooter className="mt-auto flex-row items-center justify-between bg-card px-3 py-3">
+                <Button
+                  aria-label={previousStep ? `Back to ${previousStep.label}` : "No previous step"}
+                  disabled={!previousStep}
+                  onClick={() => previousStep && setActiveStep(previousStep.id)}
+                  size="icon"
+                  variant="outline"
+                >
+                  <ArrowLeft aria-hidden="true" />
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{SETUP_STEPS[activeStepIndex].label}</span>
+                  {" · "}{activeStepIndex + 1} of {SETUP_STEPS.length}
+                </p>
+                <Button
+                  aria-label={nextStep ? `Continue to ${nextStep.label}` : `Run ${durationHours}-hour simulation`}
+                  disabled={nextDisabled}
+                  onClick={handleNext}
+                  size="icon"
+                >
+                  <ArrowRight aria-hidden="true" />
+                </Button>
+              </CardFooter>
             </Card>
           </PopoverAnchor>
         </FloatingMapPanel>

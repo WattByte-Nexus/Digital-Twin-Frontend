@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   buildSatelliteTerrainStyle,
@@ -14,11 +15,35 @@ import {
   TERRAIN_SOURCE_ID,
 } from "../packages/map/src/satellite-terrain-style";
 import {
+  addSatelliteReferenceOverlay,
   DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
   loadSatelliteReferenceOverlay,
   SATELLITE_REFERENCE_SOURCE_ID,
   setSatelliteReferenceVisibility,
 } from "../packages/map/src/satellite-reference-overlay";
+
+const satelliteTerrainMapSource = readFileSync(
+  new URL("../packages/map/src/SatelliteTerrainMap.tsx", import.meta.url),
+  "utf8",
+);
+
+test("satellite terrain map mounts before the optional reference overlay loads", () => {
+  const mapConstruction = satelliteTerrainMapSource.indexOf("new maplibregl.Map");
+  const referenceOverlayLoad = satelliteTerrainMapSource.indexOf(
+    "loadSatelliteReferenceOverlay(",
+  );
+
+  assert.ok(mapConstruction >= 0);
+  assert.ok(referenceOverlayLoad > mapConstruction);
+});
+
+test("satellite terrain map owns one portable interleaved deck surface", () => {
+  assert.match(satelliteTerrainMapSource, /new MapboxOverlay\(/);
+  assert.match(satelliteTerrainMapSource, /interleaved:\s*true/);
+  assert.match(satelliteTerrainMapSource, /deckLayers/);
+  assert.match(satelliteTerrainMapSource, /powerPreference:\s*"low-power"/);
+  assert.doesNotMatch(satelliteTerrainMapSource, /powerPreference:\s*"high-performance"/);
+});
 
 test("satellite terrain style orders imagery, terrain, and reference details", () => {
   const style = buildSatelliteTerrainStyle({
@@ -301,6 +326,60 @@ test("satellite reference categories toggle independently", () => {
   assert.deepEqual(calls, [
     ["roads", "visibility", "none"],
     ["places", "visibility", "visible"],
+  ]);
+});
+
+test("satellite reference details hydrate onto an already-running map", () => {
+  const calls: unknown[] = [];
+  const map = {
+    addLayer: (layer: unknown) => calls.push(["addLayer", layer]),
+    addSource: (id: string, source: unknown) => calls.push(["addSource", id, source]),
+    addSprite: (id: string, url: string) => calls.push(["addSprite", id, url]),
+    getGlyphs: () => null,
+    getLayer: () => undefined,
+    getSource: () => undefined,
+    getSprite: () => [],
+    setGlyphs: (url: string) => calls.push(["setGlyphs", url]),
+    setSprite: (url: string) => calls.push(["setSprite", url]),
+  };
+  const source = {
+    type: "vector" as const,
+    tiles: ["https://reference.example/{z}/{x}/{y}.pbf"],
+  };
+
+  addSatelliteReferenceOverlay(
+    map as unknown as Parameters<typeof addSatelliteReferenceOverlay>[0],
+    {
+      source,
+      glyphs: "https://reference.example/fonts/{fontstack}/{range}.pbf",
+      sprite: "https://reference.example/sprite",
+      layers: [
+        {
+          category: "roads",
+          layer: {
+            id: "digital-twin-reference-road",
+            type: "line",
+            source: SATELLITE_REFERENCE_SOURCE_ID,
+          },
+        },
+      ],
+    },
+    { ...DEFAULT_SATELLITE_REFERENCE_VISIBILITY, roads: false },
+  );
+
+  assert.deepEqual(calls, [
+    ["setGlyphs", "https://reference.example/fonts/{fontstack}/{range}.pbf"],
+    ["setSprite", "https://reference.example/sprite"],
+    ["addSource", SATELLITE_REFERENCE_SOURCE_ID, source],
+    [
+      "addLayer",
+      {
+        id: "digital-twin-reference-road",
+        type: "line",
+        source: SATELLITE_REFERENCE_SOURCE_ID,
+        layout: { visibility: "none" },
+      },
+    ],
   ]);
 });
 

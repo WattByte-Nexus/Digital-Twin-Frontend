@@ -13,6 +13,13 @@ const workspaceSource = readFileSync(
   ),
   "utf8"
 );
+const lidarSource = readFileSync(
+  new URL(
+    "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-lidar.ts",
+    import.meta.url
+  ),
+  "utf8"
+);
 const scenarioBuilderSource = readFileSync(
   new URL(
     "../apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/ScenarioBuilder.tsx",
@@ -86,10 +93,8 @@ describe("Digital Twin frontend composition", () => {
       topbarSource,
       /<header[\s\S]*?\{mapToolbar \? \([\s\S]*?<\/header>/
     );
-    assert.equal(
-      topbarSource.match(/border-b border-sidebar-border/g)?.length,
-      2
-    );
+    assert.equal(topbarSource.match(/border-b border-separator/g)?.length, 2);
+    assert.match(topbarSource, /<nav[\s\S]*?bg-card/);
   });
 
   it("shows the live map controls while the scenario builder is open", () => {
@@ -100,6 +105,13 @@ describe("Digital Twin frontend composition", () => {
     assert.match(workspaceSource, /mapToolbar=\{\s*showLiveMapChrome \?/);
   });
 
+  it("keeps operational asset auto-fit from overriding the run camera", () => {
+    assert.match(
+      workspaceSource,
+      /if \(\s*!showLiveMapChrome \|\|\s*!mapInstance \|\|[\s\S]*?mapInstance\.fitBounds\([\s\S]*?\}, \[activeRegionId, mapInstance, powerLines, showLiveMapChrome\]\);/,
+    );
+  });
+
   it("keeps the scenario map interactive behind draggable floating panels", () => {
     assert.match(
       scenarioBuilderSource,
@@ -108,6 +120,22 @@ describe("Digital Twin frontend composition", () => {
     assert.match(scenarioBuilderSource, /<FloatingMapPanelDragHandle/);
     assert.doesNotMatch(scenarioBuilderSource, /<WeatherSettingsFloatingPanel/);
     assert.doesNotMatch(scenarioBuilderSource, /Open weather settings/);
+  });
+
+  it("populates simulation areas from API-backed workspace regions", () => {
+    assert.match(workspaceSource, /<ScenariosView[\s\S]*?regions=\{regions\}/);
+    assert.match(
+      scenarioBuilderSource,
+      /regions\.map\(\(region\) => \([\s\S]*?<SelectMenuItem key=\{region\.id\} value=\{region\.id\}/
+    );
+    assert.doesNotMatch(
+      scenarioBuilderSource,
+      /<SelectMenuItem value="Boulder Foothills">/
+    );
+    assert.doesNotMatch(
+      scenarioBuilderSource,
+      /initialRequest\?\.scenario \?\? "Boulder Foothills/
+    );
   });
 
   it("opens scenario weather editing beside the run setup panel", () => {
@@ -153,6 +181,19 @@ describe("Digital Twin frontend composition", () => {
     assert.match(workspaceSource, /aria-live="polite"/);
     assert.doesNotMatch(workspaceSource, /createGoldenUsgsLidarLayer/);
     assert.doesNotMatch(workspaceSource, /\/data\/usgs-lidar\/golden-city/);
+  });
+
+  it("composes operational layers through one shared deck surface", () => {
+    assert.match(workspaceSource, /new GeoJsonLayer/);
+    assert.match(workspaceSource, /deckLayers=\{deckLayers\}/);
+    assert.doesNotMatch(workspaceSource, /new MapboxOverlay/);
+    assert.doesNotMatch(workspaceSource, /addSource\(POWER_LINE_SOURCE_ID/);
+  });
+
+  it("starts point clouds at an interactive LOD with screen-sized points", () => {
+    assert.match(lidarSource, /maximumScreenSpaceError:\s*16/);
+    assert.match(lidarSource, /maximumMemoryUsage:\s*512/);
+    assert.match(lidarSource, /sizeUnits:\s*"pixels"/);
   });
 
   it("does not ship the obsolete frontend-bundled Golden point cloud", () => {

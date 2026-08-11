@@ -11,12 +11,19 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Input,
+  FilterButton,
+  FilterChip,
+  FilterSearch,
+  FilterSelectTrigger,
+  FilterToolbar,
+  FilterToolbarRow,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   ScrollArea,
   SelectMenu,
   SelectMenuContent,
   SelectMenuItem,
-  SelectMenuTrigger,
   SelectMenuValue,
   Table,
   TableBody,
@@ -24,9 +31,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tabs,
-  TabsList,
-  TabsTrigger,
+  surfaceThemeClassName,
+  type DigitalTwinRegion,
   type SurfaceTheme,
 } from "@geolibre/ui";
 import {
@@ -47,7 +53,10 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { ScenarioRunRequest } from "../simulation-flow";
+import {
+  DEFAULT_FIRE_MODEL_SETTINGS,
+  type ScenarioRunRequest,
+} from "../simulation-flow";
 import { ScenarioBuilder, type ScenarioMapController } from "./ScenarioBuilder";
 
 type ScenarioStatus = "Ready" | "Draft" | "Completed" | "Review";
@@ -166,24 +175,29 @@ function requestForScenario(scenario: Scenario): ScenarioRunRequest {
         windDirection: WIND_DIRECTIONS[windDirectionLabel] ?? 0,
       },
     },
+    modelSettings: { ...DEFAULT_FIRE_MODEL_SETTINGS },
   };
 }
 
 interface ScenariosViewProps {
+  activeRegionId: string;
   creationRequest: number;
   mapControllerRef: RefObject<ScenarioMapController | null>;
   mapSlot: ReactNode;
   onBuilderOpenChange: (open: boolean) => void;
   onRun: (request: ScenarioRunRequest) => void;
+  regions: readonly DigitalTwinRegion[];
   theme: SurfaceTheme;
 }
 
 export function ScenariosView({
+  activeRegionId,
   creationRequest,
   mapControllerRef,
   mapSlot,
   onBuilderOpenChange,
   onRun,
+  regions,
   theme,
 }: ScenariosViewProps) {
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -191,6 +205,7 @@ export function ScenariosView({
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("all");
   const [status, setStatus] = useState<ScenarioStatus | "All">("All");
+  const activeFilterCount = [location !== "all", status !== "All"].filter(Boolean).length;
 
   useEffect(() => {
     onBuilderOpenChange(builderOpen);
@@ -219,12 +234,13 @@ export function ScenariosView({
   if (builderOpen) {
     return (
       <ScenarioBuilder
-        initialLocation="Boulder Foothills"
+        activeRegionId={activeRegionId}
         initialRequest={selectedScenario ? requestForScenario(selectedScenario) : undefined}
         mapControllerRef={mapControllerRef}
         mapSlot={mapSlot}
         onClose={() => setBuilderOpen(false)}
         onRun={onRun}
+        regions={regions}
         theme={theme}
       />
     );
@@ -232,7 +248,7 @@ export function ScenariosView({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-4 lg:px-7">
+      <header className="flex flex-wrap items-center justify-between gap-4 px-5 pb-2 pt-5 lg:px-7">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Scenarios</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -250,27 +266,24 @@ export function ScenariosView({
         </Button>
       </header>
 
-      <div className="border-b px-5 py-4 lg:px-7">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[220px] flex-1 lg:max-w-sm">
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              className="pl-9"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search scenarios"
-              type="search"
+      <div className="px-5 pb-5 pt-2 lg:px-7">
+        <FilterToolbar>
+          <FilterToolbarRow>
+            <FilterSearch
+              aria-label="Search scenarios"
+              onValueChange={setQuery}
+              placeholder="Search scenarios…"
               value={query}
             />
-          </div>
           <SelectMenu onValueChange={setLocation} value={location}>
-            <SelectMenuTrigger className="w-[190px]">
+            <FilterSelectTrigger className="w-48">
               <MapPinned aria-hidden="true" />
               <SelectMenuValue placeholder="All locations" />
-            </SelectMenuTrigger>
-            <SelectMenuContent className={theme === "dark" ? "dark" : undefined}>
+            </FilterSelectTrigger>
+            <SelectMenuContent
+              className={`${surfaceThemeClassName(theme)} surface-glass-overlay min-w-[var(--radix-select-trigger-width)]`}
+              position="popper"
+            >
               <SelectMenuItem value="all">All locations</SelectMenuItem>
               {[...new Set(SCENARIOS.map((scenario) => scenario.location))].map(
                 (scenarioLocation) => (
@@ -281,37 +294,96 @@ export function ScenariosView({
               )}
             </SelectMenuContent>
           </SelectMenu>
-          <Button variant="outline">
-            <SlidersHorizontal aria-hidden="true" />
-            Filters
-          </Button>
-        </div>
-        <Tabs
-          className="mt-4"
-          onValueChange={(value) => setStatus(value as ScenarioStatus | "All")}
-          value={status}
-        >
-          <TabsList variant="line">
-            {(["All", "Ready", "Draft", "Completed", "Review"] as const).map(
-              (scenarioStatus) => (
-                <TabsTrigger key={scenarioStatus} value={scenarioStatus}>
-                  {scenarioStatus}
-                  <Badge className="ml-1" variant="secondary">
-                    {scenarioStatus === "All"
-                      ? SCENARIOS.length
-                      : SCENARIOS.filter((scenario) => scenario.status === scenarioStatus).length}
-                  </Badge>
-                </TabsTrigger>
-              ),
-            )}
-          </TabsList>
-        </Tabs>
+            <Popover>
+              <PopoverTrigger asChild>
+                <FilterButton aria-label="Open scenario filters">
+                  <SlidersHorizontal aria-hidden="true" className="size-3.5" />
+                  Filters
+                  {status !== "All" ? (
+                    <Badge className="ml-0.5 h-4 min-w-4 px-1 text-[10px]" variant="secondary">1</Badge>
+                  ) : null}
+                </FilterButton>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className={`${surfaceThemeClassName(theme)} surface-glass-overlay w-64 p-0`}
+              >
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Filter scenarios</p>
+                    <p className="text-xs text-muted-foreground">Choose a workflow status.</p>
+                  </div>
+                  {status !== "All" ? (
+                    <Button
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setStatus("All")}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      Clear
+                    </Button>
+                  ) : null}
+                </div>
+                <div className="bg-surface-subtle p-1.5">
+                  {(["All", "Ready", "Draft", "Completed", "Review"] as const).map(
+                    (scenarioStatus) => (
+                      <Button
+                        aria-pressed={status === scenarioStatus}
+                        className="h-8 w-full justify-between px-2 text-xs font-normal data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
+                        data-active={status === scenarioStatus}
+                        key={scenarioStatus}
+                        onClick={() => setStatus(scenarioStatus)}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Check
+                            aria-hidden="true"
+                            className={status === scenarioStatus ? "size-3.5" : "size-3.5 opacity-0"}
+                          />
+                          {scenarioStatus === "All" ? "Any status" : scenarioStatus}
+                        </span>
+                        <span className="tabular-nums text-muted-foreground">
+                          {scenarioStatus === "All"
+                            ? SCENARIOS.length
+                            : SCENARIOS.filter((scenario) => scenario.status === scenarioStatus).length}
+                        </span>
+                      </Button>
+                    ),
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </FilterToolbarRow>
+
+          {activeFilterCount > 0 ? (
+            <FilterToolbarRow aria-label="Active scenario filters">
+              {location !== "all" ? (
+                <FilterChip label={`Location: ${location}`} onRemove={() => setLocation("all")} />
+              ) : null}
+              {status !== "All" ? (
+                <FilterChip label={`Status: ${status}`} onRemove={() => setStatus("All")} />
+              ) : null}
+              <Button
+                className="h-7 px-2 text-[11px] text-muted-foreground"
+                onClick={() => {
+                  setLocation("all");
+                  setStatus("All");
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                Clear all
+              </Button>
+            </FilterToolbarRow>
+          ) : null}
+        </FilterToolbar>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="p-5 lg:p-7">
+        <div className="px-5 pb-5 lg:px-7 lg:pb-7">
           <Card className="gap-0 overflow-hidden py-0">
-            <CardHeader className="border-b px-5 py-4">
+            <CardHeader className="px-5 py-4">
               <CardTitle className="text-base">Scenario library</CardTitle>
               <CardDescription>
                 {filteredScenarios.length} of {SCENARIOS.length} scenarios

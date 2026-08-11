@@ -48,6 +48,12 @@ export default {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
+        surface: {
+          DEFAULT: "hsl(var(--surface))",
+          subtle: "hsl(var(--surface-subtle))",
+          hover: "hsl(var(--surface-hover))",
+        },
+        separator: "hsl(var(--separator))",
         glass: {
           DEFAULT: "hsl(var(--glass))",
           foreground: "hsl(var(--glass-foreground))",

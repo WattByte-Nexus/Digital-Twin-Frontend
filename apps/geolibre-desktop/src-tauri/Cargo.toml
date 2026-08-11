@@ -1,8 +1,8 @@
 [package]
 name = "geolibre-desktop"
 version = "2.2.0"
-description = "GeoLibre Desktop — lightweight cloud-native desktop GIS"
-authors = ["GeoLibre Contributors"]
+description = "WattByte Nexus — lightweight cloud-native desktop GIS"
+authors = ["WattByte Nexus Contributors"]
 edition = "2021"
 
 [lib]

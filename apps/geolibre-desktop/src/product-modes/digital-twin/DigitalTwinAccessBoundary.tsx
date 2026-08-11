@@ -65,18 +65,18 @@ function signInLocation(): string {
 function AccessFrame({ children }: { children: ReactNode }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
-      <section className="w-full max-w-md rounded-lg border bg-card p-6 shadow-sm">
+      <section className="w-full max-w-md rounded-xl bg-card p-6">
         <div className="mb-6 flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Map aria-hidden="true" className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-sm font-semibold text-primary">GeoLibre</p>
+            <p className="text-sm font-semibold text-primary">WattByte Nexus</p>
             <h1 className="text-lg font-semibold">Digital Twin</h1>
           </div>
         </div>
         {children}
-        <p className="mt-6 border-t pt-4 text-xs text-muted-foreground">
+        <p className="mt-6 text-xs text-muted-foreground">
           Decision support only · Equipment controls unavailable
         </p>
       </section>

@@ -82,7 +82,7 @@
     },
     "expert": {
       "title": "Expert GIS",
-      "description": "Advanced GeoLibre tools · operational evidence remains read-only",
+      "description": "Advanced WattByte Nexus tools · operational evidence remains read-only",
       "return": "Return to Digital Twin"
     }
   },
@@ -115,8 +115,8 @@
   },
   "about": {
     "trigger": "About",
-    "title": "About GeoLibre",
-    "description": "GeoLibre is a lightweight cloud-native GIS platform.",
+    "title": "About WattByte Nexus",
+    "description": "WattByte Nexus is a lightweight cloud-native GIS platform.",
     "version": "Version",
     "checkForUpdates": "Check for updates",
     "tryAgain": "Try again",
@@ -135,7 +135,7 @@
     "steps": {
       "download": "Download the installer for your platform from the downloads page.",
       "install": "Run the installer. Your local projects, settings, and API keys are kept.",
-      "reopen": "Reopen GeoLibre to finish updating."
+      "reopen": "Reopen WattByte Nexus to finish updating."
     },
     "severity": {
       "major": "Major release",
@@ -1536,7 +1536,7 @@
     "noticeDesc": "Opening a knowledge card sends the coordinates of the place you clicked (and the title of any nearby article you open) to Wikipedia's public API to fetch a summary and photo — your coordinates leave your device for those requests."
   },
   "onboarding": {
-    "title": "Welcome to GeoLibre",
+    "title": "Welcome to WattByte Nexus",
     "description": "Choose your experience level to tailor the interface. You can change this any time in Settings → Interface.",
     "level": {
       "beginner": {
@@ -1549,7 +1549,7 @@
       },
       "advanced": {
         "title": "Advanced",
-        "description": "Show everything GeoLibre has to offer."
+        "description": "Show everything WattByte Nexus has to offer."
       }
     },
     "showEverything": "Skip — show everything"

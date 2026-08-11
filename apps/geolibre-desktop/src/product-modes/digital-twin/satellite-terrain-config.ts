@@ -29,9 +29,10 @@ export const DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG = {
     tiles: [USGS_IMAGERY_TILE_URL],
     tileSize: 256,
     minzoom: 0,
-    // Keep this deliberately coarse: MapLibre overzooms a small set of cached
-    // tiles beneath DRAPP instead of requesting a second dense imagery pyramid.
-    maxzoom: 8,
+    // Keep a fast standard-tile pyramid visible while the detailed DRAPP
+    // ImageServer export tiles arrive. One zoom of overdraw stays crisp without
+    // competing with the primary source at its maximum detail.
+    maxzoom: 16,
     attribution: USGS_IMAGERY_ATTRIBUTION,
   },
   satelliteSource: {
