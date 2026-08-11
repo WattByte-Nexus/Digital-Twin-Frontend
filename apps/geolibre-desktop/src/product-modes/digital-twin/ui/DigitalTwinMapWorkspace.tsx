@@ -171,6 +171,7 @@ export function DigitalTwinMapWorkspace({
 }: DigitalTwinMapWorkspaceProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const lidarOverlayRef = useRef<MapboxOverlay | null>(null);
+  const lidarLayerRef = useRef<ReturnType<typeof createGoldenUsgsLidarLayer> | null>(null);
   const weatherSunRef = useRef<WeatherSunSimulationController | null>(null);
   const [displaySettings, setDisplaySettings] =
     useState<DigitalTwinMapDisplaySettings>(
@@ -213,6 +214,7 @@ export function DigitalTwinMapWorkspace({
       const map = mapRef.current;
       if (overlay && map) map.removeControl(overlay);
       lidarOverlayRef.current = null;
+      lidarLayerRef.current = null;
     },
     []
   );
@@ -222,6 +224,7 @@ export function DigitalTwinMapWorkspace({
     const previousMap = mapRef.current;
     if (previousOverlay && previousMap) previousMap.removeControl(previousOverlay);
     lidarOverlayRef.current = null;
+    lidarLayerRef.current = null;
     weatherSunRef.current?.destroy();
     weatherSunRef.current = null;
     mapRef.current = map;
@@ -235,9 +238,10 @@ export function DigitalTwinMapWorkspace({
             setLidarStatus("error");
           },
         });
+        lidarLayerRef.current = lidarLayer;
         const lidarOverlay = new MapboxOverlay({
           ...DIGITAL_TWIN_LIDAR_OVERLAY_PROPS,
-          layers: [lidarLayer],
+          layers: displaySettings.pointClouds ? [lidarLayer] : [],
         });
         map.addControl(lidarOverlay);
         lidarOverlayRef.current = lidarOverlay;
@@ -249,6 +253,13 @@ export function DigitalTwinMapWorkspace({
       );
     }
   };
+
+  useEffect(() => {
+    const overlay = lidarOverlayRef.current;
+    const layer = lidarLayerRef.current;
+    if (!overlay || !layer) return;
+    overlay.setProps({ layers: displaySettings.pointClouds ? [layer] : [] });
+  }, [displaySettings.pointClouds]);
 
   const handleWeatherSettingsChange = (nextValue: WeatherSettingsValue) => {
     setWeatherSettings(nextValue);
@@ -628,7 +639,7 @@ export function DigitalTwinMapWorkspace({
               />
             </div>
 
-            {showLidar ? (
+            {showLidar && displaySettings.pointClouds ? (
               <div className="absolute left-4 top-4 z-10">
                 <Badge variant="secondary" aria-live="polite">
                   USGS 3DEP LiDAR · Golden · {lidarStatus}

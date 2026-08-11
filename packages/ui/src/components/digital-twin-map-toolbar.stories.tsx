@@ -85,3 +85,15 @@ export const LabelsMenuOpen: Story = {
     await expect(within(document.body).getByText("City & place names")).toBeVisible();
   },
 };
+
+export const PointCloudToggle: Story = {
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByText("Surface"));
+    const pointClouds = within(document.body).getByText("Point clouds");
+    await expect(pointClouds).toBeVisible();
+    await userEvent.click(pointClouds);
+    await expect(meta.args.onValueChange).toHaveBeenCalledWith(
+      expect.objectContaining({ pointClouds: false })
+    );
+  },
+};

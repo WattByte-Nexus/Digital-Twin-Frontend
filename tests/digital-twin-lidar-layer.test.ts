@@ -9,8 +9,13 @@ import {
   GOLDEN_LIDAR_TILESET_LOAD_OPTIONS,
   GOLDEN_USGS_LIDAR_TILESET_URL,
 } from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-lidar";
+import { DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS } from "../packages/ui/src/components/digital-twin-map-toolbar";
 
 describe("Digital Twin LiDAR fusion layer", () => {
+  it("shows point clouds by default so the toolbar can explicitly disable them", () => {
+    assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.pointClouds, true);
+  });
+
   it("streams the Golden point cloud as 3D Tiles in the interleaved map scene", () => {
     const layer = createGoldenUsgsLidarLayer({
       onError: () => {},

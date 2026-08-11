@@ -1,6 +1,7 @@
 import {
   Building2,
   Compass,
+  Cloud,
   Image as ImageIcon,
   Layers3,
   Map,
@@ -29,6 +30,7 @@ import { surfaceThemeClassName, type SurfaceTheme } from "../lib/surface-theme";
 export interface DigitalTwinMapDisplaySettings {
   satellite: boolean;
   elevation: boolean;
+  pointClouds: boolean;
   placeLabels: boolean;
   roads: boolean;
   roadLabels: boolean;
@@ -44,6 +46,7 @@ export const DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS: DigitalTwinMapDisplaySet
   {
     satellite: true,
     elevation: true,
+    pointClouds: true,
     placeLabels: true,
     roads: true,
     roadLabels: true,
@@ -118,6 +121,14 @@ export function DigitalTwinMapToolbar({
           >
             <Mountain />
             Elevation
+          </MenubarCheckboxItem>
+          <MenubarCheckboxItem
+            checked={value.pointClouds}
+            className={itemClassName}
+            onCheckedChange={(checked) => set("pointClouds", checked === true)}
+          >
+            <Cloud />
+            Point clouds
           </MenubarCheckboxItem>
         </MenubarContent>
       </MenubarMenu>
