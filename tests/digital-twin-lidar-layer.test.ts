@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { PointCloudLayer } from "@deck.gl/layers";
 import {
   createDigitalTwinPointCloudLayer,
+  DIGITAL_TWIN_POSITION_ONLY_POINT_COLOR,
   DIGITAL_TWIN_LIDAR_OVERLAY_PROPS,
   GAUSSIAN_SURFEL_FRAGMENT_INJECTION,
   GAUSSIAN_SURFEL_VERTEX_INJECTION,
@@ -20,10 +22,10 @@ const DATASET: DigitalTwinReadyPointCloudDataset = {
   tilesetUrl: "https://cdn.example.com/golden/sha256-a1/tileset.json",
   bounds: [-105.25, 39.72, -105.16, 39.79],
   boundsCrs: "EPSG:4326",
-  pointCount: 125_000_000,
-  sourcePointCount: 167_621_255,
+  pointCount: 167_621_127,
+  sourcePointCount: 167_621_127,
   minimumSpacingMeters: 0.5,
-  attributes: ["position", "rgb"],
+  attributes: ["position"],
   version: "sha256-a1",
   attribution: "U.S. Geological Survey 3DEP",
   updatedAt: "2026-08-11T18:00:00Z",
@@ -35,7 +37,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
     assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.pointClouds, true);
   });
 
-  it("streams an Engine dataset with high-detail LOD and bounded memory", () => {
+  it("streams the full-resolution position-only dataset within the interactive scene budget", () => {
     const layer = createDigitalTwinPointCloudLayer(DATASET, {
       onError: () => {},
       onReady: () => {},
@@ -47,20 +49,38 @@ describe("Digital Twin LiDAR fusion layer", () => {
     assert.equal(layer.props.pointSize, 0.75);
     assert.equal(layer.props.pickable, false);
     assert.equal(layer.props.operation, "draw");
+    assert.deepEqual(
+      layer.props.getPointColor,
+      DIGITAL_TWIN_POSITION_ONLY_POINT_COLOR,
+    );
     assert.equal(layer.props.loadOptions, POINT_CLOUD_TILESET_LOAD_OPTIONS);
     assert.equal(
       layer.props.loadOptions?.tileset?.maximumScreenSpaceError,
-      1,
+      4,
     );
-    assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 512);
+    assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 256);
+    assert.equal(layer.props.loadOptions?.tileset?.maxRequests, 8);
+    assert.equal(layer.props.loadOptions?.tileset?.debounceTime, 75);
+    assert.equal(layer.props.loadOptions?.tileset?.updateTransforms, false);
     assert.equal(layer.props.loadOptions?.tileset?.memoryAdjustedScreenSpaceError, true);
     assert.equal(layer.props.loadOptions?.tileset?.throttleRequests, true);
-    assert.equal(layer.props.loadOptions?.core?.worker, false);
+    assert.equal(
+      layer.props._subLayerProps?.pointcloud?.type,
+      PointCloudLayer,
+    );
+    assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "meters");
+  });
+
+  it("enables Gaussian surfels only when the quality mode is requested", () => {
+    const layer = createDigitalTwinPointCloudLayer(DATASET, {
+      onError: () => {},
+      renderMode: "gaussian",
+    });
+
     assert.equal(
       layer.props._subLayerProps?.pointcloud?.type,
       GaussianSurfelPointCloudLayer,
     );
-    assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "meters");
     assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /clamp\(/);
     assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /1\.5/);
     assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /18\.0/);
@@ -87,5 +107,41 @@ describe("Digital Twin LiDAR fusion layer", () => {
     layer.props.onTileLoad({} as never);
     layer.props.onTileLoad({} as never);
     assert.equal(readyCount, 1);
+  });
+
+  it("exposes loaders.gl scene diagnostics at tile lifecycle boundaries", () => {
+    const diagnostics: unknown[] = [];
+    const counters = new Map([
+      ["Tiles In Memory", 12],
+      ["Points/Vertices", 842_000],
+    ]);
+    const tileset = {
+      stats: {
+        get: (name: string) => ({ count: counters.get(name) ?? 0 }),
+      },
+      gpuMemoryUsageInBytes: 96 * 1024 * 1024,
+      memoryAdjustedScreenSpaceError: 5.25,
+      selectedTiles: [{}, {}, {}],
+      isLoaded: () => false,
+    };
+    const layer = createDigitalTwinPointCloudLayer(DATASET, {
+      onError: () => {},
+      onDiagnostics: (snapshot) => diagnostics.push(snapshot),
+    });
+
+    layer.props.onTilesetLoad(tileset as never);
+    layer.props.onTileLoad({} as never);
+    layer.props.onTileUnload({} as never);
+
+    assert.equal(diagnostics.length, 3);
+    assert.deepEqual(diagnostics.at(-1), {
+      datasetId: "golden-lidar",
+      residentTileCount: 12,
+      selectedTileCount: 3,
+      visiblePointCount: 842_000,
+      gpuMemoryUsageBytes: 96 * 1024 * 1024,
+      screenSpaceError: 5.25,
+      settled: false,
+    });
   });
 });

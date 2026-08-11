@@ -48,25 +48,56 @@ export const DIGITAL_TWIN_LIDAR_OVERLAY_PROPS = {
   interleaved: true,
 } as const;
 
+export const DIGITAL_TWIN_POSITION_ONLY_POINT_COLOR: [
+  number,
+  number,
+  number,
+  number,
+] = [82, 168, 255, 255];
+
 export const POINT_CLOUD_TILESET_LOAD_OPTIONS = {
   tileset: {
-    // A one-pixel error budget keeps the hierarchy refining near the camera.
-    maximumScreenSpaceError: 1,
-    // Bound decoded tile memory independently of the browser cache.
-    maximumMemoryUsage: 512,
+    // Four pixels preserves native detail near the camera without attempting
+    // to hold the full 167-million-point hierarchy in memory.
+    maximumScreenSpaceError: 4,
+    maximumMemoryUsage: 256,
     memoryAdjustedScreenSpaceError: true,
     throttleRequests: true,
-  },
-  core: {
-    // Point-cloud payloads are already spatially bounded. Keeping parsing on the
-    // app origin also avoids loaders.gl trying to fetch worker bundles from a CDN.
-    worker: false,
+    maxRequests: 8,
+    // Camera motion can otherwise trigger a traversal for every input event.
+    debounceTime: 75,
+    // Engine tiles are georeferenced once and remain stationary.
+    updateTransforms: false,
   },
 } as const;
+
+export type DigitalTwinPointCloudRenderMode = "opaque" | "gaussian";
+
+export interface DigitalTwinPointCloudDiagnostics {
+  datasetId: string;
+  residentTileCount: number;
+  selectedTileCount: number;
+  visiblePointCount: number;
+  gpuMemoryUsageBytes: number;
+  screenSpaceError: number;
+  settled: boolean;
+}
+
+interface PointCloudTilesetDiagnosticsSource {
+  stats: {
+    get: (name: string) => { count: number };
+  };
+  gpuMemoryUsageInBytes: number;
+  memoryAdjustedScreenSpaceError: number;
+  selectedTiles: unknown[];
+  isLoaded: () => boolean;
+}
 
 interface DigitalTwinPointCloudLayerCallbacks {
   onError: (error: Error) => void;
   onReady?: () => void;
+  onDiagnostics?: (snapshot: DigitalTwinPointCloudDiagnostics) => void;
+  renderMode?: DigitalTwinPointCloudRenderMode;
 }
 
 function pointSizeForSpacing(minimumSpacingMeters: number): number {
@@ -77,37 +108,68 @@ function pointSizeForSpacing(minimumSpacingMeters: number): number {
  * Builds a streamed point-cloud layer from an Engine dataset descriptor.
  *
  * deck.gl selects spatial detail from the current camera. The layer remains
- * depth-tested so terrain supplies the ground while Gaussian surfels provide
- * smooth above-ground survey structure.
+ * depth-tested so terrain supplies the ground while point sprites provide
+ * above-ground survey structure. Gaussian coverage is an opt-in quality mode.
  */
 export function createDigitalTwinPointCloudLayer(
   dataset: DigitalTwinReadyPointCloudDataset,
-  { onError, onReady }: DigitalTwinPointCloudLayerCallbacks,
+  {
+    onError,
+    onReady,
+    onDiagnostics,
+    renderMode = "opaque",
+  }: DigitalTwinPointCloudLayerCallbacks,
 ): Tile3DLayer {
   let firstTileLoaded = false;
+  let tileset: PointCloudTilesetDiagnosticsSource | null = null;
 
   const reportError = (error: Error) => {
     if (!firstTileLoaded) onError(error);
+  };
+
+  const reportDiagnostics = () => {
+    if (!onDiagnostics || !tileset) return;
+
+    onDiagnostics({
+      datasetId: dataset.datasetId,
+      residentTileCount: tileset.stats.get("Tiles In Memory").count,
+      selectedTileCount: tileset.selectedTiles.length,
+      visiblePointCount: tileset.stats.get("Points/Vertices").count,
+      gpuMemoryUsageBytes: tileset.gpuMemoryUsageInBytes,
+      screenSpaceError: tileset.memoryAdjustedScreenSpaceError,
+      settled: tileset.isLoaded(),
+    });
   };
 
   return new Tile3DLayer({
     id: `digital-twin-point-cloud-${dataset.datasetId}`,
     data: dataset.tilesetUrl,
     pointSize: pointSizeForSpacing(dataset.minimumSpacingMeters),
+    getPointColor: DIGITAL_TWIN_POSITION_ONLY_POINT_COLOR,
     pickable: false,
     operation: "draw",
     loadOptions: POINT_CLOUD_TILESET_LOAD_OPTIONS,
     _subLayerProps: {
       pointcloud: {
-        type: GaussianSurfelPointCloudLayer,
+        type:
+          renderMode === "gaussian"
+            ? GaussianSurfelPointCloudLayer
+            : PointCloudLayer,
         sizeUnits: "meters",
       },
     },
-    onTileLoad: () => {
-      if (firstTileLoaded) return;
-      firstTileLoaded = true;
-      onReady?.();
+    onTilesetLoad: (loadedTileset) => {
+      tileset = loadedTileset;
+      reportDiagnostics();
     },
+    onTileLoad: () => {
+      if (!firstTileLoaded) {
+        firstTileLoaded = true;
+        onReady?.();
+      }
+      reportDiagnostics();
+    },
+    onTileUnload: reportDiagnostics,
     // @loaders.gl calls this as (tile, message, url), despite deck.gl's type
     // declaration naming the string arguments in the opposite order.
     onTileError: (_tile, message, url) => {
