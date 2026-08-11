@@ -5,6 +5,14 @@ import { cn } from "../lib/utils";
 import { Badge } from "./badge";
 import { Button } from "./button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "./card";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -113,16 +121,16 @@ export function DigitalTwinAlertsDropdown({
                 <span className="min-w-0 flex-1">
                   <span className="mb-1.5 flex items-center gap-2">
                     <Badge
-                      className="text-[10px]"
+                      className="text-[12px]"
                       variant={severityVariant(alert.severity)}
                     >
                       {severityLabel(alert.severity)}
                     </Badge>
-                    <span className="truncate text-[11px] font-medium">
+                    <span className="truncate text-[13px] font-medium">
                       {alert.name}
                     </span>
                   </span>
-                  <span className="block text-[10px] font-normal text-muted-foreground">
+                  <span className="block text-[12px] font-normal text-muted-foreground">
                     {alert.description}
                   </span>
                 </span>
@@ -135,7 +143,7 @@ export function DigitalTwinAlertsDropdown({
               </Button>
             ))
           ) : (
-            <div className="flex min-h-36 items-center justify-center rounded-lg border border-dashed border-border p-6 text-center text-[11px] text-muted-foreground">
+            <div className="flex min-h-36 items-center justify-center rounded-lg border border-dashed border-border p-6 text-center text-[13px] text-muted-foreground">
               {tab === "active"
                 ? "No active alerts"
                 : tab === "acknowledged"
@@ -234,11 +242,12 @@ export function DigitalTwinAlertsDropdown({
               defaultSize={{ width: 380, height: 820 }}
               fitToBounds
             >
-              <div
+              <Card
                 className={cn(
                   overlayClassName,
-                  "surface-glass-overlay relative flex h-full flex-col overflow-hidden rounded-[10px] border border-border shadow-xl animate-in fade-in-0 zoom-in-95"
+                  "relative h-full gap-0 overflow-hidden rounded-[10px] py-0 shadow-xl animate-in fade-in-0 zoom-in-95"
                 )}
+                surface="panel"
               >
                 <FloatingMapPanelDragHandle className="absolute inset-x-0 top-0 z-10 h-[46px] rounded-t-[10px]" />
                 <Button
@@ -252,23 +261,23 @@ export function DigitalTwinAlertsDropdown({
                   <X aria-hidden="true" className="h-4 w-4" />
                 </Button>
 
-                <div className="border-b border-border px-3 pb-3 pt-3 pe-12">
+                <CardHeader className="gap-0 border-b border-border px-3 pb-3 pt-3 pe-12">
                   <span className="flex items-center justify-between gap-3">
-                    <h2 className="text-[16px] font-semibold tracking-[-0.01em]">
+                    <CardTitle className="text-[18px] tracking-[-0.01em]">
                       Alerts
-                    </h2>
+                    </CardTitle>
                     <Badge
-                      className="text-[10px]"
+                      className="text-[12px]"
                       variant={activeCount > 0 ? "destructive" : "secondary"}
                     >
                       {countLabel}
                     </Badge>
                   </span>
-                  <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+                  <CardDescription className="mt-0.5 text-[12px] font-medium">
                     Review operational alerts without leaving the map workspace.
-                  </p>
+                  </CardDescription>
                   <Button
-                    className="mt-2 w-fit"
+                    className="mt-2 w-fit text-sm"
                     disabled={activeCount === 0}
                     onClick={() => setAllReviewed(true)}
                     size="sm"
@@ -278,37 +287,44 @@ export function DigitalTwinAlertsDropdown({
                     <CheckCheck aria-hidden="true" className="h-4 w-4" />
                     Mark all reviewed
                   </Button>
-                </div>
+                </CardHeader>
 
-                <Tabs className="min-h-0 flex-1 gap-0" defaultValue="active">
-                  <TabsList className="mx-3 mt-3 grid w-auto grid-cols-3">
+                <CardContent className="min-h-0 flex-1 p-0">
+                  <Tabs className="h-full min-h-0 gap-0" defaultValue="active">
+                    <TabsList className="mx-3 mt-3 grid w-auto grid-cols-3">
+                      {ALERT_TABS.map((tab) => (
+                        <TabsTrigger
+                          className="text-[14px]"
+                          key={tab.value}
+                          value={tab.value}
+                        >
+                          {tab.label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
                     {ALERT_TABS.map((tab) => (
-                      <TabsTrigger
-                        className="text-[12px]"
+                      <TabsContent
+                        className="min-h-0 flex-1"
                         key={tab.value}
                         value={tab.value}
                       >
-                        {tab.label}
-                      </TabsTrigger>
+                        {renderAlertList(tab.value)}
+                      </TabsContent>
                     ))}
-                  </TabsList>
-                  {ALERT_TABS.map((tab) => (
-                    <TabsContent
-                      className="min-h-0 flex-1"
-                      key={tab.value}
-                      value={tab.value}
-                    >
-                      {renderAlertList(tab.value)}
-                    </TabsContent>
-                  ))}
-                </Tabs>
+                  </Tabs>
+                </CardContent>
 
-                <div className="border-t border-border p-3">
-                  <Button onClick={openFullInbox} size="sm" type="button">
+                <CardFooter className="border-t border-border p-3">
+                  <Button
+                    className="text-sm"
+                    onClick={openFullInbox}
+                    size="sm"
+                    type="button"
+                  >
                     Open full alert inbox
                   </Button>
-                </div>
-              </div>
+                </CardFooter>
+              </Card>
             </FloatingMapPanel>,
             inboxContainer ?? document.body
           )
