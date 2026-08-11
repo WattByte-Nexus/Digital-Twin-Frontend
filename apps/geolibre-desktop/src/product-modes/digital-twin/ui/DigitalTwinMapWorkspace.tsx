@@ -572,17 +572,19 @@ export function DigitalTwinMapWorkspace({
             alertsCount={7}
             alertsPanelContainer={mapPanelContainer}
             mapToolbar={
-              <DigitalTwinMapToolbar
-                className="h-10 rounded-md border-0 bg-transparent p-0 shadow-none"
-                theme={activeThemeMode}
-                value={displaySettings}
-                viewMode={viewMode}
-                onValueChange={setDisplaySettings}
-                onViewModeChange={changeViewMode}
-                onResetOrientation={() => {
-                  mapRef.current?.easeTo({ bearing: 0, duration: 400 });
-                }}
-              />
+              activeDestination === "live" ? (
+                <DigitalTwinMapToolbar
+                  className="h-10 rounded-md border-0 bg-transparent p-0 shadow-none"
+                  theme={activeThemeMode}
+                  value={displaySettings}
+                  viewMode={viewMode}
+                  onValueChange={setDisplaySettings}
+                  onViewModeChange={changeViewMode}
+                  onResetOrientation={() => {
+                    mapRef.current?.easeTo({ bearing: 0, duration: 400 });
+                  }}
+                />
+              ) : undefined
             }
             operator={operator}
             organizationName={organizationName}

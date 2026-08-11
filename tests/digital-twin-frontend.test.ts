@@ -13,6 +13,13 @@ const workspaceSource = readFileSync(
   ),
   "utf8",
 );
+const topbarSource = readFileSync(
+  new URL(
+    "../packages/ui/src/components/digital-twin-topbar.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const storySource = readFileSync(
   new URL(
     "../apps/geolibre-desktop/src/components/map/DigitalTwinMapWorkspace.stories.tsx",
@@ -45,6 +52,28 @@ describe("Digital Twin frontend composition", () => {
       /import \{ DigitalTwinMapWorkspace \} from "\.\.\/\.\.\/product-modes\/digital-twin\/ui\/DigitalTwinMapWorkspace"/,
     );
     assert.doesNotMatch(storySource, /function DigitalTwinMapWorkspace/);
+  });
+
+  it("places map controls in a dedicated subtoolbar below the application header", () => {
+    assert.match(
+      topbarSource,
+      /<\/header>\s*\{mapToolbar \? \(\s*<nav\s+aria-label="Map controls"/,
+    );
+    assert.doesNotMatch(
+      topbarSource,
+      /<header[\s\S]*?\{mapToolbar \? \([\s\S]*?<\/header>/,
+    );
+    assert.equal(
+      topbarSource.match(/border-b border-sidebar-border/g)?.length,
+      2,
+    );
+  });
+
+  it("shows the map subtoolbar only in live monitoring", () => {
+    assert.match(
+      workspaceSource,
+      /mapToolbar=\{\s*activeDestination === "live" \?/,
+    );
   });
 
   it("owns the weather-to-map controller in the shared production component", () => {
