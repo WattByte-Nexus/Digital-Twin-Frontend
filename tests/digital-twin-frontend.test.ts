@@ -112,6 +112,13 @@ describe("Digital Twin frontend composition", () => {
     assert.match(scenarioBuilderSource, /<FloatingMapPanelDragHandle/);
   });
 
+  it("opens scenario weather editing beside the run setup panel", () => {
+    assert.match(
+      scenarioBuilderSource,
+      /<PopoverContent[\s\S]*?align="center"[\s\S]*?side="left"[\s\S]*?sideOffset=\{12\}[\s\S]*?<WeatherSettingsPanel/
+    );
+  });
+
   it("supports scenario durations up to 100 hours", () => {
     assert.match(
       scenarioBuilderSource,

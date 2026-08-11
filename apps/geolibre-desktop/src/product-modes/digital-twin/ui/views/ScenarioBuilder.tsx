@@ -500,10 +500,12 @@ export function ScenarioBuilder({
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent
-                        align="end"
+                        align="center"
                         className={`${surfaceThemeClassName(
                           theme
                         )} w-auto border-0 bg-transparent p-0 shadow-none`}
+                        side="left"
+                        sideOffset={12}
                       >
                         <WeatherSettingsPanel
                           location={location}
