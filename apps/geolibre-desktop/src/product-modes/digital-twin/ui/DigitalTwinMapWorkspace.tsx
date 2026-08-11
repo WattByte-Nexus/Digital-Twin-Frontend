@@ -12,7 +12,6 @@ import {
   CommandShortcut,
   DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS,
   DEFAULT_WEATHER_SETTINGS,
-  DigitalTwinMapStatus,
   DigitalTwinMapToolbar,
   DigitalTwinMonitoringStatus,
   DigitalTwinSidebar,
@@ -44,8 +43,14 @@ import {
   Sun,
 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
+import type { GeoJSONSource } from "maplibre-gl";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { defaultDigitalTwinApiUrl } from "../../../lib/digital-twin-earth-engine";
+import {
+  fetchDigitalTwinPowerLines,
+  powerLinesFeatureCollection,
+  type DigitalTwinPowerLine,
+} from "../../../lib/digital-twin-power-lines";
 import {
   fetchActiveDigitalTwinPointCloud,
   type DigitalTwinPointCloudResult,
@@ -66,13 +71,13 @@ import {
 import {
   SIMULATION_RUNS,
   createSimulationRun,
+  loadLaunchedSimulationRuns,
+  persistLaunchedSimulationRuns,
   type ScenarioRunRequest,
   type SimulationRun,
 } from "./simulation-flow";
 import { RunsView } from "./views/RunsView";
-import {
-  ScenariosView,
-} from "./views/ScenariosView";
+import { ScenariosView } from "./views/ScenariosView";
 import type { ScenarioMapController } from "./views/ScenarioBuilder";
 
 export type WorkspaceTheme = "light" | "dark";
@@ -81,6 +86,16 @@ type PointCloudLoadState =
   | DigitalTwinPointCloudResult
   | { status: "loading" }
   | { status: "error"; error: Error };
+
+type PowerLineLoadState =
+  | { status: "none" }
+  | { status: "loading" }
+  | { status: "ready"; regionId: string; lines: DigitalTwinPowerLine[] }
+  | { status: "error"; error: Error };
+
+const POWER_LINE_SOURCE_ID = "digital-twin-operational-power-lines";
+const POWER_LINE_CASING_LAYER_ID = "digital-twin-operational-power-lines-casing";
+const POWER_LINE_LAYER_ID = "digital-twin-operational-power-lines-line";
 
 function pointCloudDatasetKey(
   dataset: Extract<DigitalTwinPointCloudResult, { status: "ready" }>["dataset"],
@@ -237,7 +252,9 @@ export function DigitalTwinMapWorkspace({
   const [pointCloud, setPointCloud] = useState<PointCloudLoadState>({
     status: "none",
   });
-  const [pointCloudAttempt, setPointCloudAttempt] = useState(0);
+  const [powerLines, setPowerLines] = useState<PowerLineLoadState>({
+    status: "none",
+  });
   const [readyPointCloudDatasetKey, setReadyPointCloudDatasetKey] = useState<
     string | null
   >(null);
@@ -253,8 +270,12 @@ export function DigitalTwinMapWorkspace({
   );
   const [localDestination, setLocalDestination] =
     useState<DigitalTwinDestination>("live");
+  const [scenarioBuilderOpen, setScenarioBuilderOpen] = useState(false);
   const activeRegionId = controlledRegionId ?? localRegionId;
   const activeDestination = controlledDestination ?? localDestination;
+  const showLiveMapChrome =
+    activeDestination === "live" ||
+    (activeDestination === "scenarios" && scenarioBuilderOpen);
   const [weatherSettings, setWeatherSettings] = useState<WeatherSettingsValue>(
     () => ({
       ...DEFAULT_WEATHER_SETTINGS,
@@ -266,15 +287,15 @@ export function DigitalTwinMapWorkspace({
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  const [launchedRuns, setLaunchedRuns] = useState<SimulationRun[]>([]);
+  const [launchedRuns, setLaunchedRuns] = useState<SimulationRun[]>(loadLaunchedSimulationRuns);
   const [scenarioCreationRequest, setScenarioCreationRequest] = useState(0);
   const runSequenceRef = useRef(1);
+
+  useEffect(() => {
+    persistLaunchedSimulationRuns(launchedRuns);
+  }, [launchedRuns]);
   const [mapPanelContainer, setMapPanelContainer] =
     useState<HTMLDivElement | null>(null);
-  const visibleDetailCount = Object.entries(displaySettings).filter(
-    ([key, visible]) => key !== "satellite" && key !== "elevation" && visible
-  ).length;
-
   useEffect(() => {
     setActiveThemeMode(themeMode);
   }, [themeMode]);
@@ -334,7 +355,122 @@ export function DigitalTwinMapWorkspace({
       disposed = true;
       controller.abort();
     };
-  }, [activeRegionId, digitalTwinApiUrl, pointCloudAttempt, showLidar]);
+  }, [activeRegionId, digitalTwinApiUrl, showLidar]);
+
+  useEffect(() => {
+    if (!activeRegionId) {
+      setPowerLines({ status: "none" });
+      return;
+    }
+    const controller = new AbortController();
+    setPowerLines({ status: "loading" });
+    void fetchDigitalTwinPowerLines(digitalTwinApiUrl, activeRegionId, {
+      signal: controller.signal,
+    }).then(
+      (lines) => {
+        if (!controller.signal.aborted) {
+          setPowerLines({ status: "ready", regionId: activeRegionId, lines });
+        }
+      },
+      (cause: unknown) => {
+        if (controller.signal.aborted) return;
+        const error =
+          cause instanceof Error
+            ? cause
+            : new Error("Power-line inventory request failed.");
+        console.error("Digital Twin power lines could not be loaded", error);
+        setPowerLines({ status: "error", error });
+      },
+    );
+    return () => controller.abort();
+  }, [activeRegionId, digitalTwinApiUrl]);
+
+  useEffect(() => {
+    if (
+      !mapInstance ||
+      powerLines.status !== "ready" ||
+      powerLines.regionId !== activeRegionId
+    ) {
+      return;
+    }
+    const collection = powerLinesFeatureCollection(powerLines.lines);
+    let mapRemoved = false;
+    const handleMapRemove = () => {
+      mapRemoved = true;
+    };
+    const render = () => {
+      if (!mapInstance.isStyleLoaded()) return;
+      const source = mapInstance.getSource(POWER_LINE_SOURCE_ID) as
+        | GeoJSONSource
+        | undefined;
+      if (source) source.setData(collection);
+      else mapInstance.addSource(POWER_LINE_SOURCE_ID, { type: "geojson", data: collection });
+      if (!mapInstance.getLayer(POWER_LINE_CASING_LAYER_ID)) {
+        mapInstance.addLayer({
+          id: POWER_LINE_CASING_LAYER_ID,
+          type: "line",
+          source: POWER_LINE_SOURCE_ID,
+          paint: {
+            "line-color": "#111827",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2, 18, 8],
+            "line-opacity": 0.9,
+          },
+          layout: { "line-cap": "round", "line-join": "round" },
+        });
+      }
+      if (!mapInstance.getLayer(POWER_LINE_LAYER_ID)) {
+        mapInstance.addLayer({
+          id: POWER_LINE_LAYER_ID,
+          type: "line",
+          source: POWER_LINE_SOURCE_ID,
+          paint: {
+            "line-color": "#fbbf24",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1, 18, 4],
+            "line-opacity": 1,
+          },
+          layout: { "line-cap": "round", "line-join": "round" },
+        });
+      }
+    };
+    render();
+    mapInstance.on("remove", handleMapRemove);
+    mapInstance.on("style.load", render);
+    return () => {
+      mapInstance.off("remove", handleMapRemove);
+      mapInstance.off("style.load", render);
+      if (mapRemoved) return;
+      if (mapInstance.getLayer(POWER_LINE_LAYER_ID)) {
+        mapInstance.removeLayer(POWER_LINE_LAYER_ID);
+      }
+      if (mapInstance.getLayer(POWER_LINE_CASING_LAYER_ID)) {
+        mapInstance.removeLayer(POWER_LINE_CASING_LAYER_ID);
+      }
+      if (mapInstance.getSource(POWER_LINE_SOURCE_ID)) {
+        mapInstance.removeSource(POWER_LINE_SOURCE_ID);
+      }
+    };
+  }, [activeRegionId, mapInstance, powerLines]);
+
+  useEffect(() => {
+    if (
+      !mapInstance ||
+      powerLines.status !== "ready" ||
+      powerLines.regionId !== activeRegionId ||
+      powerLines.lines.length === 0
+    ) {
+      return;
+    }
+    const coordinates = powerLines.lines.flatMap((line) => line.geometry.coordinates);
+    const longitudes = coordinates.map((position) => position[0]);
+    const latitudes = coordinates.map((position) => position[1]);
+    mapInstance.fitBounds(
+      [
+        [Math.min(...longitudes), Math.min(...latitudes)],
+        [Math.max(...longitudes), Math.max(...latitudes)],
+      ],
+      { padding: 96, maxZoom: 16.5, duration: 500 },
+    );
+  }, [activeRegionId, mapInstance, powerLines]);
 
   useLayoutEffect(() => {
     if (
@@ -389,9 +525,6 @@ export function DigitalTwinMapWorkspace({
     readyPointCloudDatasetKey,
     showLidar,
   );
-  const canRetryPointCloud =
-    pointCloud.status === "error" || pointCloud.status === "failed";
-
   const handleWeatherSettingsChange = (nextValue: WeatherSettingsValue) => {
     setWeatherSettings(nextValue);
     weatherSunRef.current?.update(nextValue);
@@ -497,20 +630,13 @@ export function DigitalTwinMapWorkspace({
         }}
       />
 
-      {activeDestination === "live" ? (
+      {showLiveMapChrome ? (
         <>
-          <div className="absolute bottom-4 left-4 z-10">
-            <DigitalTwinMapStatus
-              viewMode={viewMode}
-              visibleDetailCount={visibleDetailCount}
-            />
-          </div>
-
           <div className="absolute bottom-6 right-4 z-10">
             <DigitalTwinMonitoringStatus themeMode={activeThemeMode} />
           </div>
 
-          {showWeather ? (
+          {showWeather && activeDestination === "live" ? (
             <WeatherSettingsFloatingPanel
               theme={activeThemeMode}
               location="Boulder County, Colorado"
@@ -537,17 +663,15 @@ export function DigitalTwinMapWorkspace({
         {activePointCloudStatus}
       </output>
 
-      {canRetryPointCloud && activeDestination === "live" ? (
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="absolute bottom-16 left-4 z-10 border bg-background/95 shadow-lg backdrop-blur"
-          onClick={() => setPointCloudAttempt((attempt) => attempt + 1)}
-        >
-          Retry point cloud
-        </Button>
-      ) : null}
+      <output aria-live="polite" className="sr-only">
+        {powerLines.status === "loading"
+          ? "Power lines loading."
+          : powerLines.status === "ready"
+            ? `${powerLines.lines.length} operational power lines loaded.`
+            : powerLines.status === "error"
+              ? `Power lines failed to load: ${powerLines.error.message}`
+              : "No power lines loaded."}
+      </output>
     </div>
   );
 
@@ -572,7 +696,7 @@ export function DigitalTwinMapWorkspace({
             alertsCount={7}
             alertsPanelContainer={mapPanelContainer}
             mapToolbar={
-              activeDestination === "live" ? (
+              showLiveMapChrome ? (
                 <DigitalTwinMapToolbar
                   className="h-10 rounded-md border-0 bg-transparent p-0 shadow-none"
                   theme={activeThemeMode}
@@ -836,12 +960,14 @@ export function DigitalTwinMapWorkspace({
               creationRequest={scenarioCreationRequest}
               mapControllerRef={interactionMapControllerRef}
               mapSlot={mapSurface}
+              onBuilderOpenChange={setScenarioBuilderOpen}
               onRun={launchSimulation}
               theme={activeThemeMode}
             />
           ) : activeDestination === "runs" ? (
             <RunsView
               location={location}
+              mapControllerRef={interactionMapControllerRef}
               mapSlot={mapSurface}
               onCreateScenario={() => {
                 setScenarioCreationRequest((request) => request + 1);

@@ -40,6 +40,8 @@
     --surface-panel-border: 214.3 31.8% 86%;
     --surface-panel-shadow: 222.2 47.4% 11.2%;
     --warning: 38 92% 50%;
+    --map-callout: 0 0% 100%;
+    --map-callout-foreground: 0 0% 0%;
     --chart-1: 330 81% 46%;
     --dt-status-ok-surface: 142 70% 96%;
     --dt-status-ok-border: 142 46% 76%;
@@ -84,6 +86,8 @@
     --surface-panel-border: 217.2 32.6% 24%;
     --surface-panel-shadow: 222.2 84% 2%;
     --warning: 38 92% 50%;
+    --map-callout: 0 0% 100%;
+    --map-callout-foreground: 0 0% 0%;
     --chart-1: 330 81% 56%;
     --dt-status-ok-surface: 150 42% 13%;
     --dt-status-ok-border: 147 45% 28%;
@@ -266,4 +270,6 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-map-callout: hsl(var(--map-callout));
+  --color-map-callout-foreground: hsl(var(--map-callout-foreground));
 }

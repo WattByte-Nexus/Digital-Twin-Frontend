@@ -66,6 +66,7 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
       <DigitalTwinMapWorkspace
         activeDestination={route.view}
         activeRegionId={activeRegionId}
+        location={route.location}
         operator={{
           initials: displayNameInitials(access.displayName),
           name: access.displayName,
@@ -79,8 +80,12 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
         showLidar
         showWeather
         themeMode={themeMode}
-        onNavigate={(view) =>
-          navigate(`/regions/${encodeURIComponent(activeRegionId)}/${view}`)
+        onNavigate={(view, resourceId) =>
+          navigate(
+            `/regions/${encodeURIComponent(activeRegionId)}/${view}${
+              resourceId ? `/${encodeURIComponent(resourceId)}` : ""
+            }`,
+          )
         }
         onOpenAdministration={
           access.capabilities.includes("administration")

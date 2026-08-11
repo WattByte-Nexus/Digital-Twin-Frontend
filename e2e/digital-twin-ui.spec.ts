@@ -128,6 +128,19 @@ async function dragSeparator(
 test.describe("WattByte Nexus Figma workspace", () => {
   test.use({ viewport: { width: 1672, height: 941 } });
 
+  test("navigates from the live map to runs without crashing", async ({ page }) => {
+    await installDigitalTwinMocks(page);
+    await page.goto(process.env.DIGITAL_TWIN_E2E_URL ?? "/");
+    await expect(page).toHaveURL(/\/regions\/boulder-co\/live$/);
+    await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+
+    await page.getByRole("button", { name: /Runs:/ }).click();
+
+    await expect(page).toHaveURL(/\/regions\/boulder-co\/runs$/);
+    await expect(page.getByRole("heading", { name: "Runs", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Something went wrong" })).toHaveCount(0);
+  });
+
   test("shows the map risk callout only after selecting a supported asset", async ({
     page,
   }) => {

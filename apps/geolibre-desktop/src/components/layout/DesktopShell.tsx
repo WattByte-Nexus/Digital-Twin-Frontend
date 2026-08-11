@@ -927,7 +927,7 @@ export function DesktopShell({
   }, [externalPluginsReady, workspaceMode]);
 
   const handleDigitalTwinNavigate = useCallback(
-    (view: DigitalTwinView) => {
+    (view: DigitalTwinView, resourceId?: string) => {
       setDigitalTwinWorkspaceView(view);
       const regionId =
         route.regionId ??
@@ -936,7 +936,8 @@ export function DesktopShell({
         )?.id ??
         access.regions[0]?.id;
       if (!regionId) return;
-      navigate(`/regions/${encodeURIComponent(regionId)}/${view}`);
+      const resourcePath = resourceId ? `/${encodeURIComponent(resourceId)}` : "";
+      navigate(`/regions/${encodeURIComponent(regionId)}/${view}${resourcePath}`);
       openDigitalTwinPanelIfAvailable();
     },
     [access.mostRecentlyUsedRegionId, access.regions, navigate, route.regionId]
@@ -2186,11 +2187,14 @@ export function DesktopShell({
           ) : (
             <DigitalTwinWorkspace
               activeView={digitalTwinWorkspaceView}
+              location={route.location}
+              mapControllerRef={mapControllerRef}
               mapSlot={mapHost}
               onMapPresentationChange={handleDigitalTwinMapPresentation}
               onNavigate={handleDigitalTwinNavigate}
               onOpenRealSettings={() => openSettingsSection("interface")}
               pluginContentEl={dockContentEl}
+              theme={themeMode}
             />
           )
         ) : (

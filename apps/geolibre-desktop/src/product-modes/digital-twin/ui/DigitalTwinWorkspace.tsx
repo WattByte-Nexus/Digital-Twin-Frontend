@@ -1,6 +1,8 @@
-import { SimulationPopover } from "@geolibre/ui";
+import type { MapController } from "@geolibre/map";
+import { SimulationPopover, type SurfaceTheme } from "@geolibre/ui";
 import {
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useRef,
@@ -12,17 +14,28 @@ import { RunsView } from "./views/RunsView";
 import { ScenariosView } from "./views/ScenariosView";
 import { SettingsView } from "./views/SettingsView";
 import { SimulationAreaChart, type SimulationAreaSample } from "./SimulationAreaChart";
+import {
+  SIMULATION_RUNS,
+  createSimulationRun,
+  loadLaunchedSimulationRuns,
+  persistLaunchedSimulationRuns,
+  type ScenarioRunRequest,
+  type SimulationRun,
+} from "./simulation-flow";
 import "./digital-twin-workspace.css";
 
 export type DigitalTwinWorkspaceView = DigitalTwinView | "settings";
 
 interface DigitalTwinWorkspaceProps {
   activeView: DigitalTwinWorkspaceView;
+  location: string;
+  mapControllerRef: RefObject<MapController | null>;
   mapSlot: ReactNode;
   onMapPresentationChange: (mode: "3d" | "plan") => void;
-  onNavigate: (view: DigitalTwinView) => void;
+  onNavigate: (view: DigitalTwinView, resourceId?: string) => void;
   onOpenRealSettings: () => void;
   pluginContentEl: HTMLElement;
+  theme: SurfaceTheme;
 }
 
 function PluginContentHost({ contentEl }: { contentEl: HTMLElement }) {
@@ -42,16 +55,26 @@ function PluginContentHost({ contentEl }: { contentEl: HTMLElement }) {
  */
 export function DigitalTwinWorkspace({
   activeView,
+  location,
+  mapControllerRef,
   mapSlot,
   onMapPresentationChange,
   onNavigate,
   onOpenRealSettings,
   pluginContentEl,
+  theme,
 }: DigitalTwinWorkspaceProps) {
   const simulationOpenerRef = useRef<HTMLElement | null>(null);
   const restoreFocusFrameRef = useRef<number | null>(null);
   const [simulationOpen, setSimulationOpen] = useState(false);
   const [areaSamples, setAreaSamples] = useState<SimulationAreaSample[]>([]);
+  const [launchedRuns, setLaunchedRuns] = useState<SimulationRun[]>(loadLaunchedSimulationRuns);
+  const [scenarioCreationRequest, setScenarioCreationRequest] = useState(0);
+  const runSequenceRef = useRef(1);
+
+  useEffect(() => {
+    persistLaunchedSimulationRuns(launchedRuns);
+  }, [launchedRuns]);
 
   useEffect(() => {
     const handleAreaSeries = (event: Event) => {
@@ -93,6 +116,16 @@ export function DigitalTwinWorkspace({
     });
   }, []);
 
+  const launchSimulation = useCallback(
+    (request: ScenarioRunRequest) => {
+      const run = createSimulationRun(request, runSequenceRef.current);
+      runSequenceRef.current += 1;
+      setLaunchedRuns((current) => [run, ...current]);
+      onNavigate("runs", run.id);
+    },
+    [onNavigate],
+  );
+
   return (
     <div className="dt-product-workspace" data-digital-twin-workspace="">
       <div
@@ -102,7 +135,7 @@ export function DigitalTwinWorkspace({
         inert={activeView !== "live"}
       >
         <LiveView
-          mapSlot={mapSlot}
+          mapSlot={activeView === "live" ? mapSlot : null}
           onMapPresentationChange={onMapPresentationChange}
           onOpenRuns={() => onNavigate("runs")}
           onOpenSimulation={openSimulation}
@@ -116,8 +149,12 @@ export function DigitalTwinWorkspace({
         role={activeView === "scenarios" ? "main" : undefined}
       >
         <ScenariosView
-          onNavigateLive={() => onNavigate("live")}
-          onOpenSimulation={openSimulation}
+          creationRequest={scenarioCreationRequest}
+          mapControllerRef={mapControllerRef}
+          mapSlot={activeView === "scenarios" ? mapSlot : null}
+          onBuilderOpenChange={() => undefined}
+          onRun={launchSimulation}
+          theme={theme}
         />
       </div>
       <div
@@ -128,8 +165,17 @@ export function DigitalTwinWorkspace({
         role={activeView === "runs" ? "main" : undefined}
       >
         <RunsView
-          onNavigateLive={() => onNavigate("live")}
-          onOpenSimulation={openSimulation}
+          location={location}
+          mapControllerRef={mapControllerRef}
+          mapSlot={activeView === "runs" ? mapSlot : null}
+          onCreateScenario={() => {
+            setScenarioCreationRequest((request) => request + 1);
+            onNavigate("scenarios");
+          }}
+          onOpenRun={(runId) => onNavigate("runs", runId)}
+          onReturnToRuns={() => onNavigate("runs")}
+          runs={[...launchedRuns, ...SIMULATION_RUNS]}
+          theme={theme}
         />
       </div>
       <div

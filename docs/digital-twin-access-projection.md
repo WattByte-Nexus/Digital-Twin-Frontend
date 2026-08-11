@@ -49,7 +49,7 @@ same organization, region, and action policy. The route guard is only the UI
 boundary.
 
 Vite development uses a compiled-development-only engineer projection for the
-`boulder-co` region. Override its label with
+curated `boulder-co` and `golden-co` demo regions. Override the default region with
 `VITE_DIGITAL_TWIN_DEV_REGION_ID` and `VITE_DIGITAL_TWIN_DEV_REGION_NAME`, or
 set `VITE_DIGITAL_TWIN_DEV_ACCESS=0` to exercise the real access endpoint.
 Production builds never include this fallback path.

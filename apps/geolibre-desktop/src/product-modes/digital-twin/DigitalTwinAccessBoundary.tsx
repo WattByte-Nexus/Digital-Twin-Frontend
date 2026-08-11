@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   AccessResolutionError,
+  createDevelopmentAccess,
   type AuthorizedLocationResolution,
   type DigitalTwinAccessContext,
   loadDigitalTwinAccess,
@@ -34,21 +35,6 @@ type BootstrapState =
 
 function currentLocation(): string {
   return `${window.location.pathname}${window.location.search}${window.location.hash}`;
-}
-
-function developmentAccess(): DigitalTwinAccessContext {
-  const regionId = import.meta.env.VITE_DIGITAL_TWIN_DEV_REGION_ID?.trim() || "boulder-co";
-  const regionName = import.meta.env.VITE_DIGITAL_TWIN_DEV_REGION_NAME?.trim() || "Boulder";
-  return {
-    subjectId: "local-pilot-developer",
-    displayName: "Local pilot developer",
-    organization: { id: "local-development", name: "Local development" },
-    roles: ["engineer"],
-    capabilities: ["digital-twin", "expert-gis", "administration"],
-    regions: [{ id: regionId, name: regionName }],
-    mostRecentlyUsedRegionId: regionId,
-    savedStartLocation: "digital-twin",
-  };
 }
 
 function accessEndpoint(): string {
@@ -202,7 +188,12 @@ export function DigitalTwinAccessBoundary({ children }: DigitalTwinAccessBoundar
 
     const request =
       import.meta.env.DEV && import.meta.env.VITE_DIGITAL_TWIN_DEV_ACCESS !== "0"
-        ? Promise.resolve(developmentAccess())
+        ? Promise.resolve(
+            createDevelopmentAccess({
+              regionId: import.meta.env.VITE_DIGITAL_TWIN_DEV_REGION_ID,
+              regionName: import.meta.env.VITE_DIGITAL_TWIN_DEV_REGION_NAME,
+            }),
+          )
         : loadDigitalTwinAccess({ endpoint: accessEndpoint(), signal: controller.signal });
 
     void request.then(

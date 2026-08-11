@@ -33,6 +33,43 @@ export interface DigitalTwinAccessContext {
   savedStartLocation: "digital-twin" | "expert-gis" | null;
 }
 
+interface DevelopmentAccessOptions {
+  regionId?: string;
+  regionName?: string;
+}
+
+const DEVELOPMENT_REGIONS: AuthorizedRegion[] = [
+  { id: "boulder-co", name: "Boulder" },
+  { id: "golden-co", name: "Golden" },
+];
+
+export function createDevelopmentAccess(
+  options: DevelopmentAccessOptions = {},
+): DigitalTwinAccessContext {
+  const regionId = options.regionId?.trim();
+  const regionName = options.regionName?.trim();
+  const regions =
+    regionId || regionName
+      ? [
+          {
+            id: regionId || DEVELOPMENT_REGIONS[0].id,
+            name: regionName || DEVELOPMENT_REGIONS[0].name,
+          },
+        ]
+      : DEVELOPMENT_REGIONS;
+
+  return {
+    subjectId: "local-pilot-developer",
+    displayName: "Local pilot developer",
+    organization: { id: "local-development", name: "Local development" },
+    roles: ["engineer"],
+    capabilities: ["digital-twin", "expert-gis", "administration"],
+    regions,
+    mostRecentlyUsedRegionId: regions[0].id,
+    savedStartLocation: "digital-twin",
+  };
+}
+
 export type AccessFailureKind =
   | "unauthenticated"
   | "unauthorized"

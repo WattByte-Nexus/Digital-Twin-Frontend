@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   AccessResolutionError,
+  createDevelopmentAccess,
   loadDigitalTwinAccess,
   parseAccessContext,
   resolveApplicationUrl,
@@ -30,6 +31,16 @@ function access(
 }
 
 describe("Digital Twin access resolution", () => {
+  it("grants local development access to every curated demo region", () => {
+    const developmentAccess = createDevelopmentAccess();
+
+    assert.deepEqual(developmentAccess.regions, [
+      { id: "boulder-co", name: "Boulder" },
+      { id: "golden-co", name: "Golden" },
+    ]);
+    assert.equal(developmentAccess.mostRecentlyUsedRegionId, "boulder-co");
+  });
+
   it("resolves deployment endpoints from the app base instead of a deep-link route", () => {
     assert.equal(
       resolveApplicationUrl(

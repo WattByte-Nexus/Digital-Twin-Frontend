@@ -4,39 +4,53 @@ import { describe, it } from "node:test";
 
 const appSource = readFileSync(
   new URL("../apps/geolibre-desktop/src/App.tsx", import.meta.url),
-  "utf8",
+  "utf8"
 );
 const workspaceSource = readFileSync(
   new URL(
     "../apps/geolibre-desktop/src/product-modes/digital-twin/ui/DigitalTwinMapWorkspace.tsx",
-    import.meta.url,
+    import.meta.url
   ),
-  "utf8",
+  "utf8"
+);
+const scenarioBuilderSource = readFileSync(
+  new URL(
+    "../apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/ScenarioBuilder.tsx",
+    import.meta.url
+  ),
+  "utf8"
+);
+const accessBoundarySource = readFileSync(
+  new URL(
+    "../apps/geolibre-desktop/src/product-modes/digital-twin/DigitalTwinAccessBoundary.tsx",
+    import.meta.url
+  ),
+  "utf8"
 );
 const topbarSource = readFileSync(
   new URL(
     "../packages/ui/src/components/digital-twin-topbar.tsx",
-    import.meta.url,
+    import.meta.url
   ),
-  "utf8",
+  "utf8"
 );
 const storySource = readFileSync(
   new URL(
     "../apps/geolibre-desktop/src/components/map/DigitalTwinMapWorkspace.stories.tsx",
-    import.meta.url,
+    import.meta.url
   ),
-  "utf8",
+  "utf8"
 );
 const threeDTilesPluginSource = readFileSync(
   new URL(
     "../packages/plugins/src/plugins/maplibre-3d-tiles.ts",
-    import.meta.url,
+    import.meta.url
   ),
-  "utf8",
+  "utf8"
 );
 const rootPackageSource = readFileSync(
   new URL("../package.json", import.meta.url),
-  "utf8",
+  "utf8"
 );
 
 describe("Digital Twin frontend composition", () => {
@@ -49,37 +63,73 @@ describe("Digital Twin frontend composition", () => {
   it("keeps Storybook and production on the same workspace implementation", () => {
     assert.match(
       storySource,
-      /import \{ DigitalTwinMapWorkspace \} from "\.\.\/\.\.\/product-modes\/digital-twin\/ui\/DigitalTwinMapWorkspace"/,
+      /import \{ DigitalTwinMapWorkspace \} from "\.\.\/\.\.\/product-modes\/digital-twin\/ui\/DigitalTwinMapWorkspace"/
     );
     assert.doesNotMatch(storySource, /function DigitalTwinMapWorkspace/);
+  });
+
+  it("keeps localhost access independent from Engine availability", () => {
+    assert.match(accessBoundarySource, /createDevelopmentAccess/);
+    assert.match(accessBoundarySource, /VITE_DIGITAL_TWIN_DEV_REGION_ID/);
+    assert.doesNotMatch(
+      accessBoundarySource,
+      /loadPublishedDigitalTwinRegions/
+    );
   });
 
   it("places map controls in a dedicated subtoolbar below the application header", () => {
     assert.match(
       topbarSource,
-      /<\/header>\s*\{mapToolbar \? \(\s*<nav\s+aria-label="Map controls"/,
+      /<\/header>\s*\{mapToolbar \? \(\s*<nav\s+aria-label="Map controls"/
     );
     assert.doesNotMatch(
       topbarSource,
-      /<header[\s\S]*?\{mapToolbar \? \([\s\S]*?<\/header>/,
+      /<header[\s\S]*?\{mapToolbar \? \([\s\S]*?<\/header>/
     );
     assert.equal(
       topbarSource.match(/border-b border-sidebar-border/g)?.length,
-      2,
+      2
     );
   });
 
-  it("shows the map subtoolbar only in live monitoring", () => {
+  it("shows the live map controls while the scenario builder is open", () => {
     assert.match(
       workspaceSource,
-      /mapToolbar=\{\s*activeDestination === "live" \?/,
+      /const showLiveMapChrome =\s*activeDestination === "live" \|\|\s*\(activeDestination === "scenarios" && scenarioBuilderOpen\)/
+    );
+    assert.match(workspaceSource, /mapToolbar=\{\s*showLiveMapChrome \?/);
+  });
+
+  it("keeps the scenario map interactive behind draggable floating panels", () => {
+    assert.match(
+      scenarioBuilderSource,
+      /className="pointer-events-none absolute inset-y-0 left-0 right-\[432px\]/
+    );
+    assert.match(
+      scenarioBuilderSource,
+      /<FloatingMapPanel\s+aria-label="Simulation run setup"/
+    );
+    assert.match(scenarioBuilderSource, /<FloatingMapPanelDragHandle/);
+  });
+
+  it("supports scenario durations up to 100 hours", () => {
+    assert.match(
+      scenarioBuilderSource,
+      /<Slider[\s\S]*?aria-label="Simulation duration in hours"[\s\S]*?max=\{100\}[\s\S]*?min=\{1\}/
+    );
+    assert.doesNotMatch(
+      scenarioBuilderSource,
+      /<SelectMenuItem value="8">8 hours/
     );
   });
 
   it("owns the weather-to-map controller in the shared production component", () => {
     assert.match(workspaceSource, /createWeatherSunSimulationController/);
     assert.match(workspaceSource, /<WeatherSettingsFloatingPanel/);
-    assert.match(workspaceSource, /onValueChange=\{handleWeatherSettingsChange\}/);
+    assert.match(
+      workspaceSource,
+      /onValueChange=\{handleWeatherSettingsChange\}/
+    );
   });
 
   it("streams the active region point cloud from the Digital Twin Engine", () => {
@@ -87,7 +137,6 @@ describe("Digital Twin frontend composition", () => {
     assert.match(workspaceSource, /new AbortController\(\)/);
     assert.match(workspaceSource, /createDigitalTwinPointCloudLayer/);
     assert.match(workspaceSource, /Point-cloud metadata loading/);
-    assert.match(workspaceSource, /Retry point cloud/);
     assert.match(workspaceSource, /aria-live="polite"/);
     assert.doesNotMatch(workspaceSource, /createGoldenUsgsLidarLayer/);
     assert.doesNotMatch(workspaceSource, /\/data\/usgs-lidar\/golden-city/);
@@ -101,10 +150,10 @@ describe("Digital Twin frontend composition", () => {
       existsSync(
         new URL(
           `../apps/geolibre-desktop/public${bundledDatasetPath}`,
-          import.meta.url,
-        ),
+          import.meta.url
+        )
       ),
-      false,
+      false
     );
     assert.equal(threeDTilesPluginSource.includes(bundledDatasetPath), false);
     assert.equal(rootPackageSource.includes(buildCommand), false);
@@ -112,11 +161,22 @@ describe("Digital Twin frontend composition", () => {
 
   it("composites time-of-day lighting above every map canvas", () => {
     const mapIndex = workspaceSource.indexOf("<SatelliteTerrainMap");
-    const lightingIndex = workspaceSource.indexOf('data-time-of-day-lighting="true"');
-    const statusIndex = workspaceSource.indexOf("<DigitalTwinMapStatus");
+    const lightingIndex = workspaceSource.indexOf(
+      'data-time-of-day-lighting="true"'
+    );
+    const monitoringIndex = workspaceSource.indexOf(
+      "<DigitalTwinMonitoringStatus"
+    );
 
     assert.ok(mapIndex >= 0);
     assert.ok(lightingIndex > mapIndex);
-    assert.ok(statusIndex > lightingIndex);
+    assert.ok(monitoringIndex > lightingIndex);
+  });
+
+  it("keeps the bottom-left corner of the map clear", () => {
+    assert.doesNotMatch(workspaceSource, /<DigitalTwinMapStatus/);
+    assert.doesNotMatch(workspaceSource, /Retry point cloud/);
+    assert.doesNotMatch(workspaceSource, /Retry power lines/);
+    assert.doesNotMatch(workspaceSource, /absolute bottom-\d+ left-\d+/);
   });
 });
