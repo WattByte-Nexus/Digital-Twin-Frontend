@@ -44,7 +44,14 @@ import {
 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { GeoJSONSource } from "maplibre-gl";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { defaultDigitalTwinApiUrl } from "../../../lib/digital-twin-earth-engine";
 import {
   fetchDigitalTwinPowerLines,
@@ -76,6 +83,7 @@ import {
   type ScenarioRunRequest,
   type SimulationRun,
 } from "./simulation-flow";
+import { PersistentDigitalTwinMapHost } from "./PersistentDigitalTwinMapHost";
 import { RunsView } from "./views/RunsView";
 import { ScenariosView } from "./views/ScenariosView";
 import type { ScenarioMapController } from "./views/ScenarioBuilder";
@@ -239,7 +247,24 @@ export function DigitalTwinMapWorkspace({
   onToggleTheme,
 }: DigitalTwinMapWorkspaceProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
-  const interactionMapControllerRef = useRef<ScenarioMapController | null>(null);
+  const mapParkingHostRef = useRef<HTMLDivElement | null>(null);
+  const [mapContentEl] = useState(() => {
+    const element = document.createElement("div");
+    element.className = "contents";
+    return element;
+  });
+  const [mapStarted, setMapStarted] = useState(false);
+  const activateMap = useCallback(() => setMapStarted(true), []);
+  const setMapParkingHost = useCallback(
+    (host: HTMLDivElement | null) => {
+      mapParkingHostRef.current = host;
+      if (host && !mapContentEl.isConnected) host.replaceChildren(mapContentEl);
+    },
+    [mapContentEl],
+  );
+  const interactionMapControllerRef = useRef<ScenarioMapController | null>(
+    null
+  );
   if (interactionMapControllerRef.current === null) {
     interactionMapControllerRef.current = { getMap: () => mapRef.current };
   }
@@ -674,6 +699,14 @@ export function DigitalTwinMapWorkspace({
       </output>
     </div>
   );
+  const mapHost = (
+    <PersistentDigitalTwinMapHost
+      contentEl={mapContentEl}
+      mapRef={mapRef}
+      onActivate={activateMap}
+      parkingHostRef={mapParkingHostRef}
+    />
+  );
 
   return (
     <div
@@ -690,7 +723,14 @@ export function DigitalTwinMapWorkspace({
           onNavigate={navigateTo}
           onSelectRegion={selectRegion}
         />
-        <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+        <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none invisible absolute bottom-0 end-0 overflow-hidden"
+            data-digital-twin-map-parking=""
+            ref={setMapParkingHost}
+          />
+          {mapStarted ? createPortal(mapSurface, mapContentEl) : null}
           <DigitalTwinTopbar
             alerts={WORKSPACE_ALERTS}
             alertsCount={7}
@@ -959,7 +999,7 @@ export function DigitalTwinMapWorkspace({
             <ScenariosView
               creationRequest={scenarioCreationRequest}
               mapControllerRef={interactionMapControllerRef}
-              mapSlot={mapSurface}
+              mapSlot={mapHost}
               onBuilderOpenChange={setScenarioBuilderOpen}
               onRun={launchSimulation}
               theme={activeThemeMode}
@@ -968,7 +1008,7 @@ export function DigitalTwinMapWorkspace({
             <RunsView
               location={location}
               mapControllerRef={interactionMapControllerRef}
-              mapSlot={mapSurface}
+              mapSlot={mapHost}
               onCreateScenario={() => {
                 setScenarioCreationRequest((request) => request + 1);
                 navigateTo("scenarios");
@@ -979,7 +1019,7 @@ export function DigitalTwinMapWorkspace({
               theme={activeThemeMode}
             />
           ) : (
-            mapSurface
+            mapHost
           )}
         </SidebarInset>
       </SidebarProvider>

@@ -97,6 +97,35 @@ async function openDigitalTwin(page: Page): Promise<void> {
   ).toBeVisible();
 }
 
+async function rememberMapCanvas(page: Page): Promise<void> {
+  await page.locator(".maplibregl-canvas").evaluate((canvas) => {
+    const lifecycleWindow = window as Window & {
+      digitalTwinMapCanvas?: Element;
+      digitalTwinMapContextLosses?: number;
+    };
+    lifecycleWindow.digitalTwinMapCanvas = canvas;
+    lifecycleWindow.digitalTwinMapContextLosses = 0;
+    canvas.addEventListener("webglcontextlost", () => {
+      lifecycleWindow.digitalTwinMapContextLosses =
+        (lifecycleWindow.digitalTwinMapContextLosses ?? 0) + 1;
+    });
+  });
+}
+
+async function expectRememberedMapCanvasConnected(page: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const lifecycleWindow = window as Window & {
+          digitalTwinMapCanvas?: Element;
+        };
+        return lifecycleWindow.digitalTwinMapCanvas?.isConnected ?? false;
+      })
+    )
+    .toBe(true);
+  await expect(page.locator(".maplibregl-canvas")).toHaveCount(1);
+}
+
 async function dragSeparator(
   page: Page,
   name: string,
@@ -139,6 +168,43 @@ test.describe("WattByte Nexus Figma workspace", () => {
     await expect(page).toHaveURL(/\/regions\/boulder-co\/runs$/);
     await expect(page.getByRole("heading", { name: "Runs", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Something went wrong" })).toHaveCount(0);
+  });
+
+
+  test("keeps one connected WebGL map while visiting non-map pages", async ({
+    page,
+  }) => {
+    await installDigitalTwinMocks(page);
+    await page.goto(process.env.DIGITAL_TWIN_E2E_URL ?? "/");
+    await expect(page).toHaveURL(/\/regions\/boulder-co\/live$/);
+    await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+    await rememberMapCanvas(page);
+
+    await page.locator('button[aria-label^="Scenarios:"]').click();
+    await expect(page).toHaveURL(/\/regions\/boulder-co\/scenarios$/);
+    await expectRememberedMapCanvasConnected(page);
+
+    await page.locator('button[aria-label^="Runs:"]').click();
+    await expect(page).toHaveURL(/\/regions\/boulder-co\/runs$/);
+    await expectRememberedMapCanvasConnected(page);
+
+    await page.locator('button[aria-label^="Live:"]').click();
+    await expect(page).toHaveURL(/\/regions\/boulder-co\/live$/);
+    await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+    expect(
+      await page.evaluate(() => {
+        const lifecycleWindow = window as Window & {
+          digitalTwinMapCanvas?: Element;
+          digitalTwinMapContextLosses?: number;
+        };
+        return {
+          contextLosses: lifecycleWindow.digitalTwinMapContextLosses ?? 0,
+          sameCanvas:
+            lifecycleWindow.digitalTwinMapCanvas ===
+            document.querySelector(".maplibregl-canvas"),
+        };
+      })
+    ).toEqual({ contextLosses: 0, sameCanvas: true });
   });
 
   test("shows the map risk callout only after selecting a supported asset", async ({
