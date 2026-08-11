@@ -62,7 +62,7 @@ export const GOLDEN_LIDAR_TILESET_LOAD_OPTIONS = {
 
 interface GoldenUsgsLidarLayerCallbacks {
   onError: (error: Error) => void;
-  onReady: () => void;
+  onReady?: () => void;
 }
 
 /**
@@ -99,7 +99,7 @@ export function createGoldenUsgsLidarLayer({
     onTileLoad: () => {
       if (firstTileLoaded) return;
       firstTileLoaded = true;
-      onReady();
+      onReady?.();
     },
     // @loaders.gl calls this as (tile, message, url), despite deck.gl's type
     // declaration naming the string arguments in the opposite order.

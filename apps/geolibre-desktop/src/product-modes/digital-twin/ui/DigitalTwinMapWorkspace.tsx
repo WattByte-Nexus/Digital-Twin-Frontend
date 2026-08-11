@@ -1,7 +1,6 @@
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { SatelliteTerrainMap } from "@geolibre/map";
 import {
-  Badge,
   Button,
   CommandDialog,
   CommandEmpty,
@@ -61,7 +60,6 @@ import {
 } from "../weather-time-of-day-presentation";
 
 export type WorkspaceTheme = "light" | "dark";
-type LidarStatus = "loading" | "ready" | "error";
 
 export interface DigitalTwinMapWorkspaceProps {
   activeDestination?: DigitalTwinDestination;
@@ -192,7 +190,6 @@ export function DigitalTwinMapWorkspace({
       events: { ...DEFAULT_WEATHER_SETTINGS.events },
     })
   );
-  const [lidarStatus, setLidarStatus] = useState<LidarStatus>("loading");
   const [lightingOverlay, setLightingOverlay] =
     useState<TimeOfDayLightingOverlay>(() => timeOfDayLightingOverlay(90));
 
@@ -232,12 +229,9 @@ export function DigitalTwinMapWorkspace({
     mapRef.current = map;
     if (map) {
       if (showLidar) {
-        setLidarStatus("loading");
         const lidarLayer = createGoldenUsgsLidarLayer({
-          onReady: () => setLidarStatus("ready"),
           onError: (error) => {
             console.error("Golden USGS LiDAR could not be loaded", error);
-            setLidarStatus("error");
           },
         });
         lidarLayerRef.current = lidarLayer;
@@ -644,14 +638,6 @@ export function DigitalTwinMapWorkspace({
                 visibleDetailCount={visibleDetailCount}
               />
             </div>
-
-            {showLidar && displaySettings.pointClouds ? (
-              <div className="absolute left-4 top-4 z-10">
-                <Badge variant="secondary" aria-live="polite">
-                  USGS 3DEP LiDAR · Golden · {lidarStatus}
-                </Badge>
-              </div>
-            ) : null}
 
             <div className="absolute bottom-6 right-4 z-10">
               <DigitalTwinMonitoringStatus themeMode={activeThemeMode} />
