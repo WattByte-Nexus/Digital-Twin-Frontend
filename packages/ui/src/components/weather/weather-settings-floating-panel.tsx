@@ -56,7 +56,7 @@ export function WeatherSettingsFloatingPanel({
     <div className="pointer-events-none absolute inset-0 z-10">
       <FloatingMapLauncher
         anchor={anchor}
-        hidden={isOpen}
+        hidden={isOpen || panelPresent}
         onActivate={() => setOpen(true)}
         onAnchorChange={setAnchor}
       >
