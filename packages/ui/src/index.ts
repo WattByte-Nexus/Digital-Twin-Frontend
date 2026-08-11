@@ -31,6 +31,19 @@ export {
 } from "./components/digital-twin-map-status";
 export { Button, buttonVariants, type ButtonProps } from "./components/button";
 export {
+  FloatingMapPanel,
+  FloatingMapPanelDragHandle,
+  FloatingMapLauncher,
+  type FloatingMapPanelDock,
+  type FloatingMapPanelDragHandleProps,
+  type FloatingMapPanelProps,
+  type FloatingMapLauncherProps,
+} from "./components/floating-map-panel";
+export type {
+  FloatingPanelAnchor,
+  FloatingPanelEdge,
+} from "./components/floating-map-panel-geometry";
+export {
   Avatar,
   AvatarBadge,
   AvatarFallback,
@@ -151,7 +164,7 @@ export {
 } from "./components/simulation-popover";
 export {
   WeatherSettingsPanel,
-  WeatherSettingsPopover,
+  WeatherSettingsFloatingPanel,
   WeatherSummaryBar,
   WeatherModeToggle,
   TimeOfDayControl,
@@ -159,7 +172,7 @@ export {
   DEFAULT_WEATHER_EVENTS,
   DEFAULT_WEATHER_SETTINGS,
   type WeatherSettingsPanelProps,
-  type WeatherSettingsPopoverProps,
+  type WeatherSettingsFloatingPanelProps,
   type WeatherTheme,
   type WeatherSettingsValue,
   type WeatherMode,

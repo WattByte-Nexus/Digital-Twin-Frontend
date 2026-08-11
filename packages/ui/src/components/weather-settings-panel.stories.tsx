@@ -1,19 +1,17 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ComponentProps } from "react";
-import { WeatherSettingsPopover } from "./weather";
+import { WeatherSettingsFloatingPanel } from "./weather";
 
 function WeatherCanvas({
   dark = false,
   ...props
-}: ComponentProps<typeof WeatherSettingsPopover> & {
+}: ComponentProps<typeof WeatherSettingsFloatingPanel> & {
   dark?: boolean;
 }) {
   return (
-    <div
-      className={`${dark ? "dark bg-zinc-950" : "bg-white"} min-h-screen p-7 font-sans`}
-    >
-      <div className="flex min-h-[1120px] items-start justify-center pt-3">
-        <WeatherSettingsPopover
+    <div className={`${dark ? "dark" : ""} relative min-h-[1120px] font-sans`}>
+      <div className="relative min-h-[1120px]">
+        <WeatherSettingsFloatingPanel
           {...props}
           defaultOpen
           theme={dark ? "dark" : "light"}
@@ -25,12 +23,12 @@ function WeatherCanvas({
 
 const meta = {
   title: "UI/Weather Settings Panel",
-  component: WeatherSettingsPopover,
+  component: WeatherSettingsFloatingPanel,
   parameters: {
     layout: "fullscreen",
   },
   tags: ["autodocs"],
-} satisfies Meta<typeof WeatherSettingsPopover>;
+} satisfies Meta<typeof WeatherSettingsFloatingPanel>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

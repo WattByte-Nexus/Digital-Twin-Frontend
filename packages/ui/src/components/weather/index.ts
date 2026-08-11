@@ -9,9 +9,9 @@ export {
 } from "./weather-mode-toggle";
 export { WeatherSettingsPanel } from "./weather-settings-panel";
 export {
-  WeatherSettingsPopover,
-  type WeatherSettingsPopoverProps,
-} from "./weather-settings-popover";
+  WeatherSettingsFloatingPanel,
+  type WeatherSettingsFloatingPanelProps,
+} from "./weather-settings-floating-panel";
 export {
   WeatherSummaryBar,
   type WeatherSummaryBarProps,

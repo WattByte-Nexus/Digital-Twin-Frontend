@@ -21,7 +21,7 @@ import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
-  WeatherSettingsPopover,
+  WeatherSettingsFloatingPanel,
   type DigitalTwinDestination,
   type DigitalTwinMapDisplaySettings,
   type DigitalTwinOperator,
@@ -652,26 +652,24 @@ export function DigitalTwinMapWorkspace({
             </div>
 
             {showWeather ? (
-              <div className="absolute right-4 top-4 z-10">
-                <WeatherSettingsPopover
-                  theme={activeThemeMode}
-                  location="Boulder County, Colorado"
-                  value={weatherSettings}
-                  onValueChange={handleWeatherSettingsChange}
-                  trigger={
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon"
-                      className="border bg-background/95 text-foreground shadow-lg backdrop-blur"
-                      aria-label="Open weather settings"
-                      title="Weather settings"
-                    >
-                      <CloudSun aria-hidden="true" />
-                    </Button>
-                  }
-                />
-              </div>
+              <WeatherSettingsFloatingPanel
+                theme={activeThemeMode}
+                location="Boulder County, Colorado"
+                value={weatherSettings}
+                onValueChange={handleWeatherSettingsChange}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="icon"
+                    className="border bg-background/95 text-foreground shadow-lg backdrop-blur"
+                    aria-label="Open weather settings"
+                    title="Weather settings"
+                  >
+                    <CloudSun aria-hidden="true" />
+                  </Button>
+                }
+              />
             ) : null}
           </div>
         </SidebarInset>

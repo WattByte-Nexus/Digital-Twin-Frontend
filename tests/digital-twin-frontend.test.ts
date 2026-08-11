@@ -38,7 +38,7 @@ describe("Digital Twin frontend composition", () => {
 
   it("owns the weather-to-map controller in the shared production component", () => {
     assert.match(workspaceSource, /createWeatherSunSimulationController/);
-    assert.match(workspaceSource, /<WeatherSettingsPopover/);
+    assert.match(workspaceSource, /<WeatherSettingsFloatingPanel/);
     assert.match(workspaceSource, /onValueChange=\{handleWeatherSettingsChange\}/);
   });
 

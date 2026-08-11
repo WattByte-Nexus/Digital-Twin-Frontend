@@ -3,7 +3,6 @@ import { Card } from "../card";
 import { DatePicker } from "../date-picker";
 import { Input } from "../input";
 import { Label } from "../label";
-import { ScrollArea } from "../scroll-area";
 import {
   Select,
   SelectContent,
@@ -65,7 +64,7 @@ export function WeatherSettingsPanel({
     <Card
       className={cn(
         surfaceThemeClassName(theme),
-        "flex max-h-[min(calc(100dvh-2rem),var(--radix-popover-content-available-height,calc(100dvh-2rem)))] w-[min(380px,calc(100vw-2rem))] flex-col gap-0 overflow-hidden rounded-[10px] py-0 [@media(max-height:900px)]:h-[min(calc(100dvh-2rem),var(--radix-popover-content-available-height,calc(100dvh-2rem)))]",
+        "flex w-[min(380px,calc(100vw-2rem))] flex-col gap-0 overflow-hidden rounded-[10px] py-0",
         className,
       )}
       surface="panel"
@@ -80,7 +79,7 @@ export function WeatherSettingsPanel({
         theme={theme}
       />
 
-      <ScrollArea type="auto" className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1">
         <div className="space-y-4 px-3 pb-4 pt-3 [@media(max-height:900px)]:space-y-2 [@media(max-height:900px)]:py-2">
           <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-card-foreground">
             Weather settings
@@ -176,7 +175,7 @@ export function WeatherSettingsPanel({
             </div>
           </fieldset>
         </div>
-      </ScrollArea>
+      </div>
     </Card>
   );
 }
