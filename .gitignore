@@ -67,3 +67,4 @@ python/examples/my-map.geolibre.json
 
 *storybook.log
 storybook-static
+.gstack/

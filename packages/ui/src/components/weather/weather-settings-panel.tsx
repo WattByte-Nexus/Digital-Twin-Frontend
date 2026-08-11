@@ -80,7 +80,7 @@ export function WeatherSettingsPanel({
       />
 
       <div className="min-h-0 flex-1">
-        <div className="space-y-4 px-3 pb-4 pt-3 [@media(max-height:900px)]:space-y-2 [@media(max-height:900px)]:py-2">
+        <div className="space-y-4 px-3 pb-6 pt-3 [@media(max-height:900px)]:space-y-2 [@media(max-height:900px)]:pb-6 [@media(max-height:900px)]:pt-2">
           <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-card-foreground">
             Weather settings
           </h2>
@@ -162,7 +162,7 @@ export function WeatherSettingsPanel({
 
             <div className="space-y-2 [@media(max-height:900px)]:space-y-1">
               <SectionLabel>Weather Events</SectionLabel>
-              <div className="space-y-4 [@media(max-height:900px)]:space-y-1">
+              <div className="space-y-2 [@media(max-height:900px)]:space-y-1">
                 <WeatherEventRow label="Fog" value={value.events.fog} unit="%" onChange={(next) => updateEvent("fog", next)} />
                 <WeatherEventRow label="Rain" value={value.events.rain} unit="%" onChange={(next) => updateEvent("rain", next)} />
                 <WeatherEventRow label="Thunder" value={value.events.thunder} unit="%" onChange={(next) => updateEvent("thunder", next)} />
