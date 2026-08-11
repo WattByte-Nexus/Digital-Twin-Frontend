@@ -1,5 +1,6 @@
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck, X } from "lucide-react";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "../lib/utils";
 import { Badge } from "./badge";
 import { Button } from "./button";
@@ -11,15 +12,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { ScrollArea } from "./scroll-area";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "./sheet";
+  FloatingMapPanel,
+  FloatingMapPanelDragHandle,
+} from "./floating-map-panel";
+import { ScrollArea } from "./scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
@@ -35,6 +32,7 @@ export interface DigitalTwinAlertSummary {
 export interface DigitalTwinAlertsDropdownProps {
   alerts?: readonly DigitalTwinAlertSummary[];
   alertsCount?: number;
+  inboxContainer?: Element | DocumentFragment | null;
   onOpenAlerts?: () => void;
   overlayClassName?: string;
 }
@@ -60,6 +58,7 @@ function severityVariant(severity: DigitalTwinAlertSeverity) {
 export function DigitalTwinAlertsDropdown({
   alerts = [],
   alertsCount = 0,
+  inboxContainer,
   onOpenAlerts,
   overlayClassName,
 }: DigitalTwinAlertsDropdownProps) {
@@ -101,7 +100,7 @@ export function DigitalTwinAlertsDropdown({
 
     return (
       <ScrollArea className="h-full">
-        <div className="space-y-2 p-4">
+        <div className="space-y-2 p-3">
           {visibleAlerts.length > 0 ? (
             visibleAlerts.map((alert) => (
               <Button
@@ -113,14 +112,17 @@ export function DigitalTwinAlertsDropdown({
               >
                 <span className="min-w-0 flex-1">
                   <span className="mb-1.5 flex items-center gap-2">
-                    <Badge variant={severityVariant(alert.severity)}>
+                    <Badge
+                      className="text-[10px]"
+                      variant={severityVariant(alert.severity)}
+                    >
                       {severityLabel(alert.severity)}
                     </Badge>
-                    <span className="truncate text-sm font-medium">
+                    <span className="truncate text-[11px] font-medium">
                       {alert.name}
                     </span>
                   </span>
-                  <span className="block text-xs font-normal text-muted-foreground">
+                  <span className="block text-[10px] font-normal text-muted-foreground">
                     {alert.description}
                   </span>
                 </span>
@@ -133,12 +135,12 @@ export function DigitalTwinAlertsDropdown({
               </Button>
             ))
           ) : (
-            <div className="flex min-h-36 items-center justify-center rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+            <div className="flex min-h-36 items-center justify-center rounded-lg border border-dashed border-border p-6 text-center text-[11px] text-muted-foreground">
               {tab === "active"
                 ? "No active alerts"
                 : tab === "acknowledged"
-                  ? "No acknowledged alerts"
-                  : "No alerts to display"}
+                ? "No acknowledged alerts"
+                : "No alerts to display"}
             </div>
           )}
         </div>
@@ -153,7 +155,9 @@ export function DigitalTwinAlertsDropdown({
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <Button
-                aria-label={`Open alerts${activeCount > 0 ? `, ${countLabel}` : ""}`}
+                aria-label={`Open alerts${
+                  activeCount > 0 ? `, ${countLabel}` : ""
+                }`}
                 className="relative h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground"
                 size="icon"
                 type="button"
@@ -222,63 +226,93 @@ export function DigitalTwinAlertsDropdown({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Sheet onOpenChange={setInboxOpen} open={inboxOpen}>
-        <SheetContent
-          className={cn(
-            overlayClassName,
-            "w-full gap-0 p-0 sm:max-w-[30rem]"
-          )}
-          side="right"
-        >
-          <SheetHeader className="border-b border-border pe-12">
-            <span className="flex items-center justify-between gap-3">
-              <SheetTitle>Alerts</SheetTitle>
-              <Badge variant={activeCount > 0 ? "destructive" : "secondary"}>
-                {countLabel}
-              </Badge>
-            </span>
-            <SheetDescription>
-              Review operational alerts without leaving the map workspace.
-            </SheetDescription>
-            <Button
-              className="mt-2 w-fit"
-              disabled={activeCount === 0}
-              onClick={() => setAllReviewed(true)}
-              size="sm"
-              type="button"
-              variant="outline"
+      {inboxOpen
+        ? createPortal(
+            <FloatingMapPanel
+              aria-label="Alerts"
+              defaultDock="top-left"
+              defaultSize={{ width: 380, height: 820 }}
+              fitToBounds
             >
-              <CheckCheck aria-hidden="true" className="h-4 w-4" />
-              Mark all reviewed
-            </Button>
-          </SheetHeader>
-
-          <Tabs className="min-h-0 flex-1 gap-0" defaultValue="active">
-            <TabsList className="mx-4 mt-4 grid w-auto grid-cols-3">
-              {ALERT_TABS.map((tab) => (
-                <TabsTrigger key={tab.value} value={tab.value}>
-                  {tab.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            {ALERT_TABS.map((tab) => (
-              <TabsContent
-                className="min-h-0 flex-1"
-                key={tab.value}
-                value={tab.value}
+              <div
+                className={cn(
+                  overlayClassName,
+                  "surface-glass-overlay relative flex h-full flex-col overflow-hidden rounded-[10px] border border-border shadow-xl animate-in fade-in-0 zoom-in-95"
+                )}
               >
-                {renderAlertList(tab.value)}
-              </TabsContent>
-            ))}
-          </Tabs>
+                <FloatingMapPanelDragHandle className="absolute inset-x-0 top-0 z-10 h-[46px] rounded-t-[10px]" />
+                <Button
+                  aria-label="Close alert inbox"
+                  className="absolute right-2 top-2 z-20 h-7 w-7 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => setInboxOpen(false)}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                >
+                  <X aria-hidden="true" className="h-4 w-4" />
+                </Button>
 
-          <SheetFooter className="border-t border-border">
-            <Button onClick={openFullInbox} type="button">
-              Open full alert inbox
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+                <div className="border-b border-border px-3 pb-3 pt-3 pe-12">
+                  <span className="flex items-center justify-between gap-3">
+                    <h2 className="text-[16px] font-semibold tracking-[-0.01em]">
+                      Alerts
+                    </h2>
+                    <Badge
+                      className="text-[10px]"
+                      variant={activeCount > 0 ? "destructive" : "secondary"}
+                    >
+                      {countLabel}
+                    </Badge>
+                  </span>
+                  <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+                    Review operational alerts without leaving the map workspace.
+                  </p>
+                  <Button
+                    className="mt-2 w-fit"
+                    disabled={activeCount === 0}
+                    onClick={() => setAllReviewed(true)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <CheckCheck aria-hidden="true" className="h-4 w-4" />
+                    Mark all reviewed
+                  </Button>
+                </div>
+
+                <Tabs className="min-h-0 flex-1 gap-0" defaultValue="active">
+                  <TabsList className="mx-3 mt-3 grid w-auto grid-cols-3">
+                    {ALERT_TABS.map((tab) => (
+                      <TabsTrigger
+                        className="text-[12px]"
+                        key={tab.value}
+                        value={tab.value}
+                      >
+                        {tab.label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                  {ALERT_TABS.map((tab) => (
+                    <TabsContent
+                      className="min-h-0 flex-1"
+                      key={tab.value}
+                      value={tab.value}
+                    >
+                      {renderAlertList(tab.value)}
+                    </TabsContent>
+                  ))}
+                </Tabs>
+
+                <div className="border-t border-border p-3">
+                  <Button onClick={openFullInbox} size="sm" type="button">
+                    Open full alert inbox
+                  </Button>
+                </div>
+              </div>
+            </FloatingMapPanel>,
+            inboxContainer ?? document.body
+          )
+        : null}
     </>
   );
 }

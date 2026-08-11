@@ -198,6 +198,8 @@ export function DigitalTwinMapWorkspace({
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [mapPanelContainer, setMapPanelContainer] =
+    useState<HTMLDivElement | null>(null);
   const visibleDetailCount = Object.entries(displaySettings).filter(
     ([key, visible]) => key !== "satellite" && key !== "elevation" && visible
   ).length;
@@ -354,6 +356,7 @@ export function DigitalTwinMapWorkspace({
           <DigitalTwinTopbar
             alerts={WORKSPACE_ALERTS}
             alertsCount={7}
+            alertsPanelContainer={mapPanelContainer}
             mapToolbar={
               <DigitalTwinMapToolbar
                 className="h-10 rounded-md border-0 bg-transparent p-0 shadow-none"
@@ -612,7 +615,10 @@ export function DigitalTwinMapWorkspace({
             </CommandList>
           </CommandDialog>
 
-          <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+          <div
+            className="relative min-h-0 flex-1 overflow-hidden bg-background"
+            ref={setMapPanelContainer}
+          >
             <SatelliteTerrainMap
               {...DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG}
               satelliteVisible={displaySettings.satellite}

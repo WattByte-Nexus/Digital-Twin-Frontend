@@ -43,6 +43,7 @@ export interface DigitalTwinOperator {
 export interface DigitalTwinTopbarProps {
   alerts?: readonly DigitalTwinAlertSummary[];
   alertsCount?: number;
+  alertsPanelContainer?: Element | DocumentFragment | null;
   mapToolbar?: ReactNode;
   operator: DigitalTwinOperator;
   organizationName: string;
@@ -108,6 +109,7 @@ function MenuAction({
 export function DigitalTwinTopbar({
   alerts = [],
   alertsCount = 0,
+  alertsPanelContainer,
   mapToolbar,
   operator,
   organizationName,
@@ -190,6 +192,7 @@ export function DigitalTwinTopbar({
           <DigitalTwinAlertsDropdown
             alerts={alerts}
             alertsCount={alertsCount}
+            inboxContainer={alertsPanelContainer}
             onOpenAlerts={onOpenAlerts}
             overlayClassName={overlayClassName}
           />
