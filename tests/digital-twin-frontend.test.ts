@@ -41,4 +41,14 @@ describe("Digital Twin frontend composition", () => {
     assert.match(workspaceSource, /<WeatherSettingsPopover/);
     assert.match(workspaceSource, /onValueChange=\{handleWeatherSettingsChange\}/);
   });
+
+  it("composites time-of-day lighting above every map canvas", () => {
+    const mapIndex = workspaceSource.indexOf("<SatelliteTerrainMap");
+    const lightingIndex = workspaceSource.indexOf('data-time-of-day-lighting="true"');
+    const statusIndex = workspaceSource.indexOf("<DigitalTwinMapStatus");
+
+    assert.ok(mapIndex >= 0);
+    assert.ok(lightingIndex > mapIndex);
+    assert.ok(statusIndex > lightingIndex);
+  });
 });

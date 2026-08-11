@@ -5,8 +5,15 @@ const DAY_HORIZON = [248, 250, 252] as const;
 const NIGHT_SKY = [7, 17, 31] as const;
 const NIGHT_HORIZON = [17, 24, 39] as const;
 const TWILIGHT_HORIZON = [219, 126, 91] as const;
+const NIGHT_LIGHTING_OVERLAY = [4, 12, 28] as const;
+const TWILIGHT_LIGHTING_OVERLAY = [84, 38, 22] as const;
 
 type Rgb = readonly [number, number, number];
+
+export interface TimeOfDayLightingOverlay {
+  color: string;
+  opacity: number;
+}
 
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
@@ -46,4 +53,22 @@ export function timeOfDaySky(solarAltitude: number): SkySpecification {
 
 export function timeOfDayIllumination(solarAltitude: number): number {
   return smoothstep((solarAltitude + 8) / 26);
+}
+
+/**
+ * Returns the global color grade composited above every map renderer. MapLibre
+ * light and raster paint properties cannot affect deck.gl or every layer type,
+ * so this presentation completes the time-of-day effect across the full scene.
+ */
+export function timeOfDayLightingOverlay(
+  solarAltitude: number,
+): TimeOfDayLightingOverlay {
+  const daylight = timeOfDayIllumination(solarAltitude);
+  const twilight = 1 - clamp01(Math.abs(solarAltitude + 2) / 12);
+  return {
+    color: rgb(
+      mixRgb(NIGHT_LIGHTING_OVERLAY, TWILIGHT_LIGHTING_OVERLAY, twilight),
+    ),
+    opacity: (1 - daylight) * 0.68,
+  };
 }

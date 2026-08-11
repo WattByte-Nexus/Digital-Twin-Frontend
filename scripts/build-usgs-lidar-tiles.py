@@ -15,6 +15,7 @@ import argparse
 import io
 import json
 import math
+import shutil
 import tempfile
 import urllib.parse
 import urllib.request
@@ -37,10 +38,12 @@ DEFAULT_IMAGERY_URL = (
 )
 DEFAULT_IMAGERY_SIZE = 4_096
 DEFAULT_CLASSIFICATIONS = [1, 3, 4, 5, 6, 14, 15]
+DISPLAY_VOXEL_METERS = (4.0, 4.0, 3.0)
+VOXEL_CHUNK_POINTS = 1_000_000
+UTILITY_CLASSES = (14, 15)
 DEFAULT_OUTPUT = Path(
     "apps/geolibre-desktop/public/data/usgs-lidar/golden-city"
 )
-NOAA_GEOID_URL = "https://geodesy.noaa.gov/api/geoid/ght"
 GOLDEN_BOUNDARY_URL = (
     "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/"
     "Places_CouSub_ConCity_SubMCD/MapServer/4/query?"
@@ -60,7 +63,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Stream a bounded USGS EPT point cloud, colorize it, correct its "
-            "NAVD88 height, and convert it to self-hostable OGC 3D Tiles."
+            "NAVD88 terrain height, and convert it to self-hostable OGC 3D Tiles."
         )
     )
     parser.add_argument(
@@ -92,20 +95,6 @@ def parse_args() -> argparse.Namespace:
             "(default: 1 3 4 5 6 14 15)."
         ),
     )
-    parser.add_argument(
-        "--max-points",
-        type=int,
-        default=750_000,
-        help="Deterministic display-point cap (default: 750000).",
-    )
-    parser.add_argument(
-        "--geoid-height",
-        type=float,
-        help=(
-            "GEOID18 height in meters. When omitted, query NOAA for the center. "
-            "Ellipsoid height is computed as NAVD88 height plus this value."
-        ),
-    )
     parser.add_argument("--jobs", type=int, default=4)
     return parser.parse_args()
 
@@ -113,8 +102,6 @@ def parse_args() -> argparse.Namespace:
 def validate_args(args: argparse.Namespace) -> None:
     if not math.isfinite(args.query_resolution) or args.query_resolution <= 0:
         raise ValueError("--query-resolution must be greater than zero")
-    if args.max_points <= 0:
-        raise ValueError("--max-points must be greater than zero")
     if args.imagery_size <= 0:
         raise ValueError("--imagery-size must be greater than zero")
     if args.jobs <= 0:
@@ -158,25 +145,12 @@ def fetch_city_boundary(boundary_url: str):
     return feature, bounds_wgs84, (min_x, min_y, max_x, max_y)
 
 
-def fetch_geoid_height(lon: float, lat: float) -> float:
-    query = urllib.parse.urlencode({"lat": lat, "lon": lon, "model": 14})
-    with urllib.request.urlopen(f"{NOAA_GEOID_URL}?{query}", timeout=30) as response:
-        payload = json.load(response)
-    if payload.get("geoidModel") != "GEOID18":
-        raise RuntimeError(f"NOAA returned an unexpected geoid model: {payload!r}")
-    height = float(payload["geoidHeight"])
-    if not math.isfinite(height):
-        raise RuntimeError(f"NOAA returned an invalid geoid height: {payload!r}")
-    return height
-
-
 def query_lidar(
     ept_url: str,
     bounds: tuple[float, ...],
     query_resolution: float,
     classifications: list[int] | None,
-    max_points: int,
-) -> laspy.LasData:
+) -> tuple[laspy.LasData, int]:
     min_x, min_y, max_x, max_y = bounds
     query = ept.EPT(
         ept_url.rstrip("/"),
@@ -198,13 +172,50 @@ def query_lidar(
                 + ", ".join(str(value) for value in classifications)
             )
 
-    if len(lidar.points) > max_points:
-        indices = np.sort(
-            np.random.default_rng(0).choice(
-                len(lidar.points), size=max_points, replace=False
-            )
+    source_point_count = len(lidar.points)
+    return spatially_thin_for_display(lidar), source_point_count
+
+
+def spatially_thin_for_display(lidar: laspy.LasData) -> laspy.LasData:
+    """Retain one surface sample per voxel while preserving sparse utilities."""
+    voxel_steps = tuple(
+        max(1, round(size / scale))
+        for size, scale in zip(
+            DISPLAY_VOXEL_METERS,
+            lidar.header.scales,
+            strict=True,
         )
-        lidar.points = lidar.points[indices]
+    )
+    selected_chunks: list[np.ndarray] = []
+    key_type = np.dtype(
+        [("x", "<i4"), ("y", "<i4"), ("z", "<i4"), ("classification", "u1")]
+    )
+
+    for start in range(0, len(lidar.points), VOXEL_CHUNK_POINTS):
+        end = min(start + VOXEL_CHUNK_POINTS, len(lidar.points))
+        classifications = np.asarray(lidar.classification[start:end])
+        utility_mask = np.isin(classifications, UTILITY_CLASSES)
+        surface_indices = np.flatnonzero(~utility_mask)
+
+        keys = np.empty(end - start, dtype=key_type)
+        keys["x"] = np.floor_divide(np.asarray(lidar.X[start:end]), voxel_steps[0])
+        keys["y"] = np.floor_divide(np.asarray(lidar.Y[start:end]), voxel_steps[1])
+        keys["z"] = np.floor_divide(np.asarray(lidar.Z[start:end]), voxel_steps[2])
+        keys["classification"] = classifications
+
+        if len(surface_indices) > 0:
+            _, first_positions = np.unique(
+                keys[surface_indices],
+                return_index=True,
+            )
+            surface_indices = surface_indices[first_positions]
+
+        local_indices = np.sort(
+            np.concatenate((surface_indices, np.flatnonzero(utility_mask)))
+        )
+        selected_chunks.append(local_indices + start)
+
+    lidar.points = lidar.points[np.concatenate(selected_chunks)]
     return lidar
 
 
@@ -258,14 +269,12 @@ def sample_imagery_colors(
     return imagery[rows, columns]
 
 
-def colorize_and_correct_height(
+def colorize_for_satellite_terrain(
     lidar: laspy.LasData,
-    geoid_height: float,
     imagery: np.ndarray,
     bounds: tuple[float, ...],
 ) -> laspy.LasData:
     colored = laspy.convert(lidar, point_format_id=7)
-    colored.z = np.asarray(colored.z) + geoid_height
     colors = sample_imagery_colors(colored, imagery, bounds).copy()
 
     # Preserve legibility for sparse utility classes whose footprints are too
@@ -287,8 +296,8 @@ def write_source_metadata(
     boundary_feature: dict,
     center: tuple[float, float],
     bounds: tuple[float, ...],
-    geoid_height: float,
     point_count: int,
+    source_point_count: int,
     imagery_dimensions: tuple[int, int],
     imagery_request_url: str,
 ) -> None:
@@ -304,9 +313,10 @@ def write_source_metadata(
         "center": list(center),
         "queryBoundsEpsg3857": list(bounds),
         "queryResolutionMeters": args.query_resolution,
-        "geoidModel": "GEOID18",
-        "geoidHeightMeters": geoid_height,
+        "verticalDatum": "NAVD88 source elevations retained for MapLibre raster-dem alignment",
         "pointCount": point_count,
+        "sourcePointCount": source_point_count,
+        "displayVoxelMeters": list(DISPLAY_VOXEL_METERS),
         "classifications": args.classifications,
         "groundPointsRendered": False,
         "pointColoring": {
@@ -328,6 +338,18 @@ def write_source_metadata(
 def normalize_tileset_metadata(output: Path) -> None:
     tileset_path = output / "tileset.json"
     tileset = json.loads(tileset_path.read_text())
+
+    def use_additive_point_refinement(tile: dict) -> None:
+        # Point-cloud hierarchy levels are independent density samples. Keeping
+        # py3dtiles' REPLACE parents above ADD children deadlocks loaders.gl's
+        # traversal: it waits for every child before replacing the parent while
+        # non-visible ADD children are deliberately not requested. ADD at every
+        # level streams visible detail without dropping the overview coverage.
+        tile["refine"] = "ADD"
+        for child in tile.get("children", []):
+            use_additive_point_refinement(child)
+
+    use_additive_point_refinement(tileset["root"])
     extras = tileset.setdefault("asset", {}).setdefault("extras", {})
     extras.pop("created_date", None)
     extras.update(
@@ -348,22 +370,19 @@ def build(args: argparse.Namespace) -> None:
         (bounds_wgs84[0] + bounds_wgs84[2]) / 2,
         (bounds_wgs84[1] + bounds_wgs84[3]) / 2,
     )
-    geoid_height = (
-        args.geoid_height
-        if args.geoid_height is not None
-        else fetch_geoid_height(*center)
-    )
-
     print(
         "Streaming city-wide USGS LiDAR for Golden boundary "
         f"at {args.query_resolution:g} m EPT resolution"
     )
-    lidar = query_lidar(
+    lidar, source_point_count = query_lidar(
         args.ept_url,
         bounds,
         args.query_resolution,
         args.classifications,
-        args.max_points,
+    )
+    print(
+        f"Spatial display sampling retained {len(lidar.points):,} of "
+        f"{source_point_count:,} classified points"
     )
     print("Fetching DRAPP orthophoto for point colorization")
     imagery, imagery_request_url = fetch_imagery(
@@ -371,48 +390,58 @@ def build(args: argparse.Namespace) -> None:
         bounds,
         args.imagery_size,
     )
-    colored = colorize_and_correct_height(lidar, geoid_height, imagery, bounds)
-    print(
-        f"Converting {len(colored.points):,} points with GEOID18 correction "
-        f"{geoid_height:+.3f} m"
-    )
+    colored = colorize_for_satellite_terrain(lidar, imagery, bounds)
+    print(f"Converting {len(colored.points):,} map-terrain-aligned points")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="geolibre-usgs-lidar-") as scratch:
+    with tempfile.TemporaryDirectory(
+        prefix=f".{args.output.name}-build-",
+        dir=args.output.parent,
+    ) as scratch:
         source_path = Path(scratch) / "source.las"
+        staged_output = Path(scratch) / "tiles"
         colored.write(source_path)
         convert(
             source_path,
-            outfolder=args.output,
+            outfolder=staged_output,
             overwrite=True,
             jobs=args.jobs,
             crs_out=CRS.from_epsg(4978),
             rgb=True,
             verbose=False,
         )
-
-    normalize_tileset_metadata(args.output)
-    obsolete_point_buffer = args.output / "points.bin"
-    if obsolete_point_buffer.exists():
-        obsolete_point_buffer.unlink()
-    (args.output / "boundary.geojson").write_text(
-        json.dumps(
-            {"type": "FeatureCollection", "features": [boundary_feature]},
-            separators=(",", ":"),
+        normalize_tileset_metadata(staged_output)
+        (staged_output / "boundary.geojson").write_text(
+            json.dumps(
+                {"type": "FeatureCollection", "features": [boundary_feature]},
+                separators=(",", ":"),
+            )
+            + "\n"
         )
-        + "\n"
-    )
-    write_source_metadata(
-        args.output,
-        args,
-        boundary_feature,
-        center,
-        bounds,
-        geoid_height,
-        len(colored.points),
-        (imagery.shape[1], imagery.shape[0]),
-        imagery_request_url,
-    )
+        write_source_metadata(
+            staged_output,
+            args,
+            boundary_feature,
+            center,
+            bounds,
+            len(colored.points),
+            source_point_count,
+            (imagery.shape[1], imagery.shape[0]),
+            imagery_request_url,
+        )
+
+        previous_output = Path(scratch) / "previous"
+        if args.output.exists():
+            args.output.rename(previous_output)
+        try:
+            staged_output.rename(args.output)
+        except BaseException:
+            if previous_output.exists() and not args.output.exists():
+                previous_output.rename(args.output)
+            raise
+        if previous_output.exists():
+            shutil.rmtree(previous_output)
+
     print(f"Wrote {args.output / 'tileset.json'}")
 
 

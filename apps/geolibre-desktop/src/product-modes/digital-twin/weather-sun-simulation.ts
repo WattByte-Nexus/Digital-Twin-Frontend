@@ -13,7 +13,9 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { weatherSettingsDateMs } from "./weather-settings-time";
 import {
   timeOfDayIllumination,
+  timeOfDayLightingOverlay,
   timeOfDaySky,
+  type TimeOfDayLightingOverlay,
 } from "./weather-time-of-day-presentation";
 
 const AUTO_CLOCK_REFRESH_MS = 60_000;
@@ -46,11 +48,12 @@ function numericPaintValue(value: unknown, fallback: number): number {
 export function createWeatherSunSimulationController(
   map: MapLibreMap,
   initialValue: WeatherSettingsValue,
+  onLightingOverlayChange: (overlay: TimeOfDayLightingOverlay) => void,
 ): WeatherSunSimulationController {
   let value = initialValue;
   let autoClock: ReturnType<typeof setInterval> | null = null;
   let destroyed = false;
-  let baseSky = map.getSky();
+  let baseSky = map.isStyleLoaded() ? map.getSky() : undefined;
   let baseHillshadeDirection: unknown;
   let baseHillshadeAltitude: unknown;
   const baseRasterPresentation = new Map<string, RasterPresentation>();
@@ -96,6 +99,8 @@ export function createWeatherSunSimulationController(
     const center = map.getCenter();
     const { altitude, azimuth } = sunPositionAt(dateMs, center.lat, center.lng);
     const illumination = timeOfDayIllumination(altitude);
+    onLightingOverlayChange(timeOfDayLightingOverlay(altitude));
+    if (!map.isStyleLoaded()) return;
     map.setSky(timeOfDaySky(altitude));
     for (const [layerId, base] of baseRasterPresentation) {
       if (!map.getLayer(layerId)) continue;
@@ -157,10 +162,9 @@ export function createWeatherSunSimulationController(
     syncClock();
   };
 
-  captureHillshade();
-  captureRasterPresentation();
-  applyPresentation(weatherSettingsDateMs(initialValue));
   map.on("style.load", handleStyleLoad);
+  if (map.isStyleLoaded()) handleStyleLoad();
+  else syncClock();
   syncAutoClock();
 
   return {
@@ -170,7 +174,7 @@ export function createWeatherSunSimulationController(
       stopAutoClock();
       map.off("style.load", handleStyleLoad);
       sun.destroy();
-      map.setSky(baseSky);
+      if (baseSky) map.setSky(baseSky);
       for (const [layerId, base] of baseRasterPresentation) {
         if (!map.getLayer(layerId)) continue;
         map.setPaintProperty(

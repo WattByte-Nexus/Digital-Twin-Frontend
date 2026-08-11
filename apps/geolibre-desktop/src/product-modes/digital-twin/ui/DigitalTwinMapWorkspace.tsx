@@ -55,6 +55,10 @@ import {
   createWeatherSunSimulationController,
   type WeatherSunSimulationController,
 } from "../weather-sun-simulation";
+import {
+  timeOfDayLightingOverlay,
+  type TimeOfDayLightingOverlay,
+} from "../weather-time-of-day-presentation";
 
 export type WorkspaceTheme = "light" | "dark";
 type LidarStatus = "loading" | "ready" | "error";
@@ -188,6 +192,8 @@ export function DigitalTwinMapWorkspace({
     })
   );
   const [lidarStatus, setLidarStatus] = useState<LidarStatus>("loading");
+  const [lightingOverlay, setLightingOverlay] =
+    useState<TimeOfDayLightingOverlay>(() => timeOfDayLightingOverlay(90));
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -238,7 +244,8 @@ export function DigitalTwinMapWorkspace({
       }
       weatherSunRef.current = createWeatherSunSimulationController(
         map,
-        weatherSettings
+        weatherSettings,
+        setLightingOverlay
       );
     }
   };
@@ -602,6 +609,16 @@ export function DigitalTwinMapWorkspace({
               themeMode={activeThemeMode}
               referenceOverlayVisibility={displaySettings}
               onMapReady={handleMapReady}
+            />
+
+            <div
+              aria-hidden="true"
+              data-time-of-day-lighting="true"
+              className="pointer-events-none absolute inset-0 z-[5] transition-[background-color,opacity] duration-500 motion-reduce:transition-none"
+              style={{
+                backgroundColor: lightingOverlay.color,
+                opacity: lightingOverlay.opacity,
+              }}
             />
 
             <div className="absolute bottom-4 left-4 z-10">

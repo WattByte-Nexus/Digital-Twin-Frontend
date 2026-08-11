@@ -129,10 +129,11 @@ deck.gl likewise documents meter offsets around a longitude/latitude/altitude
 origin, which is preferable to passing large global coordinates through
 single-precision GPU attributes. [deck.gl coordinate systems](https://deck.gl/docs/developer-guide/coordinate-systems)
 
-The most visible failure is usually a vertical-datum mismatch: orthometric
-LiDAR or DEM heights are treated as ellipsoidal heights, shifting the cloud by
-the local geoid separation. The existing Golden pilot already handles this
-case; see [`docs/usgs-lidar-3d-tiles.md`](../usgs-lidar-3d-tiles.md).
+The most visible failure is usually a vertical-datum mismatch. Both sides of a
+fusion must use the same convention: ellipsoidal heights for a globe, or the
+same sea-level/orthometric heights for a MapLibre `raster-dem` scene. The Golden
+pilot intentionally retains NAVD88 source Z values to match its terrain; see
+[`docs/usgs-lidar-3d-tiles.md`](../usgs-lidar-3d-tiles.md).
 
 After transformation, validate with surveyed checkpoints and stable tie objects
 such as pole bases, roof corners, and road markings. Report horizontal residuals

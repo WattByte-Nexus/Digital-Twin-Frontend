@@ -10,6 +10,7 @@ import { weatherSettingsDateMs } from "../apps/geolibre-desktop/src/product-mode
 import { createWeatherSunSimulationController } from "../apps/geolibre-desktop/src/product-modes/digital-twin/weather-sun-simulation";
 import {
   timeOfDayIllumination,
+  timeOfDayLightingOverlay,
   timeOfDaySky,
 } from "../apps/geolibre-desktop/src/product-modes/digital-twin/weather-time-of-day-presentation";
 
@@ -95,11 +96,23 @@ describe("timeOfDaySky", () => {
     assert.ok(timeOfDayIllumination(0) > 0);
     assert.ok(timeOfDayIllumination(0) < 1);
   });
+
+  it("provides a global lighting overlay that is strongest at night", () => {
+    const night = timeOfDayLightingOverlay(-30);
+    const twilight = timeOfDayLightingOverlay(-2);
+    const day = timeOfDayLightingOverlay(60);
+
+    assert.ok(night.opacity >= 0.6);
+    assert.ok(twilight.opacity > day.opacity);
+    assert.equal(day.opacity, 0);
+    assert.notEqual(night.color, twilight.color);
+  });
 });
 
 describe("createWeatherSunSimulationController", () => {
   it("applies popup time to sky, imagery, and numeric hillshade lighting", () => {
     const restoreDocument = installCanvasStub();
+    let styleLoaded = false;
     const layers = new Set<string>([
       SATELLITE_FALLBACK_LAYER_ID,
       SATELLITE_LAYER_ID,
@@ -118,6 +131,7 @@ describe("createWeatherSunSimulationController", () => {
       [`${TERRAIN_GROUND_LAYER_ID}:hillshade-illumination-altitude`, 45],
     ]);
     const skies: unknown[] = [];
+    const lightingOverlays: unknown[] = [];
     const map = {
       addLayer: (layer: { id: string }) => layers.add(layer.id),
       addSource: (id: string, source: unknown) => sources.set(id, source),
@@ -127,7 +141,7 @@ describe("createWeatherSunSimulationController", () => {
       getPaintProperty: (id: string, property: string) => paint.get(`${id}:${property}`),
       getSky: () => undefined,
       getSource: (id: string) => sources.get(id),
-      isStyleLoaded: () => true,
+      isStyleLoaded: () => styleLoaded,
       off: (event: string, listener: () => void) => listeners.get(event)?.delete(listener),
       on: (event: string, listener: () => void) => {
         const eventListeners = listeners.get(event) ?? new Set();
@@ -139,7 +153,10 @@ describe("createWeatherSunSimulationController", () => {
       setLight: () => undefined,
       setPaintProperty: (id: string, property: string, nextValue: unknown) =>
         paint.set(`${id}:${property}`, nextValue),
-      setSky: (sky: unknown) => skies.push(sky),
+      setSky: (sky: unknown) => {
+        if (!styleLoaded) throw new Error("Style is not done loading");
+        skies.push(sky);
+      },
     };
 
     try {
@@ -151,8 +168,14 @@ describe("createWeatherSunSimulationController", () => {
           hour: 2,
           minute: 0,
         },
+        (overlay) => lightingOverlays.push(overlay),
       );
 
+      assert.ok(lightingOverlays.length > 0);
+      assert.equal(skies.length, 0);
+
+      styleLoaded = true;
+      for (const listener of listeners.get("style.load") ?? []) listener();
       assert.ok(skies.length > 0);
       assert.equal(
         typeof paint.get(`${TERRAIN_GROUND_LAYER_ID}:hillshade-illumination-direction`),

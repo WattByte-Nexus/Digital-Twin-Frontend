@@ -4,7 +4,9 @@ import {
   createGoldenUsgsLidarLayer,
   DIGITAL_TWIN_LIDAR_OVERLAY_PROPS,
   GAUSSIAN_SURFEL_FRAGMENT_INJECTION,
+  GAUSSIAN_SURFEL_VERTEX_INJECTION,
   GaussianSurfelPointCloudLayer,
+  GOLDEN_LIDAR_TILESET_LOAD_OPTIONS,
   GOLDEN_USGS_LIDAR_TILESET_URL,
 } from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-lidar";
 
@@ -17,13 +19,22 @@ describe("Digital Twin LiDAR fusion layer", () => {
 
     assert.equal(DIGITAL_TWIN_LIDAR_OVERLAY_PROPS.interleaved, true);
     assert.equal(layer.props.data, GOLDEN_USGS_LIDAR_TILESET_URL);
-    assert.equal(layer.props.pointSize, 4);
+    assert.equal(layer.props.pointSize, 2.5);
     assert.equal(layer.props.pickable, false);
     assert.equal(layer.props.operation, "draw");
+    assert.equal(layer.props.loadOptions, GOLDEN_LIDAR_TILESET_LOAD_OPTIONS);
+    assert.equal(
+      layer.props.loadOptions?.tileset?.maximumScreenSpaceError,
+      1,
+    );
     assert.equal(
       layer.props._subLayerProps?.pointcloud?.type,
       GaussianSurfelPointCloudLayer,
     );
+    assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "meters");
+    assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /clamp\(/);
+    assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /1\.5/);
+    assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /18\.0/);
     assert.match(GAUSSIAN_SURFEL_FRAGMENT_INJECTION, /exp\(/);
     assert.match(GAUSSIAN_SURFEL_FRAGMENT_INJECTION, /geometry\.uv/);
   });

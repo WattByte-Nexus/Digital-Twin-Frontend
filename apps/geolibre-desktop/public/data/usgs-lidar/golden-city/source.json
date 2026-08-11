@@ -23,9 +23,14 @@
     4835069.5313
   ],
   "queryResolutionMeters": 1,
-  "geoidModel": "GEOID18",
-  "geoidHeightMeters": -15.588,
-  "pointCount": 750000,
+  "verticalDatum": "NAVD88 source elevations retained for MapLibre raster-dem alignment",
+  "pointCount": 13746412,
+  "sourcePointCount": 167621255,
+  "displayVoxelMeters": [
+    4.0,
+    4.0,
+    3.0
+  ],
   "classifications": [
     1,
     3,

@@ -16,9 +16,12 @@ The script installs its pinned Python dependencies in an isolated environment,
 loads Golden's current municipal boundary from the U.S. Census Bureau, streams
 its complete continuous bounding envelope at a 1-meter EPT sampling resolution,
 retains above-ground vegetation, building, conductor, and transmission-tower
-classifications, samples DRAPP 2022 orthophoto color onto them, and caps the
-core-app display cloud at 750,000 points. The terrain supplies the ground surface,
-so ground-class points are deliberately omitted. The continuous envelope fills
+classifications, spatially thins the 1 m query to one surface sample per
+4 × 4 × 3 m display voxel, and samples DRAPP 2022 orthophoto color onto the
+result. Unlike the former random city-wide cap, this preserves consistent local
+building density; conductor and tower points are retained in full. The terrain
+supplies the ground surface, so ground-class points are deliberately omitted.
+The continuous envelope fills
 municipal holes and irregular annexation gaps so no visible part of Golden
 disappears. It writes:
 
@@ -39,13 +42,12 @@ The same URL works in both the MapLibre/deck.gl map and the Cesium globe.
 
 ## Adjust density
 
-Decrease the EPT sampling resolution or raise the final point cap after `--` to
-trade build time, download size, repository size, and browser memory for detail:
+Increase the EPT sampling resolution after `--` to trade detail for build time,
+download size, repository size, and browser memory:
 
 ```sh
 npm run build:lidar:golden -- \
-  --query-resolution 2 \
-  --max-points 4000000
+  --query-resolution 2
 ```
 
 Use `--boundary-url` for another municipal GeoJSON query and `--ept-url` for a
@@ -67,10 +69,12 @@ collection at this center returns no points.
 
 ## Height and color handling
 
-USGS Golden elevations use NAVD88 with GEOID18. Web 3D globes use ellipsoidal
-height, so the script queries NOAA's GEOID18 service at the requested center and
-applies `ellipsoid height = NAVD88 height + geoid height` before tiling. Supply
-`--geoid-height` to use a precomputed correction in an offline build.
+USGS Golden elevations use NAVD88. This product is fused with MapLibre
+`raster-dem` terrain, whose elevation samples are also sea-level heights, so the
+build retains the source Z values. Applying a GEOID18 ellipsoid correction here
+would lower Golden's points by about 15.6 m relative to the rendered terrain and
+depth-occlude the surfels. A standalone globe export must instead transform both
+the terrain and point cloud to the same ellipsoidal-height convention.
 
 The source has intensity rather than aerial RGB values. The build requests a
 Web-Mercator DRCOG/Sanborn DRAPP 2022 orthophoto over the same bounds and samples

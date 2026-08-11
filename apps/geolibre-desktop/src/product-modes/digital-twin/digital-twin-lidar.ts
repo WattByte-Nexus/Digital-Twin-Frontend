@@ -1,10 +1,18 @@
 import { Tile3DLayer } from "@deck.gl/geo-layers";
 import { PointCloudLayer } from "@deck.gl/layers";
 
+export const GAUSSIAN_SURFEL_VERTEX_INJECTION = `
+  float projectedSurfelRadius = length(size.xy);
+  if (projectedSurfelRadius > 0.0) {
+    float clampedSurfelRadius = clamp(projectedSurfelRadius, 1.5, 18.0);
+    size.xy *= clampedSurfelRadius / projectedSurfelRadius;
+  }
+`;
+
 export const GAUSSIAN_SURFEL_FRAGMENT_INJECTION = `
   float gaussianRadiusSquared = dot(geometry.uv, geometry.uv);
-  float gaussianWeight = exp(-2.0 * gaussianRadiusSquared);
-  float gaussianEdgeFade = 1.0 - smoothstep(0.72, 1.0, gaussianRadiusSquared);
+  float gaussianWeight = exp(-1.25 * gaussianRadiusSquared);
+  float gaussianEdgeFade = 1.0 - smoothstep(0.78, 1.0, gaussianRadiusSquared);
   color.a *= gaussianWeight * gaussianEdgeFade;
   if (color.a < 0.01) {
     discard;
@@ -28,6 +36,7 @@ export class GaussianSurfelPointCloudLayer extends PointCloudLayer {
       ...shaders,
       inject: {
         ...shaders.inject,
+        "vs:DECKGL_FILTER_SIZE": GAUSSIAN_SURFEL_VERTEX_INJECTION,
         "fs:DECKGL_FILTER_COLOR": GAUSSIAN_SURFEL_FRAGMENT_INJECTION,
       },
     };
@@ -39,6 +48,16 @@ export const GOLDEN_USGS_LIDAR_TILESET_URL =
 
 export const DIGITAL_TWIN_LIDAR_OVERLAY_PROPS = {
   interleaved: true,
+} as const;
+
+export const GOLDEN_LIDAR_TILESET_LOAD_OPTIONS = {
+  tileset: {
+    // The city-wide hierarchy's source spacing is one metre. deck.gl's default
+    // SSE (16) can accept the sparse overview tile even at street level, so the
+    // detailed surfels are never requested. A one-pixel error budget keeps the
+    // hierarchy refining as the camera approaches the survey.
+    maximumScreenSpaceError: 1,
+  },
 } as const;
 
 interface GoldenUsgsLidarLayerCallbacks {
@@ -67,12 +86,14 @@ export function createGoldenUsgsLidarLayer({
   return new Tile3DLayer({
     id: "golden-usgs-lidar-point-cloud",
     data: GOLDEN_USGS_LIDAR_TILESET_URL,
-    pointSize: 4,
+    pointSize: 2.5,
     pickable: false,
     operation: "draw",
+    loadOptions: GOLDEN_LIDAR_TILESET_LOAD_OPTIONS,
     _subLayerProps: {
       pointcloud: {
         type: GaussianSurfelPointCloudLayer,
+        sizeUnits: "meters",
       },
     },
     onTileLoad: () => {

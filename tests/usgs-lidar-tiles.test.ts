@@ -12,12 +12,20 @@ const TILESET_DIR = path.join(
 interface Tile {
   content?: { uri?: string };
   children?: Tile[];
+  refine?: string;
 }
 
 function contentUris(tile: Tile): string[] {
   return [
     ...(tile.content?.uri ? [tile.content.uri] : []),
     ...(tile.children ?? []).flatMap(contentUris),
+  ];
+}
+
+function refinements(tile: Tile): string[] {
+  return [
+    ...(tile.refine ? [tile.refine] : []),
+    ...(tile.children ?? []).flatMap(refinements),
   ];
 }
 
@@ -30,9 +38,12 @@ describe("Golden USGS LiDAR 3D Tiles pilot", () => {
       await readFile(path.join(TILESET_DIR, "source.json"), "utf8"),
     ) as {
       pointCount: number;
+      sourcePointCount: number;
+      displayVoxelMeters: [number, number, number];
       source: string;
       rights: string;
       queryResolutionMeters: number;
+      verticalDatum: string;
       municipality: { GEOID: string };
       groundPointsRendered: boolean;
       classifications: number[];
@@ -41,8 +52,11 @@ describe("Golden USGS LiDAR 3D Tiles pilot", () => {
 
     assert.equal(tileset.asset.extras.source, "U.S. Geological Survey 3D Elevation Program");
     assert.equal(tileset.asset.extras.rights, "Public domain");
-    assert.equal(source.pointCount, 750_000);
+    assert.ok(source.pointCount > 750_000);
+    assert.ok(source.sourcePointCount > source.pointCount);
+    assert.deepEqual(source.displayVoxelMeters, [4, 4, 3]);
     assert.equal(source.queryResolutionMeters, 1);
+    assert.match(source.verticalDatum, /NAVD88.*MapLibre raster-dem/);
     assert.equal(source.municipality.GEOID, "0830835");
     assert.match(source.source, /U\.S\. Geological Survey/);
     assert.match(source.rights, /Public domain/);
@@ -53,6 +67,7 @@ describe("Golden USGS LiDAR 3D Tiles pilot", () => {
 
     const uris = contentUris(tileset.root);
     assert.ok(uris.length > 1);
+    assert.ok(refinements(tileset.root).every((refine) => refine === "ADD"));
     for (const uri of uris) {
       assert.match(uri, /\.pnts$/);
       const tilePath = path.join(TILESET_DIR, uri);
