@@ -44,14 +44,6 @@ const DEFAULT_DRACO_DECODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/exa
 const DEFAULT_KTX2_TRANSCODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
 const GOOGLE_PHOTOREALISTIC_TILES_URL = "https://tile.googleapis.com/v1/3dtiles/root.json";
 const GOOGLE_PHOTOREALISTIC_TILES_LABEL = "Google Photorealistic 3D Tiles";
-const GOLDEN_USGS_LIDAR_TILES_PATH = "/data/usgs-lidar/golden-city/tileset.json";
-const GOLDEN_USGS_LIDAR_TILES_URL = new URL(
-  GOLDEN_USGS_LIDAR_TILES_PATH,
-  window.location.origin,
-).href;
-const GOLDEN_USGS_LIDAR_TILES_LABEL = "Golden USGS LiDAR (3DEP)";
-const GOLDEN_USGS_LIDAR_SOURCE_KIND = "usgs-lidar-3d-tiles";
-const GOLDEN_USGS_LIDAR_LAYER_ID_PREFIX = "geolibre-usgs-lidar-3d-tiles";
 const ARCGIS_I3S_SAMPLE_TILES_URL =
   "https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/SanFrancisco_Bldgs/SceneServer/layers/0";
 const ARCGIS_I3S_SAMPLE_TILES_LABEL = "San Francisco Buildings (ArcGIS I3S)";
@@ -64,13 +56,6 @@ const GOOGLE_PHOTOREALISTIC_INITIAL_VIEW = {
   bearing: 90,
   pitch: 60,
 };
-const GOLDEN_USGS_LIDAR_INITIAL_VIEW = {
-  center: [-105.2211, 39.7555] as [number, number],
-  zoom: 18,
-  bearing: 0,
-  pitch: 60,
-};
-
 const THREE_D_TILES_OPTIONS = {
   className: "geolibre-3d-tiles-control",
   collapsed: true,
@@ -81,10 +66,6 @@ const THREE_D_TILES_OPTIONS = {
   // Empty input; the sample tileset is the explicit, opt-in way to load one.
   tilesetUrl: "",
   sampleData: [
-    {
-      label: GOLDEN_USGS_LIDAR_TILES_LABEL,
-      url: GOLDEN_USGS_LIDAR_TILES_URL,
-    },
     { label: "AGI HQ", url: DEFAULT_TILESET_URL },
     {
       label: GOOGLE_PHOTOREALISTIC_TILES_LABEL,
@@ -559,7 +540,7 @@ function isThreeDTilesControlLayer(layer: GeoLibreLayer): boolean {
     layer.type === "3d-tiles" &&
     layer.metadata.sourceKind === "3d-tiles-url" &&
     layer.metadata.externalNativeLayer === true &&
-    !isExternalDeckThreeDTilesLayer(layer)
+    !isGooglePhotorealisticTilesLayer(layer)
   );
 }
 
@@ -638,12 +619,6 @@ function installGooglePhotorealisticTilesPanelHandlers(
         return;
       }
       applyDefaults();
-      if (isGoldenUsgsLidarTilesetUrl(urlInput?.value ?? "")) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        addGoldenUsgsLidarTilesFromPanel(control, panel);
-        return;
-      }
       if (!isGooglePhotorealisticTilesetUrl(urlInput?.value ?? "")) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -655,10 +630,7 @@ function installGooglePhotorealisticTilesPanelHandlers(
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     const option = target.closest<HTMLButtonElement>(".three-d-tiles-sample-option");
-    if (
-      option?.title === GOOGLE_PHOTOREALISTIC_TILES_URL ||
-      option?.title === GOLDEN_USGS_LIDAR_TILES_URL
-    ) {
+    if (option?.title === GOOGLE_PHOTOREALISTIC_TILES_URL) {
       applyDefaults();
     }
   });
@@ -666,48 +638,11 @@ function installGooglePhotorealisticTilesPanelHandlers(
   applyDefaults();
 }
 
-function applyGoldenUsgsLidarPanelDefaults(
-  panel: HTMLElement,
-  urlInput: HTMLInputElement | null,
-): void {
-  if (urlInput?.value !== GOLDEN_USGS_LIDAR_TILES_URL) {
-    delete panel.dataset.geolibreGoldenAltitudeApplied;
-    return;
-  }
-
-  const layerNameInput = panel.querySelector<HTMLInputElement>('input[aria-label="Layer name"]');
-  if (
-    layerNameInput &&
-    (!layerNameInput.value.trim() ||
-      layerNameInput.value.trim() === "3D Tiles" ||
-      layerNameInput.value.trim() ===
-        layerNameFromUrl(GOLDEN_USGS_LIDAR_TILES_URL, "3D Tiles"))
-  ) {
-    layerNameInput.value = GOLDEN_USGS_LIDAR_TILES_LABEL;
-  }
-
-  const altitudeInput = panel.querySelector<HTMLInputElement>(
-    'input[aria-label="Altitude offset"]',
-  );
-  // The build pipeline converts orthometric USGS elevations to WGS84
-  // ellipsoidal heights, so applying the control's generic -300 m default
-  // would bury this sample below the terrain.
-  if (
-    altitudeInput &&
-    panel.dataset.geolibreGoldenAltitudeApplied !== "true" &&
-    (!altitudeInput.value.trim() || Number(altitudeInput.value) === -300)
-  ) {
-    altitudeInput.value = "0";
-    panel.dataset.geolibreGoldenAltitudeApplied = "true";
-  }
-}
-
 function applyGooglePhotorealisticTilesPanelDefaults(control: ThreeDTilesControl): void {
   const panel = getThreeDTilesPanel(control);
   if (!panel) return;
 
   const urlInput = getThreeDTilesUrlInput(panel);
-  applyGoldenUsgsLidarPanelDefaults(panel, urlInput);
   if (!urlInput || !isGooglePhotorealisticTilesetUrl(urlInput.value)) {
     // Switched away from the Google tileset: drop the masked X-GOOG-API-KEY the
     // Google flow injected so the native 3D Tiles submit path does not send or
@@ -894,85 +829,6 @@ async function addGooglePhotorealisticTilesFromPanel(
   updateGooglePhotorealisticTilesPanelList(control);
 }
 
-function addGoldenUsgsLidarTilesFromPanel(
-  control: ThreeDTilesControl,
-  panel: HTMLElement,
-): void {
-  const app = activeThreeDTilesApp;
-  if (!app) return;
-
-  const name =
-    panel.querySelector<HTMLInputElement>('input[aria-label="Layer name"]')?.value.trim() ||
-    GOLDEN_USGS_LIDAR_TILES_LABEL;
-  const flyTo =
-    panel.querySelector<HTMLInputElement>('input[aria-label="Fly to tileset after load"]')
-      ?.checked ?? true;
-  const visible =
-    panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')?.checked ?? true;
-  const opacity = numberValue(control.getState().opacity, 1);
-  const altitudeOffset = numberInputValue(
-    panel.querySelector<HTMLInputElement>('input[aria-label="Altitude offset"]')?.value,
-    0,
-  );
-
-  addGoldenUsgsLidarTilesLayer(app, {
-    name,
-    altitudeOffset,
-    opacity,
-    visible,
-    flyTo,
-    map: control.getMap(),
-  });
-  control.collapse();
-  updateGooglePhotorealisticTilesPanelList(control);
-}
-
-function addGoldenUsgsLidarTilesLayer(
-  app: GeoLibreAppAPI,
-  options: {
-    name: string;
-    altitudeOffset: number;
-    opacity: number;
-    visible: boolean;
-    flyTo: boolean;
-    map?: ReturnType<ThreeDTilesControl["getMap"]>;
-  },
-): string {
-  const id = `${GOLDEN_USGS_LIDAR_LAYER_ID_PREFIX}-${crypto.randomUUID()}`;
-  const deckLayerId = `${id}-deck`;
-
-  useAppStore.getState().addLayer({
-    id,
-    name: options.name,
-    type: "3d-tiles",
-    source: {
-      sourceId: id,
-      type: GOLDEN_USGS_LIDAR_SOURCE_KIND,
-      url: GOLDEN_USGS_LIDAR_TILES_URL,
-      altitudeOffset: options.altitudeOffset,
-    },
-    visible: options.visible,
-    opacity: options.opacity,
-    style: { ...DEFAULT_LAYER_STYLE },
-    metadata: {
-      customLayerType: GOLDEN_USGS_LIDAR_SOURCE_KIND,
-      externalDeckLayer: true,
-      externalNativeLayer: true,
-      identifiable: false,
-      nativeLayerIds: [deckLayerId],
-      sourceId: id,
-      sourceKind: GOLDEN_USGS_LIDAR_SOURCE_KIND,
-      bounds: [-105.2223, 39.7546, -105.2199, 39.7564],
-      altitudeOffset: options.altitudeOffset,
-    },
-    sourcePath: GOLDEN_USGS_LIDAR_TILES_URL,
-  });
-
-  void ensureGooglePhotorealisticTilesOverlay(app);
-  if (options.flyTo) flyToExternalDeckThreeDTilesLayer(app, { layerId: id, map: options.map });
-  return id;
-}
-
 /**
  * Intercept the 3D Tiles panel submit for ArcGIS I3S Scene Layer URLs and route
  * them to the deck.gl I3S overlay, since maplibre-gl-3d-tiles' three.js renderer
@@ -1031,7 +887,7 @@ function addArcgisI3sTilesFromPanel(control: ThreeDTilesControl, panel: HTMLElem
 }
 
 function restoreGooglePhotorealisticTilesLayers(app: GeoLibreAppAPI): void {
-  if (useAppStore.getState().layers.some(isExternalDeckThreeDTilesLayer)) {
+  if (useAppStore.getState().layers.some(isGooglePhotorealisticTilesLayer)) {
     void ensureGooglePhotorealisticTilesOverlay(app);
   }
 }
@@ -1097,7 +953,7 @@ function updateGooglePhotorealisticTilesPanelList(control: ThreeDTilesControl | 
   if (!panel) return;
 
   const nativeTilesetCount = control?.getState().tilesets.length ?? 0;
-  const googleLayers = useAppStore.getState().layers.filter(isExternalDeckThreeDTilesLayer);
+  const googleLayers = useAppStore.getState().layers.filter(isGooglePhotorealisticTilesLayer);
   const nativeStatus = panel.querySelector<HTMLElement>(".three-d-tiles-status");
   if (nativeStatus) {
     nativeStatus.hidden = nativeTilesetCount === 0 && googleLayers.length > 0;
@@ -1153,12 +1009,10 @@ function createGooglePhotorealisticTilesPanelListItem(layer: GeoLibreLayer): HTM
   const title = document.createElement("button");
   title.className = "three-d-tiles-list-title";
   title.type = "button";
-  const fallbackLabel = isGoldenUsgsLidarTilesLayer(layer)
-    ? GOLDEN_USGS_LIDAR_TILES_LABEL
-    : GOOGLE_PHOTOREALISTIC_TILES_LABEL;
+  const fallbackLabel = GOOGLE_PHOTOREALISTIC_TILES_LABEL;
   title.textContent = layer.name || fallbackLabel;
   title.addEventListener("click", () => {
-    if (googleTilesApp) flyToExternalDeckThreeDTilesLayer(googleTilesApp, { layerId: layer.id });
+    if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
   });
 
   const url = document.createElement("span");
@@ -1205,7 +1059,7 @@ function createGooglePhotorealisticTilesPanelListItem(layer: GeoLibreLayer): HTM
 
   const flyTo = createGooglePhotorealisticTilesPanelSmallButton("Fly");
   flyTo.addEventListener("click", () => {
-    if (googleTilesApp) flyToExternalDeckThreeDTilesLayer(googleTilesApp, { layerId: layer.id });
+    if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
   });
 
   const remove = createGooglePhotorealisticTilesPanelSmallButton("Remove");
@@ -1254,38 +1108,6 @@ function flyToGooglePhotorealisticTiles(
   });
 }
 
-function flyToExternalDeckThreeDTilesLayer(
-  app: GeoLibreAppAPI,
-  options: {
-    layerId: string;
-    map?: ReturnType<ThreeDTilesControl["getMap"]>;
-  },
-): void {
-  const layer = useAppStore.getState().layers.find(({ id }) => id === options.layerId);
-  if (!layer || !isGoldenUsgsLidarTilesLayer(layer)) {
-    flyToGooglePhotorealisticTiles(app, options.map);
-    return;
-  }
-
-  forceGooglePhotorealisticMercatorProjection(app, options.map);
-  useAppStore.getState().setMapView(
-    {
-      ...GOLDEN_USGS_LIDAR_INITIAL_VIEW,
-      bbox: undefined,
-    },
-    false,
-  );
-  const map = options.map ?? app.getMap?.();
-  if (!map) {
-    app.fitBounds?.([-105.2223, 39.7546, -105.2199, 39.7564]);
-    return;
-  }
-  map.flyTo({
-    ...GOLDEN_USGS_LIDAR_INITIAL_VIEW,
-    essential: true,
-  });
-}
-
 function forceGooglePhotorealisticMercatorProjection(
   app: GeoLibreAppAPI,
   mapOverride?: ReturnType<ThreeDTilesControl["getMap"]>,
@@ -1304,18 +1126,6 @@ function isGooglePhotorealisticTilesLayer(layer: GeoLibreLayer): boolean {
     (layer.metadata.sourceKind === GOOGLE_PHOTOREALISTIC_SOURCE_KIND ||
       isGooglePhotorealisticTilesetLayerUrl(layer))
   );
-}
-
-function isGoldenUsgsLidarTilesLayer(layer: GeoLibreLayer): boolean {
-  return (
-    layer.type === "3d-tiles" &&
-    (layer.metadata.sourceKind === GOLDEN_USGS_LIDAR_SOURCE_KIND ||
-      isGoldenUsgsLidarTilesetLayerUrl(layer))
-  );
-}
-
-function isExternalDeckThreeDTilesLayer(layer: GeoLibreLayer): boolean {
-  return isGooglePhotorealisticTilesLayer(layer) || isGoldenUsgsLidarTilesLayer(layer);
 }
 
 function ensureGooglePhotorealisticTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
@@ -1341,7 +1151,7 @@ async function runEnsureGooglePhotorealisticTilesOverlay(app: GeoLibreAppAPI): P
   googleTilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (state.layers !== previous.layers) {
       const currentGoogleLayerIds = new Set(
-        state.layers.filter(isExternalDeckThreeDTilesLayer).map(({ id }) => id),
+        state.layers.filter(isGooglePhotorealisticTilesLayer).map(({ id }) => id),
       );
       for (const layer of previous.layers) {
         if (isGooglePhotorealisticTilesLayer(layer) && !currentGoogleLayerIds.has(layer.id)) {
@@ -1375,7 +1185,7 @@ function addGoogleTilesRuntimeEnvListener(): void {
 function renderGooglePhotorealisticTilesLayers(): void {
   if (!googleTilesDeckGL || !googleTilesApp) return;
 
-  const layers = useAppStore.getState().layers.filter(isExternalDeckThreeDTilesLayer);
+  const layers = useAppStore.getState().layers.filter(isGooglePhotorealisticTilesLayer);
 
   // Drop our contribution and release the mercator lock once the last Google
   // tileset is gone. A non-null signature means we currently hold layers, so
@@ -1402,7 +1212,7 @@ function renderGooglePhotorealisticTilesLayers(): void {
 
   const deckLayers = layers
     .filter((layer) => layer.visible)
-    .map((layer) => buildExternalDeckThreeDTilesLayer(layer))
+    .map((layer) => buildGooglePhotorealisticTilesLayer(layer))
     .filter((layer): layer is Layer => layer !== null)
     .reverse();
 
@@ -1427,28 +1237,20 @@ function googleTilesLayerSignature(layers: GeoLibreLayer[]): string {
     .join("|");
 }
 
-function buildExternalDeckThreeDTilesLayer(layer: GeoLibreLayer): Layer | null {
+function buildGooglePhotorealisticTilesLayer(layer: GeoLibreLayer): Layer | null {
   if (!googleTilesDeckGL) return null;
   const altitudeOffset = numberValue(layer.source.altitudeOffset, 0);
-  const isGoogle = isGooglePhotorealisticTilesLayer(layer);
-  const data = isGoogle
-    ? GOOGLE_PHOTOREALISTIC_TILES_URL
-    : (stringValue(layer.source.url) ?? layer.sourcePath);
-  if (!data) return null;
-  const requestHeaders = isGoogle
-    ? resolveThreeDTilesRequestHeaders(
-        GOOGLE_PHOTOREALISTIC_TILES_URL,
-        stringRecordValue(layer.source.requestHeaders),
-        googleTilesApiKeysByLayerId.get(layer.id),
-      )
-    : stringRecordValue(layer.source.requestHeaders);
+  const requestHeaders = resolveThreeDTilesRequestHeaders(
+    GOOGLE_PHOTOREALISTIC_TILES_URL,
+    stringRecordValue(layer.source.requestHeaders),
+    googleTilesApiKeysByLayerId.get(layer.id),
+  );
 
   const Tile3DLayer = getGoogleAltitudeOffsetTile3DLayerClass();
   return new Tile3DLayer({
     id: googlePhotorealisticTilesDeckLayerId(layer),
-    data,
+    data: GOOGLE_PHOTOREALISTIC_TILES_URL,
     altitudeOffset,
-    pointSize: isGoldenUsgsLidarTilesLayer(layer) ? 3 : undefined,
     // Tileset caps + main-thread parsing shared with the I3S overlay (see
     // THREE_D_TILES_DECK_LOAD_OPTIONS for why workers are disabled), plus this
     // layer's per-request auth headers.
@@ -1748,19 +1550,6 @@ function rememberGoogleMapsApiKeyFromHeaders(
 function isGooglePhotorealisticTilesetLayerUrl(layer: GeoLibreLayer): boolean {
   const url = stringValue(layer.source.url) ?? layer.sourcePath;
   return url ? isGooglePhotorealisticTilesetUrl(url) : false;
-}
-
-function isGoldenUsgsLidarTilesetUrl(url: string): boolean {
-  try {
-    return new URL(url, window.location.origin).pathname === GOLDEN_USGS_LIDAR_TILES_PATH;
-  } catch {
-    return false;
-  }
-}
-
-function isGoldenUsgsLidarTilesetLayerUrl(layer: GeoLibreLayer): boolean {
-  const url = stringValue(layer.source.url) ?? layer.sourcePath;
-  return url ? isGoldenUsgsLidarTilesetUrl(url) : false;
 }
 
 function urlHasKeyQueryParam(url: string): boolean {

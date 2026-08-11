@@ -117,7 +117,7 @@ export function rememberDigitalTwinApiUrl(value: string): void {
   window.localStorage?.setItem(API_STORAGE_KEY, normalizeDigitalTwinApiUrl(value));
 }
 
-function resolveApiUrl(apiUrl: string, path: string): string {
+export function resolveDigitalTwinApiUrl(apiUrl: string, path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
   return new URL(path.replace(/^\/+/, ""), `${apiUrl}/`).href;
 }
@@ -152,7 +152,7 @@ function parseLayer(
     name: nonEmptyString(value.name) ?? layerId,
     band: nonEmptyString(value.band),
     units: nonEmptyString(value.units),
-    url: resolveApiUrl(apiUrl, sourceUrl),
+    url: resolveDigitalTwinApiUrl(apiUrl, sourceUrl),
     regionId,
     regionName,
     sourceReady: value.source_ready === true,
@@ -301,7 +301,7 @@ export async function fetchDigitalTwinEarthEngineCatalog(
 
   const regionPage = await requestJson(
     fetchImpl,
-    resolveApiUrl(apiUrl, "/api/v1/regions?limit=100"),
+    resolveDigitalTwinApiUrl(apiUrl, "/api/v1/regions?limit=100"),
     options.signal,
   );
   const regions = pageItems(regionPage).flatMap((value) => {
@@ -315,7 +315,7 @@ export async function fetchDigitalTwinEarthEngineCatalog(
     regions.map(async (region) => {
       const response = await requestJson(
         fetchImpl,
-        resolveApiUrl(
+        resolveDigitalTwinApiUrl(
           apiUrl,
           `/api/v1/regions/${encodeURIComponent(region.id)}/earth-engine/map-layers`,
         ),

@@ -44,9 +44,14 @@ import {
   Sun,
 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { defaultDigitalTwinApiUrl } from "../../../lib/digital-twin-earth-engine";
 import {
-  createGoldenUsgsLidarLayer,
+  fetchActiveDigitalTwinPointCloud,
+  type DigitalTwinPointCloudResult,
+} from "../../../lib/digital-twin-point-cloud";
+import {
+  createDigitalTwinPointCloudLayer,
   DIGITAL_TWIN_LIDAR_OVERLAY_PROPS,
 } from "../digital-twin-lidar";
 import { DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG } from "../satellite-terrain-config";
@@ -58,19 +63,68 @@ import {
   timeOfDayLightingOverlay,
   type TimeOfDayLightingOverlay,
 } from "../weather-time-of-day-presentation";
+import {
+  SIMULATION_RUNS,
+  createSimulationRun,
+  type ScenarioRunRequest,
+  type SimulationRun,
+} from "./simulation-flow";
+import { RunsView } from "./views/RunsView";
+import {
+  ScenariosView,
+} from "./views/ScenariosView";
+import type { ScenarioMapController } from "./views/ScenarioBuilder";
 
 export type WorkspaceTheme = "light" | "dark";
+
+type PointCloudLoadState =
+  | DigitalTwinPointCloudResult
+  | { status: "loading" }
+  | { status: "error"; error: Error };
+
+function pointCloudDatasetKey(
+  dataset: Extract<DigitalTwinPointCloudResult, { status: "ready" }>["dataset"],
+): string {
+  return `${dataset.regionId}:${dataset.datasetId}:${dataset.version}`;
+}
+
+function pointCloudStatusText(
+  pointCloud: PointCloudLoadState,
+  readyDatasetKey: string | null,
+  enabled: boolean,
+): string {
+  if (!enabled) return "Point clouds disabled.";
+  if (pointCloud.status === "loading") return "Point-cloud metadata loading.";
+  if (pointCloud.status === "none") {
+    return "No point-cloud dataset is available for the selected region.";
+  }
+  if (pointCloud.status === "error") {
+    return `Point cloud failed to load: ${pointCloud.error.message}`;
+  }
+  if (pointCloud.status === "ready") {
+    return readyDatasetKey === pointCloudDatasetKey(pointCloud.dataset)
+      ? `${pointCloud.dataset.name} ready.`
+      : `${pointCloud.dataset.name} tiles loading.`;
+  }
+  if (pointCloud.status === "queued") return "Point-cloud build queued.";
+  if (pointCloud.status === "building") return "Point-cloud build in progress.";
+  return pointCloud.dataset.failureCode
+    ? `Point-cloud build failed: ${pointCloud.dataset.failureCode}`
+    : "Point-cloud build failed.";
+}
 
 export interface DigitalTwinMapWorkspaceProps {
   activeDestination?: DigitalTwinDestination;
   activeRegionId?: string;
+  digitalTwinApiUrl?: string;
+  location?: string;
   operator?: DigitalTwinOperator;
   organizationName?: string;
   regions?: DigitalTwinRegion[];
   showLidar?: boolean;
   showWeather?: boolean;
   themeMode?: WorkspaceTheme;
-  onNavigate?: (destination: DigitalTwinDestination) => void;
+  onNavigate?: (destination: DigitalTwinDestination, resourceId?: string) => void;
   onOpenAdministration?: () => void;
   onOpenDiagnostics?: () => void;
   onOpenExpertWorkspace?: () => void;
@@ -150,6 +204,8 @@ const WORKSPACE_RUNS = [
 export function DigitalTwinMapWorkspace({
   activeDestination: controlledDestination,
   activeRegionId: controlledRegionId,
+  digitalTwinApiUrl = defaultDigitalTwinApiUrl(),
+  location = "",
   operator = {
     name: "Maya Chen",
     role: "Grid operations supervisor",
@@ -168,13 +224,28 @@ export function DigitalTwinMapWorkspace({
   onToggleTheme,
 }: DigitalTwinMapWorkspaceProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
+  const interactionMapControllerRef = useRef<ScenarioMapController | null>(null);
+  if (interactionMapControllerRef.current === null) {
+    interactionMapControllerRef.current = { getMap: () => mapRef.current };
+  }
   const lidarOverlayRef = useRef<MapboxOverlay | null>(null);
-  const lidarLayerRef = useRef<ReturnType<typeof createGoldenUsgsLidarLayer> | null>(null);
+  const lidarLayerRef = useRef<ReturnType<
+    typeof createDigitalTwinPointCloudLayer
+  > | null>(null);
   const weatherSunRef = useRef<WeatherSunSimulationController | null>(null);
+  const [mapInstance, setMapInstance] = useState<MapLibreMap | null>(null);
+  const [pointCloud, setPointCloud] = useState<PointCloudLoadState>({
+    status: "none",
+  });
+  const [pointCloudAttempt, setPointCloudAttempt] = useState(0);
+  const [readyPointCloudDatasetKey, setReadyPointCloudDatasetKey] = useState<
+    string | null
+  >(null);
   const [displaySettings, setDisplaySettings] =
     useState<DigitalTwinMapDisplaySettings>(
       DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS
     );
+  const pointCloudsVisibleRef = useRef(displaySettings.pointClouds);
   const [viewMode, setViewMode] = useState<"3d" | "plan">("3d");
   const [activeThemeMode, setActiveThemeMode] = useState(themeMode);
   const [localRegionId, setLocalRegionId] = useState(
@@ -195,6 +266,9 @@ export function DigitalTwinMapWorkspace({
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [launchedRuns, setLaunchedRuns] = useState<SimulationRun[]>([]);
+  const [scenarioCreationRequest, setScenarioCreationRequest] = useState(0);
+  const runSequenceRef = useRef(1);
   const [mapPanelContainer, setMapPanelContainer] =
     useState<HTMLDivElement | null>(null);
   const visibleDetailCount = Object.entries(displaySettings).filter(
@@ -209,39 +283,16 @@ export function DigitalTwinMapWorkspace({
     () => () => {
       weatherSunRef.current?.destroy();
       weatherSunRef.current = null;
-      const overlay = lidarOverlayRef.current;
-      const map = mapRef.current;
-      if (overlay && map) map.removeControl(overlay);
-      lidarOverlayRef.current = null;
-      lidarLayerRef.current = null;
     },
     []
   );
 
   const handleMapReady = (map: MapLibreMap | null) => {
-    const previousOverlay = lidarOverlayRef.current;
-    const previousMap = mapRef.current;
-    if (previousOverlay && previousMap) previousMap.removeControl(previousOverlay);
-    lidarOverlayRef.current = null;
-    lidarLayerRef.current = null;
     weatherSunRef.current?.destroy();
     weatherSunRef.current = null;
     mapRef.current = map;
+    setMapInstance(map);
     if (map) {
-      if (showLidar) {
-        const lidarLayer = createGoldenUsgsLidarLayer({
-          onError: (error) => {
-            console.error("Golden USGS LiDAR could not be loaded", error);
-          },
-        });
-        lidarLayerRef.current = lidarLayer;
-        const lidarOverlay = new MapboxOverlay({
-          ...DIGITAL_TWIN_LIDAR_OVERLAY_PROPS,
-          layers: displaySettings.pointClouds ? [lidarLayer] : [],
-        });
-        map.addControl(lidarOverlay);
-        lidarOverlayRef.current = lidarOverlay;
-      }
       weatherSunRef.current = createWeatherSunSimulationController(
         map,
         weatherSettings,
@@ -251,11 +302,95 @@ export function DigitalTwinMapWorkspace({
   };
 
   useEffect(() => {
+    if (!showLidar || !activeRegionId) {
+      setReadyPointCloudDatasetKey(null);
+      setPointCloud({ status: "none" });
+      return;
+    }
+
+    const controller = new AbortController();
+    let disposed = false;
+    setReadyPointCloudDatasetKey(null);
+    setPointCloud({ status: "loading" });
+    void fetchActiveDigitalTwinPointCloud(digitalTwinApiUrl, activeRegionId, {
+      signal: controller.signal,
+    })
+      .then((result) => {
+        if (!disposed) setPointCloud(result);
+      })
+      .catch((cause: unknown) => {
+        if (disposed || (cause instanceof Error && cause.name === "AbortError")) {
+          return;
+        }
+        const error =
+          cause instanceof Error
+            ? cause
+            : new Error("Digital Twin point-cloud request failed.");
+        console.error("Digital Twin point-cloud catalog could not be loaded", error);
+        setPointCloud({ status: "error", error });
+      });
+
+    return () => {
+      disposed = true;
+      controller.abort();
+    };
+  }, [activeRegionId, digitalTwinApiUrl, pointCloudAttempt, showLidar]);
+
+  useLayoutEffect(() => {
+    if (
+      !mapInstance ||
+      !showLidar ||
+      pointCloud.status !== "ready" ||
+      pointCloud.dataset.regionId !== activeRegionId
+    ) {
+      return;
+    }
+
+    const datasetKey = pointCloudDatasetKey(pointCloud.dataset);
+    const lidarLayer = createDigitalTwinPointCloudLayer(pointCloud.dataset, {
+      onError: (error) => {
+        console.error(`${pointCloud.dataset.name} could not be loaded`, error);
+        setPointCloud((current) =>
+          current.status === "ready" &&
+          pointCloudDatasetKey(current.dataset) === datasetKey
+            ? { status: "error", error }
+            : current
+        );
+      },
+      onReady: () => setReadyPointCloudDatasetKey(datasetKey),
+    });
+    const lidarOverlay = new MapboxOverlay({
+      ...DIGITAL_TWIN_LIDAR_OVERLAY_PROPS,
+      layers: pointCloudsVisibleRef.current ? [lidarLayer] : [],
+    });
+    mapInstance.addControl(lidarOverlay);
+    lidarLayerRef.current = lidarLayer;
+    lidarOverlayRef.current = lidarOverlay;
+
+    return () => {
+      if (lidarOverlayRef.current === lidarOverlay) {
+        mapInstance.removeControl(lidarOverlay);
+        lidarOverlayRef.current = null;
+        lidarLayerRef.current = null;
+      }
+    };
+  }, [activeRegionId, mapInstance, pointCloud, showLidar]);
+
+  useEffect(() => {
+    pointCloudsVisibleRef.current = displaySettings.pointClouds;
     const overlay = lidarOverlayRef.current;
     const layer = lidarLayerRef.current;
     if (!overlay || !layer) return;
     overlay.setProps({ layers: displaySettings.pointClouds ? [layer] : [] });
   }, [displaySettings.pointClouds]);
+
+  const activePointCloudStatus = pointCloudStatusText(
+    pointCloud,
+    readyPointCloudDatasetKey,
+    showLidar,
+  );
+  const canRetryPointCloud =
+    pointCloud.status === "error" || pointCloud.status === "failed";
 
   const handleWeatherSettingsChange = (nextValue: WeatherSettingsValue) => {
     setWeatherSettings(nextValue);
@@ -315,9 +450,16 @@ export function DigitalTwinMapWorkspace({
     setCommandOpen(false);
   };
 
-  const navigateTo = (destination: DigitalTwinDestination) => {
+  const navigateTo = (destination: DigitalTwinDestination, resourceId?: string) => {
     setLocalDestination(destination);
-    onNavigate?.(destination);
+    onNavigate?.(destination, resourceId);
+  };
+
+  const launchSimulation = (request: ScenarioRunRequest) => {
+    const run = createSimulationRun(request, runSequenceRef.current);
+    runSequenceRef.current += 1;
+    setLaunchedRuns((current) => [run, ...current]);
+    navigateTo("runs", run.id);
   };
 
   const selectRegion = (regionId: string) => {
@@ -330,6 +472,84 @@ export function DigitalTwinMapWorkspace({
     setActiveThemeMode((current) => (current === "light" ? "dark" : "light"));
     onToggleTheme?.();
   };
+
+  const mapSurface = (
+    <div
+      className="relative h-full min-h-0 w-full overflow-hidden bg-background"
+      ref={setMapPanelContainer}
+    >
+      <SatelliteTerrainMap
+        {...DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG}
+        satelliteVisible={displaySettings.satellite}
+        elevationEnabled={displaySettings.elevation}
+        themeMode={activeThemeMode}
+        referenceOverlayVisibility={displaySettings}
+        onMapReady={handleMapReady}
+      />
+
+      <div
+        aria-hidden="true"
+        data-time-of-day-lighting="true"
+        className="pointer-events-none absolute inset-0 z-[5] transition-[background-color,opacity] duration-500 motion-reduce:transition-none"
+        style={{
+          backgroundColor: lightingOverlay.color,
+          opacity: lightingOverlay.opacity,
+        }}
+      />
+
+      {activeDestination === "live" ? (
+        <>
+          <div className="absolute bottom-4 left-4 z-10">
+            <DigitalTwinMapStatus
+              viewMode={viewMode}
+              visibleDetailCount={visibleDetailCount}
+            />
+          </div>
+
+          <div className="absolute bottom-6 right-4 z-10">
+            <DigitalTwinMonitoringStatus themeMode={activeThemeMode} />
+          </div>
+
+          {showWeather ? (
+            <WeatherSettingsFloatingPanel
+              theme={activeThemeMode}
+              location="Boulder County, Colorado"
+              value={weatherSettings}
+              onValueChange={handleWeatherSettingsChange}
+              trigger={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="border bg-background/95 text-foreground shadow-lg backdrop-blur"
+                  aria-label="Open weather settings"
+                  title="Weather settings"
+                >
+                  <CloudSun aria-hidden="true" />
+                </Button>
+              }
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      <output aria-live="polite" className="sr-only">
+        {activePointCloudStatus}
+      </output>
+
+      {canRetryPointCloud && activeDestination === "live" ? (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="absolute bottom-16 left-4 z-10 border bg-background/95 shadow-lg backdrop-blur"
+          onClick={() => setPointCloudAttempt((attempt) => attempt + 1)}
+        >
+          Retry point cloud
+        </Button>
+      ) : null}
+    </div>
+  );
 
   return (
     <div
@@ -609,61 +829,30 @@ export function DigitalTwinMapWorkspace({
             </CommandList>
           </CommandDialog>
 
-          <div
-            className="relative min-h-0 flex-1 overflow-hidden bg-background"
-            ref={setMapPanelContainer}
-          >
-            <SatelliteTerrainMap
-              {...DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG}
-              satelliteVisible={displaySettings.satellite}
-              elevationEnabled={displaySettings.elevation}
-              themeMode={activeThemeMode}
-              referenceOverlayVisibility={displaySettings}
-              onMapReady={handleMapReady}
+          {activeDestination === "scenarios" ? (
+            <ScenariosView
+              creationRequest={scenarioCreationRequest}
+              mapControllerRef={interactionMapControllerRef}
+              mapSlot={mapSurface}
+              onRun={launchSimulation}
+              theme={activeThemeMode}
             />
-
-            <div
-              aria-hidden="true"
-              data-time-of-day-lighting="true"
-              className="pointer-events-none absolute inset-0 z-[5] transition-[background-color,opacity] duration-500 motion-reduce:transition-none"
-              style={{
-                backgroundColor: lightingOverlay.color,
-                opacity: lightingOverlay.opacity,
+          ) : activeDestination === "runs" ? (
+            <RunsView
+              location={location}
+              mapSlot={mapSurface}
+              onCreateScenario={() => {
+                setScenarioCreationRequest((request) => request + 1);
+                navigateTo("scenarios");
               }}
+              onOpenRun={(runId) => navigateTo("runs", runId)}
+              onReturnToRuns={() => navigateTo("runs")}
+              runs={[...launchedRuns, ...SIMULATION_RUNS]}
+              theme={activeThemeMode}
             />
-
-            <div className="absolute bottom-4 left-4 z-10">
-              <DigitalTwinMapStatus
-                viewMode={viewMode}
-                visibleDetailCount={visibleDetailCount}
-              />
-            </div>
-
-            <div className="absolute bottom-6 right-4 z-10">
-              <DigitalTwinMonitoringStatus themeMode={activeThemeMode} />
-            </div>
-
-            {showWeather ? (
-              <WeatherSettingsFloatingPanel
-                theme={activeThemeMode}
-                location="Boulder County, Colorado"
-                value={weatherSettings}
-                onValueChange={handleWeatherSettingsChange}
-                trigger={
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="icon"
-                    className="border bg-background/95 text-foreground shadow-lg backdrop-blur"
-                    aria-label="Open weather settings"
-                    title="Weather settings"
-                  >
-                    <CloudSun aria-hidden="true" />
-                  </Button>
-                }
-              />
-            ) : null}
-          </div>
+          ) : (
+            mapSurface
+          )}
         </SidebarInset>
       </SidebarProvider>
     </div>

@@ -1,5 +1,6 @@
 import { Tile3DLayer } from "@deck.gl/geo-layers";
 import { PointCloudLayer } from "@deck.gl/layers";
+import type { DigitalTwinReadyPointCloudDataset } from "../../lib/digital-twin-point-cloud";
 
 export const GAUSSIAN_SURFEL_VERTEX_INJECTION = `
   float projectedSurfelRadius = length(size.xy);
@@ -43,40 +44,46 @@ export class GaussianSurfelPointCloudLayer extends PointCloudLayer {
   }
 }
 
-export const GOLDEN_USGS_LIDAR_TILESET_URL =
-  "/data/usgs-lidar/golden-city/tileset.json";
-
 export const DIGITAL_TWIN_LIDAR_OVERLAY_PROPS = {
   interleaved: true,
 } as const;
 
-export const GOLDEN_LIDAR_TILESET_LOAD_OPTIONS = {
+export const POINT_CLOUD_TILESET_LOAD_OPTIONS = {
   tileset: {
-    // The city-wide hierarchy's source spacing is one metre. deck.gl's default
-    // SSE (16) can accept the sparse overview tile even at street level, so the
-    // detailed surfels are never requested. A one-pixel error budget keeps the
-    // hierarchy refining as the camera approaches the survey.
+    // A one-pixel error budget keeps the hierarchy refining near the camera.
     maximumScreenSpaceError: 1,
+    // Bound decoded tile memory independently of the browser cache.
+    maximumMemoryUsage: 512,
+    memoryAdjustedScreenSpaceError: true,
+    throttleRequests: true,
+  },
+  core: {
+    // Point-cloud payloads are already spatially bounded. Keeping parsing on the
+    // app origin also avoids loaders.gl trying to fetch worker bundles from a CDN.
+    worker: false,
   },
 } as const;
 
-interface GoldenUsgsLidarLayerCallbacks {
+interface DigitalTwinPointCloudLayerCallbacks {
   onError: (error: Error) => void;
   onReady?: () => void;
 }
 
+function pointSizeForSpacing(minimumSpacingMeters: number): number {
+  return Math.min(2.5, Math.max(0.5, minimumSpacingMeters * 1.5));
+}
+
 /**
- * Builds the streamed Golden LiDAR layer used by the Digital Twin map.
+ * Builds a streamed point-cloud layer from an Engine dataset descriptor.
  *
- * The 3D Tiles hierarchy replaces the former monolithic point buffer so deck.gl
- * can select spatial detail from the current camera. The layer is intentionally
- * depth-tested: ground is supplied by the satellite terrain, while Gaussian
- * surfels provide smooth above-ground survey structure without reconstruction.
+ * deck.gl selects spatial detail from the current camera. The layer remains
+ * depth-tested so terrain supplies the ground while Gaussian surfels provide
+ * smooth above-ground survey structure.
  */
-export function createGoldenUsgsLidarLayer({
-  onError,
-  onReady,
-}: GoldenUsgsLidarLayerCallbacks): Tile3DLayer {
+export function createDigitalTwinPointCloudLayer(
+  dataset: DigitalTwinReadyPointCloudDataset,
+  { onError, onReady }: DigitalTwinPointCloudLayerCallbacks,
+): Tile3DLayer {
   let firstTileLoaded = false;
 
   const reportError = (error: Error) => {
@@ -84,12 +91,12 @@ export function createGoldenUsgsLidarLayer({
   };
 
   return new Tile3DLayer({
-    id: "golden-usgs-lidar-point-cloud",
-    data: GOLDEN_USGS_LIDAR_TILESET_URL,
-    pointSize: 2.5,
+    id: `digital-twin-point-cloud-${dataset.datasetId}`,
+    data: dataset.tilesetUrl,
+    pointSize: pointSizeForSpacing(dataset.minimumSpacingMeters),
     pickable: false,
     operation: "draw",
-    loadOptions: GOLDEN_LIDAR_TILESET_LOAD_OPTIONS,
+    loadOptions: POINT_CLOUD_TILESET_LOAD_OPTIONS,
     _subLayerProps: {
       pointcloud: {
         type: GaussianSurfelPointCloudLayer,
@@ -104,7 +111,9 @@ export function createGoldenUsgsLidarLayer({
     // @loaders.gl calls this as (tile, message, url), despite deck.gl's type
     // declaration naming the string arguments in the opposite order.
     onTileError: (_tile, message, url) => {
-      reportError(new Error(`Golden LiDAR tile failed to load: ${message} (${url})`));
+      reportError(
+        new Error(`${dataset.name} tile failed to load: ${message} (${url})`),
+      );
     },
     onError: (error) => {
       reportError(error);
