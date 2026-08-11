@@ -50,6 +50,13 @@ clear metadata-only state when those endpoints are unavailable.
 For local development, restart `npm run dev` after adding or updating a bundled
 plugin so Vite rescans `public/plugins/`.
 
+## Golden test power lines
+
+`assets/golden_test_power_lines.geojson` contains a small connected 13.8 kV
+test feeder centered on Golden, Colorado. Its 16 two-vertex spans use the same
+`power_line_span` GeoJSON shape accepted by the region seeding tooling, so it
+can be uploaded to a development Engine without transforming the geometry.
+
 ## Seed the Boulder demo region
 
 With the Digital Twin Engine API running locally, create and publish a region

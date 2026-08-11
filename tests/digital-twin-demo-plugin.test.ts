@@ -275,6 +275,45 @@ describe("digital-twin-demo bundled plugin", () => {
     );
   });
 
+  it("moves the camera to a region as soon as it is selected", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+    const loadRegionStart = source.indexOf("  async loadRegion(regionId) {");
+    const loadRegionEnd = source.indexOf("\n  presentMapAfterFit()", loadRegionStart);
+    const loadRegionSource = source.slice(loadRegionStart, loadRegionEnd);
+    const cameraFit = loadRegionSource.indexOf("this.app.fitBounds?.(");
+    const inventoryRequests = loadRegionSource.indexOf("await Promise.all([");
+
+    assert.ok(loadRegionStart >= 0, "loadRegion must exist");
+    assert.ok(cameraFit >= 0, "region selection must fit the camera");
+    assert.ok(inventoryRequests >= 0, "region inventory must still load");
+    assert.ok(
+      cameraFit < inventoryRequests,
+      "camera movement must not wait for region inventory requests",
+    );
+  });
+
+  it("ships a connected Golden test power-line dataset", async () => {
+    const fixtureUrl = new URL("assets/golden_test_power_lines.geojson", pluginRoot);
+    const collection = JSON.parse(await readFile(fixtureUrl, "utf8"));
+
+    assert.equal(collection.type, "FeatureCollection");
+    assert.ok(collection.features.length >= 10);
+    for (const [index, feature] of collection.features.entries()) {
+      assert.equal(feature.geometry.type, "LineString");
+      assert.equal(feature.geometry.coordinates.length, 2);
+      assert.equal(feature.properties.asset_type, "power_line_span");
+      for (const [longitude, latitude] of feature.geometry.coordinates) {
+        assert.ok(longitude >= -105.25 && longitude <= -105.19, `span ${index + 1} longitude`);
+        assert.ok(latitude >= 39.73 && latitude <= 39.78, `span ${index + 1} latitude`);
+      }
+    }
+
+    const endpoints = collection.features.flatMap((feature: any) =>
+      feature.geometry.coordinates.map((coordinate: number[]) => coordinate.join(",")),
+    );
+    assert.ok(new Set(endpoints).size < endpoints.length * 0.75, "spans must form a network");
+  });
+
   it("renders the selected region as an outline without a fill", async () => {
     const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
 

@@ -3680,6 +3680,13 @@ class DigitalTwinDemoPanel {
     this.assetMap.closePowerLinePopup(false);
     const assetRegionIds = this.assetRegionIds[regionId] ?? [regionId];
     this.assetMap.setRegions(this.regions, regionId);
+    const selectedRegion = this.regions.find(
+      (candidate) => candidate?.region_id === regionId,
+    );
+    if (selectedRegion) {
+      this.app.fitBounds?.(regionBoundsArray(selectedRegion));
+      this.presentMapAfterFit();
+    }
     clearInterval(this.weatherRefreshTimer);
     this.weatherRefreshTimer = null;
     this.weatherRefreshAbort?.abort();
@@ -3711,8 +3718,6 @@ class DigitalTwinDemoPanel {
       this.weatherDatasets = asPageItems(weatherPage);
       const mappedAssets = buildAuthoritativeRegionAssets(assets, operationalLines);
       this.assetMap.setData(mappedAssets, region.name ?? region.region_id);
-      this.app.fitBounds?.(regionBoundsArray(region));
-      this.presentMapAfterFit();
       this.renderRegionMeta(mappedAssets);
       this.populateWeather();
       this.startWeatherRefresh();

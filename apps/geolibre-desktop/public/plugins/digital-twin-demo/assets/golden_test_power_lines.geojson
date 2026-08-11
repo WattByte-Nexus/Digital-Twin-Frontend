@@ -1,0 +1,22 @@
+{
+  "type": "FeatureCollection",
+  "name": "Golden test power lines",
+  "features": [
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden feeder span 01", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2288, 39.7508], [-105.2262, 39.7521]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden feeder span 02", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2262, 39.7521], [-105.2238, 39.7534]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden feeder span 03", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2238, 39.7534], [-105.2211, 39.7555]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden feeder span 04", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2211, 39.7555], [-105.2185, 39.7568]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden feeder span 05", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2185, 39.7568], [-105.2157, 39.7579]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden feeder span 06", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2157, 39.7579], [-105.2129, 39.7592]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden feeder span 07", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2129, 39.7592], [-105.2101, 39.7606]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden north branch 01", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2211, 39.7555], [-105.2218, 39.7582]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden north branch 02", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2218, 39.7582], [-105.2226, 39.7610]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden north branch 03", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2226, 39.7610], [-105.2241, 39.7634]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden south branch 01", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2185, 39.7568], [-105.2179, 39.7539]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden south branch 02", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2179, 39.7539], [-105.2168, 39.7514]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden south branch 03", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2168, 39.7514], [-105.2149, 39.7491]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden west branch 01", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2238, 39.7534], [-105.2254, 39.7560]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden west branch 02", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2254, 39.7560], [-105.2270, 39.7585]] } },
+    { "type": "Feature", "properties": { "asset_type": "power_line_span", "name": "Golden west branch 03", "voltage_kv": 13.8 }, "geometry": { "type": "LineString", "coordinates": [[-105.2270, 39.7585], [-105.2290, 39.7608]] } }
+  ]
+}
