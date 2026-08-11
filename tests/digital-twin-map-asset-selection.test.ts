@@ -14,9 +14,9 @@ describe("digital twin map asset selection", () => {
     assert.equal(PLUGIN_SELECTION_EVENT, DIGITAL_TWIN_MAP_ASSET_SELECTION_EVENT);
   });
 
-  it("accepts only trees, power lines, and poles for the risk callout", () => {
+  it("accepts only trees, operational power lines, and poles for the risk callout", () => {
     assert.equal(selectableMapAssetKind({ properties: { kind: "tree" } }), "tree");
-    assert.equal(selectableMapAssetKind({ properties: { kind: "power_line" } }), "power_line");
+    assert.equal(selectableMapAssetKind({ properties: { kind: "power_line" } }), null);
     assert.equal(
       selectableMapAssetKind({ properties: { kind: "operational_power_line" } }),
       "power_line",
