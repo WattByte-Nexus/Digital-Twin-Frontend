@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
   ApiProblem,
+  buildAuthoritativeRegionAssets,
   buildIgnitionPointFeature,
   buildOperationalPowerLineFeatures,
   buildPowerLineNetwork,
@@ -24,6 +25,8 @@ import {
   selectedTreeSummary,
   SimulationReplayControl,
   TREE_CIRCLE_RADIUS_PX,
+  validatePowerLineDetail,
+  validatePowerLineSummaries,
   WildfireMapController,
 } from "../apps/geolibre-desktop/public/plugins/digital-twin-demo/dist/index.js";
 
@@ -113,7 +116,7 @@ describe("digital-twin-demo bundled plugin", () => {
       features: [
         {
           type: "Feature",
-          properties: { kind: "power_line", asset_id: "span-1" },
+          properties: { kind: "operational_power_line", power_line_id: "span-1" },
           geometry: {
             type: "LineString",
             coordinates: [
@@ -124,7 +127,7 @@ describe("digital-twin-demo bundled plugin", () => {
         },
         {
           type: "Feature",
-          properties: { kind: "power_line", asset_id: "span-2" },
+          properties: { kind: "operational_power_line", power_line_id: "span-2" },
           geometry: {
             type: "LineString",
             coordinates: [
@@ -440,8 +443,30 @@ describe("digital-twin-demo bundled plugin", () => {
     const calls: string[] = [];
     const client = createDigitalTwinClient("http://127.0.0.1:8000", {
       fetchImpl: async (input: string | URL | Request) => {
-        calls.push(String(input));
-        return Response.json([]);
+        const url = String(input);
+        calls.push(url);
+        if (url.endsWith("/power-lines")) return Response.json([]);
+        return Response.json({
+          power_line_id: "line/7",
+          region_id: "region/1",
+          geometry: {
+            type: "LineString",
+            coordinates: [[-105.1, 40], [-105, 40.1]],
+            bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
+          },
+          conductor: {
+            mass_per_meter_kg_m: 1.35,
+            span_length_m: 100,
+            conductor_diameter_m: 0.019,
+            horizontal_tension_n: 24525,
+            air_density_kg_m3: 1.225,
+            drag_coefficient: 1.2,
+            static_sag_m: null,
+            elastic_modulus_pa: null,
+            cross_sectional_area_m2: null,
+          },
+          latest_physics: null,
+        });
       },
     });
 
@@ -488,6 +513,68 @@ describe("digital-twin-demo bundled plugin", () => {
     );
   });
 
+  it("keeps asset trees while making operational lines the only rendered line inventory", () => {
+    const assets = {
+      type: "FeatureCollection",
+      features: [
+        treeFeature,
+        {
+          type: "Feature",
+          properties: { kind: "power_line", asset_id: "obsolete-static-line" },
+          geometry: { type: "LineString", coordinates: [[-105.2, 40], [-105.19, 40]] },
+        },
+      ],
+    };
+    const result = buildAuthoritativeRegionAssets(assets, [{
+      power_line_id: "operational-line",
+      geometry: {
+        type: "LineString",
+        coordinates: [[-105.1, 40], [-105, 40.1]],
+        bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
+      },
+    }]);
+
+    assert.deepEqual(result.features.map((feature: { properties: { kind: string } }) => feature.properties.kind), [
+      "tree",
+      "operational_power_line",
+    ]);
+  });
+
+  it("accepts an empty operational inventory and rejects malformed summary coordinates", () => {
+    assert.deepEqual(validatePowerLineSummaries([]), []);
+    assert.throws(
+      () => validatePowerLineSummaries([{
+        power_line_id: "line-7",
+        geometry: {
+          type: "LineString",
+          coordinates: [[-105.1, 40], [181, 40]],
+          bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
+        },
+      }]),
+      /coordinate 2/i,
+    );
+    assert.throws(
+      () => validatePowerLineSummaries([{
+        power_line_id: "line-7",
+        geometry: {
+          type: "LineString",
+          coordinates: [["-105.1", 40], [-105, 40.1]],
+          bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
+        },
+      }]),
+      /numeric WGS84/i,
+    );
+    const summary = {
+      power_line_id: "line-7",
+      geometry: {
+        type: "LineString",
+        coordinates: [[-105.1, 40], [-105, 40.1]],
+        bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
+      },
+    };
+    assert.throws(() => validatePowerLineSummaries([summary, summary]), /duplicated/i);
+  });
+
   it("builds explicit succeeded, failed, and awaiting-tick power-line detail states", () => {
     const base = {
       power_line_id: "line-7",
@@ -503,7 +590,6 @@ describe("digital-twin-demo bundled plugin", () => {
       conductor: {
         mass_per_meter_kg_m: 1.35,
         span_length_m: 100,
-        diameter_m: 0.02,
         conductor_diameter_m: 0.019,
         horizontal_tension_n: 24525,
         air_density_kg_m3: 1.225,
@@ -517,6 +603,8 @@ describe("digital-twin-demo bundled plugin", () => {
     const awaiting = buildPowerLineDetailView({ ...base, latest_physics: null });
     assert.equal(awaiting.statusLabel, "Awaiting first completed tick");
     assert.equal(awaiting.statusTone, "muted");
+    assert.equal(awaiting.staticMetrics.some((item: { label: string }) => item.label === "Aerodynamic diameter"), false);
+    assert.equal(awaiting.staticMetrics.find((item: { label: string }) => item.label === "Conductor diameter")?.value, "0.0190 m");
 
     const failed = buildPowerLineDetailView({
       ...base,
@@ -531,6 +619,10 @@ describe("digital-twin-demo bundled plugin", () => {
         feature_contract_version: "power-line-static-v1",
         model_version: "model-1",
         model_checksum: "a".repeat(64),
+        cached_from_tick: null,
+        routing_reason: null,
+        solver_version: null,
+        surrogate_confidence: null,
       },
     });
     assert.equal(failed.statusLabel, "Solve failed");
@@ -554,6 +646,7 @@ describe("digital-twin-demo bundled plugin", () => {
         feature_contract_version: "power-line-static-v1",
         model_version: "model-1",
         model_checksum: "a".repeat(64),
+        cached_from_tick: null,
         routing_reason: "near_threshold",
         solver_version: "solver-2",
         surrogate_confidence: 0.73,
@@ -563,6 +656,55 @@ describe("digital-twin-demo bundled plugin", () => {
     assert.equal(succeeded.statusDetail, "FEM · tick 9 · 18.4 m/s wind");
     assert.equal(succeeded.physicsMetrics.find((metric: { label: string }) => metric.label === "Max displacement")?.value, "1.50 m");
     assert.match(succeeded.footprintNote, /not verified vegetation contact/i);
+  });
+
+  it("validates detail IDs, conductor numbers, and physics discriminators", () => {
+    const detail = {
+      power_line_id: "line-7",
+      region_id: "region-1",
+      geometry: {
+        type: "LineString",
+        coordinates: [[-105.1, 40], [-105, 40.1]],
+        bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
+      },
+      conductor: {
+        mass_per_meter_kg_m: 1.35,
+        span_length_m: 100,
+        conductor_diameter_m: 0.019,
+        horizontal_tension_n: 24525,
+        air_density_kg_m3: 1.225,
+        drag_coefficient: 1.2,
+        static_sag_m: null,
+        elastic_modulus_pa: null,
+        cross_sectional_area_m2: null,
+      },
+      latest_physics: null,
+    };
+
+    assert.equal(validatePowerLineDetail(detail, { regionId: "region-1", powerLineId: "line-7" }), detail);
+    assert.throws(() => validatePowerLineDetail({ ...detail, power_line_id: "wrong" }, { powerLineId: "line-7" }), /does not match/i);
+    assert.throws(() => validatePowerLineDetail({ ...detail, conductor: { ...detail.conductor, span_length_m: "100" } }), /finite number/i);
+    const { static_sag_m: _missingSag, ...conductorWithoutSag } = detail.conductor;
+    assert.throws(() => validatePowerLineDetail({ ...detail, conductor: conductorWithoutSag }), /Static sag is required/i);
+    assert.throws(() => validatePowerLineDetail({ ...detail, latest_physics: { status: "pending" } }), /unsupported status/i);
+  });
+
+  it("requires operational line loading and clears stale map data during region switches", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.match(source, /this\.assetMap\.setData\(emptyFeatureCollection\(\), regionId\)/);
+    assert.match(source, /Could not load operational power lines:/);
+    assert.doesNotMatch(source, /Power-line details are unavailable/);
+    assert.doesNotMatch(source, /return \[\];\s*\}\),\s*\]\);/);
+  });
+
+  it("restores operational lines after style reload and aborts superseded detail requests", async () => {
+    const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
+
+    assert.match(source, /this\.onStyleData = \(\) => this\.ensureLayers\(\)/);
+    assert.match(source, /assetSource\.setData\(this\.data\)/);
+    assert.match(source, /this\.powerLineDetailAbort\?\.abort\(\);\s*const abort = new AbortController\(\)/);
+    assert.match(source, /if \(abort\.signal\.aborted \|\| this\.destroyed\) return;/);
   });
 
   it("gives operational power-line clicks priority over ignition placement", async () => {

@@ -149,20 +149,199 @@ function validCoordinate(coordinate) {
     : null;
 }
 
+function responseCoordinate(value, label) {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 2 ||
+    typeof value[0] !== "number" ||
+    typeof value[1] !== "number" ||
+    !validCoordinate(value)
+  ) {
+    throw new Error(`${label} must be a numeric WGS84 position.`);
+  }
+  return value;
+}
+
+function responseNumber(value, label, { minimum = null, exclusiveMinimum = false } = {}) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number.`);
+  }
+  if (
+    minimum !== null &&
+    (exclusiveMinimum ? value <= minimum : value < minimum)
+  ) {
+    throw new Error(`${label} must be ${exclusiveMinimum ? "greater than" : "at least"} ${minimum}.`);
+  }
+  return value;
+}
+
+function responseInteger(value, label) {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative integer.`);
+  }
+  return value;
+}
+
+function requireResponseField(value, field, label) {
+  if (!Object.hasOwn(value, field)) throw new Error(`${label} is required.`);
+  return value[field];
+}
+
+function validatePowerLineBounds(value, label) {
+  if (!isRecord(value)) throw new Error(`${label} are required.`);
+  const west = responseNumber(value.west, `${label} west`);
+  const south = responseNumber(value.south, `${label} south`);
+  const east = responseNumber(value.east, `${label} east`);
+  const north = responseNumber(value.north, `${label} north`);
+  if (
+    Math.abs(west) > 180 ||
+    Math.abs(east) > 180 ||
+    Math.abs(south) > 90 ||
+    Math.abs(north) > 90 ||
+    west > east ||
+    south > north
+  ) {
+    throw new Error(`${label} must be ordered WGS84 bounds.`);
+  }
+  return value;
+}
+
+function validatePowerLineGeometry(value, label) {
+  if (!isRecord(value) || value.type !== "LineString") {
+    throw new Error(`${label} must be a LineString geometry.`);
+  }
+  if (!Array.isArray(value.coordinates) || value.coordinates.length !== 2) {
+    throw new Error(`${label} must include exactly two coordinates.`);
+  }
+  value.coordinates.forEach((coordinate, index) => {
+    responseCoordinate(coordinate, `${label} coordinate ${index + 1}`);
+  });
+  validatePowerLineBounds(value.bounds, `${label} bounds`);
+  return value;
+}
+
+export function validatePowerLineSummaries(value) {
+  if (!Array.isArray(value)) throw new Error("Power-line inventory must be an array.");
+  const powerLineIds = new Set();
+  value.forEach((line, index) => {
+    if (!isRecord(line)) throw new Error(`Power line ${index + 1} must be an object.`);
+    const powerLineId = nonEmptyString(line.power_line_id, "Power line ID");
+    if (powerLineIds.has(powerLineId)) {
+      throw new Error(`Power line ID ${powerLineId} is duplicated.`);
+    }
+    powerLineIds.add(powerLineId);
+    validatePowerLineGeometry(line.geometry, `Power line ${powerLineId} geometry`);
+  });
+  return value;
+}
+
+function validatePhysicsLineage(physics) {
+  responseInteger(physics.tick, "Physics tick");
+  responseInteger(physics.line_snapshot, "Line snapshot");
+  if (
+    typeof physics.weather_version !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(physics.weather_version) ||
+    !Number.isFinite(Date.parse(physics.weather_version))
+  ) {
+    throw new Error("Weather version must be an ISO date-time string.");
+  }
+  nonEmptyString(physics.weather_source_ref, "Weather source");
+  nonEmptyString(physics.feature_contract_version, "Feature contract");
+  nonEmptyString(physics.model_version, "Model version");
+  if (typeof physics.model_checksum !== "string" || !/^[0-9a-f]{64}$/.test(physics.model_checksum)) {
+    throw new Error("Model checksum must contain 64 lowercase hexadecimal characters.");
+  }
+  const cachedFromTick = requireResponseField(physics, "cached_from_tick", "Cached tick");
+  const routingReason = requireResponseField(physics, "routing_reason", "Routing reason");
+  const solverVersion = requireResponseField(physics, "solver_version", "Solver version");
+  const surrogateConfidence = requireResponseField(
+    physics,
+    "surrogate_confidence",
+    "Surrogate confidence",
+  );
+  if (cachedFromTick != null) responseInteger(cachedFromTick, "Cached tick");
+  if (routingReason != null) nonEmptyString(routingReason, "Routing reason");
+  if (solverVersion != null) nonEmptyString(solverVersion, "Solver version");
+  if (surrogateConfidence != null) {
+    const confidence = responseNumber(surrogateConfidence, "Surrogate confidence", { minimum: 0 });
+    if (confidence > 1) throw new Error("Surrogate confidence must be at most 1.");
+  }
+}
+
+export function validatePowerLineDetail(value, expected = {}) {
+  if (!isRecord(value)) throw new Error("Power-line detail must be an object.");
+  const powerLineId = nonEmptyString(value.power_line_id, "Power line ID");
+  const regionId = nonEmptyString(value.region_id, "Region ID");
+  if (expected.powerLineId != null && powerLineId !== expected.powerLineId) {
+    throw new Error("Power-line detail ID does not match the requested line.");
+  }
+  if (expected.regionId != null && regionId !== expected.regionId) {
+    throw new Error("Power-line detail region does not match the requested region.");
+  }
+  validatePowerLineGeometry(value.geometry, `Power line ${powerLineId} geometry`);
+  const conductor = value.conductor;
+  if (!isRecord(conductor)) throw new Error("Power-line conductor details are required.");
+  for (const [field, label] of [
+    ["mass_per_meter_kg_m", "Mass per meter"],
+    ["span_length_m", "Span length"],
+    ["conductor_diameter_m", "Conductor diameter"],
+    ["horizontal_tension_n", "Horizontal tension"],
+    ["air_density_kg_m3", "Air density"],
+    ["drag_coefficient", "Drag coefficient"],
+  ]) {
+    responseNumber(conductor[field], label, { minimum: 0, exclusiveMinimum: true });
+  }
+  for (const [field, label] of [
+    ["static_sag_m", "Static sag"],
+    ["elastic_modulus_pa", "Elastic modulus"],
+    ["cross_sectional_area_m2", "Cross-sectional area"],
+  ]) {
+    const nullableNumber = requireResponseField(conductor, field, label);
+    if (nullableNumber != null) {
+      responseNumber(nullableNumber, label, { minimum: 0, exclusiveMinimum: true });
+    }
+  }
+  const physics = requireResponseField(value, "latest_physics", "Latest physics");
+  if (physics == null) return value;
+  if (!isRecord(physics)) throw new Error("Latest physics must be an object or null.");
+  if (physics.status !== "failed" && physics.status !== "succeeded") {
+    throw new Error("Latest physics has an unsupported status.");
+  }
+  validatePhysicsLineage(physics);
+  if (physics.status === "failed") {
+    if (physics.source !== "failed") throw new Error("Failed physics must use the failed source.");
+    if (!new Set(["non_convergent", "solver_error"]).has(physics.failure_kind)) {
+      throw new Error("Failed physics has an unsupported failure kind.");
+    }
+    return value;
+  }
+  if (!new Set(["surrogate", "cached", "fem"]).has(physics.source)) {
+    throw new Error("Succeeded physics has an unsupported source.");
+  }
+  responseNumber(physics.wind_speed_mps, "Wind speed", { minimum: 0 });
+  responseNumber(physics.midspan_displacement_m, "Midspan displacement");
+  responseNumber(physics.max_displacement_m, "Max displacement");
+  responseNumber(physics.max_displacement_position_m, "Max displacement position");
+  const envelope = physics.collision_envelope_m;
+  if (!isRecord(envelope)) throw new Error("Succeeded physics must include a collision envelope.");
+  for (const [field, label] of [
+    ["min_x", "Envelope min x"],
+    ["max_x", "Envelope max x"],
+    ["min_y", "Envelope min y"],
+    ["max_y", "Envelope max y"],
+  ]) responseNumber(envelope[field], label);
+  return value;
+}
+
 export function buildOperationalPowerLineFeatures(value) {
-  const lines = Array.isArray(value) ? value : asPageItems(value);
+  const lines = validatePowerLineSummaries(value);
   const features = lines.map((line) => {
     const powerLineId = nonEmptyString(line?.power_line_id, "Power line ID");
     const geometry = line?.geometry;
     if (!isRecord(geometry) || geometry.type !== "LineString") {
       throw new Error(`Power line ${powerLineId} must include a LineString geometry.`);
     }
-    const coordinates = Array.isArray(geometry.coordinates)
-      ? geometry.coordinates.map(validCoordinate).filter(Boolean)
-      : [];
-    if (coordinates.length < 2) {
-      throw new Error(`Power line ${powerLineId} must include at least two coordinates.`);
-    }
+    const coordinates = geometry.coordinates.map(validCoordinate);
     return {
       type: "Feature",
       properties: { kind: "operational_power_line", power_line_id: powerLineId },
@@ -170,6 +349,15 @@ export function buildOperationalPowerLineFeatures(value) {
     };
   });
   return emptyFeatureCollection(features);
+}
+
+export function buildAuthoritativeRegionAssets(assets, operationalLines) {
+  const assetCollection = asFeatureCollection(assets, "Engine assets");
+  const operationalCollection = buildOperationalPowerLineFeatures(operationalLines);
+  return emptyFeatureCollection([
+    ...assetCollection.features.filter((feature) => feature?.properties?.kind === "tree"),
+    ...operationalCollection.features,
+  ]);
 }
 
 function metric(label, value) {
@@ -191,7 +379,7 @@ function humanizeToken(value) {
 }
 
 export function buildPowerLineDetailView(detail) {
-  if (!isRecord(detail)) throw new Error("Power-line detail must be an object.");
+  validatePowerLineDetail(detail);
   const powerLineId = nonEmptyString(detail.power_line_id, "Power line ID");
   const regionId = nonEmptyString(detail.region_id, "Region ID");
   const conductor = detail.conductor;
@@ -206,7 +394,6 @@ export function buildPowerLineDetailView(detail) {
   const staticMetrics = [
     metric("Span length", fixedMetric(conductor.span_length_m, 1, "m")),
     metric("Mass", fixedMetric(conductor.mass_per_meter_kg_m, 3, "kg/m")),
-    metric("Aerodynamic diameter", fixedMetric(conductor.diameter_m, 4, "m")),
     metric("Conductor diameter", fixedMetric(conductor.conductor_diameter_m, 4, "m")),
     metric("Horizontal tension", fixedMetric(conductor.horizontal_tension_n, 0, "N")),
     metric("Static sag", optionalFixedMetric(conductor.static_sag_m, 3, "m")),
@@ -299,7 +486,7 @@ export function buildPowerLineDetailView(detail) {
 function powerLinePaths(collection) {
   const paths = [];
   for (const feature of collection.features) {
-    if (feature?.properties?.kind !== "power_line") continue;
+    if (feature?.properties?.kind !== "operational_power_line") continue;
     const geometry = feature?.geometry;
     const candidates =
       geometry?.type === "LineString"
@@ -318,7 +505,7 @@ function powerLinePaths(collection) {
 export function selectableMapAssetKind(feature) {
   const kind = feature?.properties?.kind;
   if (kind === "tree") return "tree";
-  if (kind === "power_line" || kind === "operational_power_line") return "power_line";
+  if (kind === "operational_power_line") return "power_line";
   if (kind === "pole") return "pole";
   return null;
 }
@@ -681,16 +868,16 @@ export function createDigitalTwinClient(baseUrl, options = {}) {
         signal,
         cache: "no-cache",
       }),
-    listPowerLines: (regionId, signal) =>
-      request(`/api/v1/regions/${encodeURIComponent(regionId)}/power-lines`, {
+    listPowerLines: async (regionId, signal) =>
+      validatePowerLineSummaries(await request(`/api/v1/regions/${encodeURIComponent(regionId)}/power-lines`, {
         signal,
         cache: "no-cache",
-      }),
-    getPowerLine: (regionId, powerLineId, signal) =>
-      request(
+      })),
+    getPowerLine: async (regionId, powerLineId, signal) =>
+      validatePowerLineDetail(await request(
         `/api/v1/regions/${encodeURIComponent(regionId)}/power-lines/${encodeURIComponent(powerLineId)}`,
         { signal, cache: "no-cache" },
-      ),
+      ), { regionId, powerLineId }),
     getWeatherDatasets: (regionId, signal) =>
       request(`/api/v1/regions/${encodeURIComponent(regionId)}/weather-datasets?limit=100`, {
         signal,
@@ -1783,10 +1970,7 @@ class AssetMapController {
       let nearest = null;
       let nearestDistance = 10 ** 2;
       for (const feature of this.data.features) {
-        if (
-          feature?.properties?.kind !== "power_line" &&
-          feature?.properties?.kind !== "operational_power_line"
-        ) continue;
+        if (feature?.properties?.kind !== "operational_power_line") continue;
         const coordinates = feature?.geometry?.coordinates;
         if (!Array.isArray(coordinates)) continue;
         for (let index = 1; index < coordinates.length; index += 1) {
@@ -1809,10 +1993,7 @@ class AssetMapController {
       let nearest = null;
       let nearestDistance = 24 ** 2;
       for (const feature of this.data.features) {
-        if (
-          feature?.properties?.kind !== "power_line" &&
-          feature?.properties?.kind !== "operational_power_line"
-        ) continue;
+        if (feature?.properties?.kind !== "operational_power_line") continue;
         const geometry = feature?.geometry;
         const paths =
           geometry?.type === "LineString"
@@ -2021,7 +2202,7 @@ class AssetMapController {
         opacity: 1,
         metadata: {
           provider: "Digital Twin Engine",
-          description: "Canonical region tree and power-line assets. Click anywhere on the map to place an ignition point.",
+          description: "Canonical region trees and operational power lines. Click anywhere on the map to place an ignition point.",
           customLayerType: "digital-twin-assets",
           externalDeckLayer: true,
           identifiable: false,
@@ -2170,7 +2351,7 @@ class AssetMapController {
           id: POWER_LINE_LAYER_ID,
           type: "line",
           source: ASSET_SOURCE_ID,
-          filter: ["in", ["get", "kind"], ["literal", ["power_line", "operational_power_line"]]],
+          filter: ["==", ["get", "kind"], "operational_power_line"],
           paint: {
             "line-color": "#2d3542",
             "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 15, 4],
@@ -3508,36 +3689,31 @@ class DigitalTwinDemoPanel {
     this.loadAbort = abort;
     this.regionSelect.disabled = true;
     this.clearTrees();
+    this.assetMap.setData(emptyFeatureCollection(), regionId);
     this.regionMeta.textContent = "Loading region assets and input catalog…";
     try {
+      const operationalLinesRequest = this.client
+        .listPowerLines(regionId, abort.signal)
+        .catch((error) => {
+          if (abort.signal.aborted) throw error;
+          throw new Error(`Could not load operational power lines: ${this.errorMessage(error)}`, {
+            cause: error,
+          });
+        });
       const [region, assets, weatherPage, operationalLines] = await Promise.all([
         this.client.getRegion(regionId, abort.signal),
         this.loadFirstPopulatedAssets(assetRegionIds, abort.signal),
         this.client.getWeatherDatasets(regionId, abort.signal),
-        // The geometry layer remains usable on Engine deployments that have not
-        // exposed the optional authoritative power-line-detail endpoint yet.
-        // Do not let a 404 here abort the whole region batch and blank the
-        // existing asset power lines from the map.
-        this.client.listPowerLines(regionId, abort.signal).catch((error) => {
-          if (!abort.signal.aborted) {
-            console.warn("[Digital Twin Demo] Power-line details are unavailable.", error);
-          }
-          return [];
-        }),
+        operationalLinesRequest,
       ]);
       if (abort.signal.aborted || this.destroyed) return;
       this.region = region;
       this.weatherDatasets = asPageItems(weatherPage);
-      const assetCollection = asFeatureCollection(assets, "Engine assets");
-      const operationalCollection = buildOperationalPowerLineFeatures(operationalLines);
-      const mappedAssets = emptyFeatureCollection([
-        ...assetCollection.features,
-        ...operationalCollection.features,
-      ]);
+      const mappedAssets = buildAuthoritativeRegionAssets(assets, operationalLines);
       this.assetMap.setData(mappedAssets, region.name ?? region.region_id);
       this.app.fitBounds?.(regionBoundsArray(region));
       this.presentMapAfterFit();
-      this.renderRegionMeta(assets);
+      this.renderRegionMeta(mappedAssets);
       this.populateWeather();
       this.startWeatherRefresh();
       this.updateRunAvailability();
@@ -3631,7 +3807,7 @@ class DigitalTwinDemoPanel {
   renderRegionMeta(assets) {
     const features = asFeatureCollection(assets).features;
     const trees = features.filter((feature) => feature?.properties?.kind === "tree").length;
-    const lines = features.filter((feature) => feature?.properties?.kind === "power_line").length;
+    const lines = features.filter((feature) => feature?.properties?.kind === "operational_power_line").length;
     const bounds = boundsFromRegion(this.region);
     this.regionMeta.replaceChildren(
       el("strong", "", this.region.name ?? this.region.region_id),
