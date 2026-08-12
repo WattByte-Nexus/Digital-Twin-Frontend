@@ -16,7 +16,7 @@ test("the selected region can be fitted from both map and command-palette contro
   );
   assert.match(
     workspaceSource,
-    /className=\{`\$\{FLOATING_MAP_ACTION_BUTTON_CLASS_NAME\} border-foreground`\}[\s\S]*?aria-label="Zoom to selected region"/,
+    /className=\{`\$\{FLOATING_MAP_ACTION_BUTTON_CLASS_NAME\} border-0 disabled:opacity-100`\}[\s\S]*?aria-label="Zoom to selected region"/,
   );
   assert.match(
     workspaceSource,
@@ -26,6 +26,10 @@ test("the selected region can be fitted from both map and command-palette contro
   assert.match(
     workspaceSource,
     /<Button[\s\S]*?size="icon"[\s\S]*?aria-label="Zoom to selected region"[\s\S]*?onClick=\{zoomToSelectedRegion\}/,
+  );
+  assert.match(
+    workspaceSource,
+    /<Maximize aria-hidden="true" className="size-4 text-foreground"/,
   );
   assert.match(
     workspaceSource,

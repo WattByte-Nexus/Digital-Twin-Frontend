@@ -889,13 +889,13 @@ export function DigitalTwinMapWorkspace({
               type="button"
               variant="secondary"
               size="icon"
-              className={`${FLOATING_MAP_ACTION_BUTTON_CLASS_NAME} border-foreground`}
+              className={`${FLOATING_MAP_ACTION_BUTTON_CLASS_NAME} border-0 disabled:opacity-100`}
               disabled={!canZoomToSelectedRegion}
               aria-label="Zoom to selected region"
               title="Zoom to selected region"
               onClick={zoomToSelectedRegion}
             >
-              <Maximize aria-hidden="true" className="size-4" />
+              <Maximize aria-hidden="true" className="size-4 text-foreground" />
             </Button>
           </div>
           <div className="absolute bottom-6 right-4 z-10">
