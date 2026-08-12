@@ -8,7 +8,10 @@ import {
   SelectMenuTrigger,
   SelectMenuValue,
   Separator,
-  cn,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
 } from "@geolibre/ui";
 import {
   BellRing,
@@ -126,68 +129,56 @@ export function SettingsView({
     <div className="dt-settings-view bg-background text-foreground" style={style}>
       <aside
         aria-label="Settings sections"
-        className="dt-settings-navigation border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
+        className="dt-settings-navigation border-r border-border bg-card text-sidebar-foreground"
       >
-        <div className="flex h-20 items-center gap-3 border-b border-sidebar-border px-5">
-          <div className="grid size-9 place-items-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <Settings2 className="size-4" />
-          </div>
+        <div className="flex h-16 items-center border-b border-border px-5">
           <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold tracking-tight">Settings</h1>
+            <h1 className="truncate text-sm font-semibold">Settings</h1>
             <p className="truncate text-xs text-muted-foreground">{organizationName}</p>
           </div>
         </div>
 
         <ScrollArea className="min-h-0 flex-1">
-          <nav className="space-y-5 p-3" aria-label="Settings navigation">
+          <nav className="space-y-2 p-3" aria-label="Settings navigation">
             {SETTINGS_GROUPS.map((group) => (
               <section aria-labelledby={`settings-group-${group.label}`} key={group.label}>
-                <h2
-                  className="px-2 pb-1.5 text-[0.68rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
-                  id={`settings-group-${group.label}`}
-                >
-                  {group.label}
-                </h2>
-                <div className="space-y-0.5">
+                <SidebarGroupLabel asChild>
+                  <h2 id={`settings-group-${group.label}`}>{group.label}</h2>
+                </SidebarGroupLabel>
+                <SidebarMenu>
                   {group.items.map((item) => {
                     const Icon = item.icon;
                     const active = item.id === activeSection;
                     return (
-                      <Button
-                        aria-current={active ? "page" : undefined}
-                        className={cn(
-                          "w-full justify-start px-2.5 text-sidebar-foreground",
-                          active &&
-                            "bg-sidebar-accent font-semibold text-sidebar-accent-foreground",
-                        )}
-                        key={item.id}
-                        onClick={() => setActiveSection(item.id)}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <Icon />
-                        <span className="truncate">{item.label}</span>
-                        {active ? <ChevronRight className="ms-auto opacity-50" /> : null}
-                      </Button>
+                      <SidebarMenuItem key={item.id}>
+                        <SidebarMenuButton
+                          aria-current={active ? "page" : undefined}
+                          className="h-10 gap-3 px-3 text-sm"
+                          isActive={active}
+                          onClick={() => setActiveSection(item.id)}
+                          type="button"
+                        >
+                          <Icon aria-hidden="true" className="size-5" />
+                          <span className="font-medium">{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
                     );
                   })}
-                </div>
+                </SidebarMenu>
               </section>
             ))}
           </nav>
         </ScrollArea>
 
-        <div className="border-t border-sidebar-border p-3">
-          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-            <div className="grid size-8 place-items-center rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
+        <div className="border-t border-border px-5 py-3">
+          <div className="flex h-10 items-center gap-3">
+            <div className="grid size-8 place-items-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
               {accountInitials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium">{accountName}</p>
-              <p className="truncate text-[0.68rem] text-muted-foreground">{accountRole}</p>
+              <p className="truncate text-sm font-medium text-foreground">{accountName}</p>
+              <p className="truncate text-xs text-muted-foreground">{accountRole}</p>
             </div>
-            <Badge variant="outline">You</Badge>
           </div>
         </div>
       </aside>
@@ -252,7 +243,7 @@ export function SettingsView({
         </SelectMenu>
       </div>
 
-      <div className="dt-settings-content min-h-0 bg-muted/20" aria-label={`${pageCopy.title} settings`}>
+      <div className="dt-settings-content min-h-0 bg-background" aria-label={`${pageCopy.title} settings`}>
         <ScrollArea className="h-full">
           <section hidden={activeSection !== "account-preferences"}>
             <AccountPreferencesPage />

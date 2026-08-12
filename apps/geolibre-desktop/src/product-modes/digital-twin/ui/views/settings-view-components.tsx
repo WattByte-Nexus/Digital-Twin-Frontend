@@ -1,6 +1,5 @@
 import {
   Badge,
-  Button,
   Card,
   CardAction,
   CardContent,
@@ -35,13 +34,13 @@ export function SettingsCard({
   title: string;
 }) {
   return (
-    <Card className="border border-border/70 py-0 shadow-xs" surface="glass">
-      <CardHeader className="gap-1.5 border-b border-border/70 px-5 py-4 sm:px-6">
+    <Card className="gap-0 rounded-none border-0 border-b border-border bg-transparent py-0 shadow-none">
+      <CardHeader className="gap-1.5 px-0 py-5">
         <CardTitle className="text-sm">{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
         {action ? <CardAction>{action}</CardAction> : null}
       </CardHeader>
-      <CardContent className="px-5 sm:px-6">{children}</CardContent>
+      <CardContent className="px-0 pb-1">{children}</CardContent>
     </Card>
   );
 }
@@ -138,7 +137,7 @@ export function SettingsSelect({
 
 export function ScopeLegend() {
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-2 border-b border-border py-4 text-xs text-muted-foreground">
       <span>Setting scope</span>
       <Separator className="h-4" orientation="vertical" />
       <Badge variant="outline">Personal</Badge>
@@ -249,27 +248,5 @@ export function ResizeSeparator({
       role="separator"
       tabIndex={0}
     />
-  );
-}
-
-export function UnsavedPreviewBar({
-  dirty,
-  onReset,
-}: {
-  dirty: boolean;
-  onReset: () => void;
-}) {
-  return (
-    <div className="sticky bottom-0 z-10 flex min-h-16 items-center justify-between gap-4 border-t border-border bg-background/95 px-5 py-3 backdrop-blur-sm sm:px-8">
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{dirty ? "Preview changed" : "Using preview defaults"}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          These controls are interactive design data and are not persisted yet.
-        </p>
-      </div>
-      <Button disabled={!dirty} onClick={onReset} size="sm" type="button" variant="outline">
-        Reset preview
-      </Button>
-    </div>
   );
 }

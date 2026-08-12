@@ -65,6 +65,15 @@ describe("Digital Twin settings", () => {
     assert.doesNotMatch(settingsComponentsSource, /<(?:button|input|select|table)\b/);
   });
 
+  it("uses the product sidebar rhythm and flat settings sections", () => {
+    assert.match(settingsViewSource, /SidebarMenuButton/);
+    assert.match(settingsViewSource, /className="h-10 gap-3 px-3 text-sm"/);
+    assert.match(settingsComponentsSource, /rounded-none border-0 border-b/);
+    assert.doesNotMatch(settingsComponentsSource, /surface="glass"/);
+    assert.doesNotMatch(settingsComponentsSource, /UnsavedPreviewBar/);
+    assert.doesNotMatch(settingsPagesSource, /Using preview defaults/);
+  });
+
   it("keeps run inputs visible while engine startup settings remain managed", () => {
     assert.match(settingsPagesSource, /Presets are starting values, not hidden engine configuration/);
     assert.match(settingsPagesSource, /Region, ignition, time, and timestep remain visible/);

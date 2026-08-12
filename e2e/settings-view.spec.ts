@@ -48,8 +48,9 @@ test.describe("Digital Twin settings", () => {
 
     await page.getByRole("button", { name: "Preferences", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible();
-    await page.getByRole("switch", { name: "Reduce motion" }).click();
-    await expect(page.getByText("Preview changed", { exact: true })).toBeVisible();
+    const reduceMotion = page.getByRole("switch", { name: "Reduce motion" });
+    await reduceMotion.click();
+    await expect(reduceMotion).toBeChecked();
 
     await page.getByRole("button", { name: "Simulation presets", exact: true }).click();
     await expect(

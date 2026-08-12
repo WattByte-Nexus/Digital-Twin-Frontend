@@ -41,7 +41,6 @@ import {
   SettingsRows,
   SettingsSelect,
   SettingsSwitch,
-  UnsavedPreviewBar,
 } from "./settings-view-components";
 import {
   INITIAL_ALERT_ROUTING,
@@ -72,10 +71,9 @@ export function AccountPreferencesPage() {
     units: "imperial",
   };
   const [draft, setDraft] = useState(initial);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
 
   return (
-    <SettingsPageBody dirty={dirty} onReset={() => setDraft(initial)}>
+    <SettingsPageBody>
       <ScopeLegend />
       <SettingsCard
         description="These choices follow your account across workspaces."
@@ -173,10 +171,9 @@ export function WorkspaceMapPage({
     terrain: false,
   };
   const [draft, setDraft] = useState(initial);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
 
   return (
-    <SettingsPageBody dirty={dirty} onReset={() => setDraft(initial)}>
+    <SettingsPageBody>
       <ScopeLegend />
       <SettingsCard
         action={
@@ -284,11 +281,10 @@ export function SimulationPresetsPage() {
     timeStepHours: "1",
   };
   const [draft, setDraft] = useState(initial);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
 
   return (
-    <SettingsPageBody dirty={dirty} onReset={() => setDraft(initial)}>
-      <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4 text-sm">
+    <SettingsPageBody>
+      <div className="flex items-start gap-3 border-y border-border bg-muted/20 p-4 text-sm">
         <CircleHelp className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div>
           <p className="font-medium">Presets are starting values, not hidden engine configuration.</p>
@@ -373,7 +369,6 @@ export function SimulationPresetsPage() {
 
 export function AlertRoutingPage() {
   const [draft, setDraft] = useState<AlertRoutingSettings>(INITIAL_ALERT_ROUTING);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(INITIAL_ALERT_ROUTING);
   const severities = Object.keys(SEVERITY_LABELS) as Severity[];
 
   function updateChannel(severity: Severity, channel: Channel, checked: boolean) {
@@ -404,7 +399,7 @@ export function AlertRoutingPage() {
   }
 
   return (
-    <SettingsPageBody dirty={dirty} onReset={() => setDraft(INITIAL_ALERT_ROUTING)}>
+    <SettingsPageBody>
       <SettingsCard
         action={
           <SettingsSwitch
@@ -522,7 +517,7 @@ export function AlertRoutingPage() {
         </Table>
       </SettingsCard>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div>
         <SettingsCard title="Escalation policy">
           <SettingsRows>
             <SettingRow htmlFor="settings-escalate-alerts" label="Escalate unacknowledged alerts" scope="Organization">
@@ -581,7 +576,7 @@ const MEMBERS = [
 export function MembersAccessPage() {
   return (
     <SettingsPageBody>
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid border-y border-border xl:grid-cols-3">
         <SummaryCard icon={<ShieldCheck />} label="Owners" value="1" />
         <SummaryCard icon={<LockKeyhole />} label="Admins" value="1" />
         <SummaryCard icon={<Activity />} label="Active members" value="2" />
@@ -640,7 +635,7 @@ export function MembersAccessPage() {
           </TableBody>
         </Table>
       </SettingsCard>
-      <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4 text-xs text-muted-foreground">
+      <div className="flex items-start gap-3 border-y border-border bg-muted/20 p-4 text-xs text-muted-foreground">
         <Info className="mt-0.5 size-4 shrink-0" />
         Member actions are intentionally disabled until organization identity and role APIs are connected.
       </div>
@@ -655,7 +650,7 @@ export function EngineStatusPage({
 }) {
   return (
     <SettingsPageBody>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid border-y border-border xl:grid-cols-4">
         <SummaryCard icon={<Server />} label="Engine API" status="Connected" value="Ready" />
         <SummaryCard icon={<Gauge />} label="Run queue" status="Healthy" value="0 queued" />
         <SummaryCard icon={<Database />} label="Snapshot store" status="Available" value="SQLite" />
@@ -707,21 +702,10 @@ export function EngineStatusPage({
   );
 }
 
-function SettingsPageBody({
-  children,
-  dirty,
-  onReset,
-}: {
-  children: ReactNode;
-  dirty?: boolean;
-  onReset?: () => void;
-}) {
+function SettingsPageBody({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-full flex-col">
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 px-5 py-5 sm:px-8 sm:py-7">
-        {children}
-      </div>
-      {onReset ? <UnsavedPreviewBar dirty={Boolean(dirty)} onReset={onReset} /> : null}
+    <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-5 py-2 sm:px-8 sm:py-3">
+      {children}
     </div>
   );
 }
@@ -738,7 +722,7 @@ function SummaryCard({
   value: string;
 }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card/70 p-4 shadow-xs">
+    <div className="border-b border-border p-4 last:border-b-0 xl:border-r xl:border-b-0 xl:last:border-r-0">
       <div className="flex items-center justify-between gap-3 text-muted-foreground">
         <span className="[&_svg]:size-4">{icon}</span>
         {status ? <Badge variant="outline">{status}</Badge> : null}
