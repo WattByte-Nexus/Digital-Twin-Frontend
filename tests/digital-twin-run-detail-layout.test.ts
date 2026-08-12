@@ -49,6 +49,7 @@ test("run detail positions graphs beside or below the expandable map and provide
   assert.match(playbackWorkspaceSource, /Affected area over time/);
   assert.match(playbackWorkspaceSource, /Active fire cells/);
   assert.match(playbackWorkspaceSource, /aria-label=\{playing \? "Pause playback" : "Play playback"\}/);
+  assert.match(playbackWorkspaceSource, /const RUN_PLAYBACK_INTERVAL_MS = 250;/);
   assert.match(playbackWorkspaceSource, /aria-label="Simulation playback tick"/);
   assert.match(playbackWorkspaceSource, /<\/Card>\s*<Card\s+aria-label="Simulation timeline"/);
   assert.doesNotMatch(playbackWorkspaceSource, /absolute bottom-3 left-3 right-3/);

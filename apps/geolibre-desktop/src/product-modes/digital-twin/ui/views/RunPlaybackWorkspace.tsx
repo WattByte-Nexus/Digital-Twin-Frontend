@@ -64,6 +64,8 @@ const BEHAVIOR_CONFIG = {
   activeCellCount: { label: "Active fire cells", color: "hsl(var(--destructive))" },
 } satisfies ChartConfig;
 
+const RUN_PLAYBACK_INTERVAL_MS = 250;
+
 function PlaybackCharts({
   data,
   selectedTick,
@@ -231,7 +233,7 @@ export function RunPlaybackWorkspace({
         }
         return current + 1;
       });
-    }, 650);
+    }, RUN_PLAYBACK_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, [playing, sampleCount]);
 
