@@ -15,7 +15,12 @@ describe("Digital Twin live weather", () => {
           calls.push(url);
           if (url.includes("/weather-datasets?")) {
             return Response.json({
-              items: [{ dataset_id: "weather:boulder/co:2026-08-12T18:00:00Z", version: "2026-08-12T18:00:00Z", ready: true }],
+              items: [{
+                dataset_id: "weather:boulder/co:2026-08-12T18:00:00Z",
+                version: "2026-08-12T18:00:00Z",
+                bounds: { west: -106, south: 39, east: -104, north: 41 },
+                ready: true,
+              }],
             });
           }
           if (url.endsWith("/map-layers")) {
@@ -44,6 +49,7 @@ describe("Digital Twin live weather", () => {
         { band: "temperature_c", label: "Air temperature", unit: "°C", value: 21.5 },
         { band: "precipitation_mm", label: "Precipitation", unit: "mm", value: 3.2 },
       ],
+      unavailableReadingLabels: [],
       temperatureC: 21.5,
       windDirectionDegrees: 90,
       windSpeedMph: 22.369362920544,
@@ -54,5 +60,51 @@ describe("Digital Twin live weather", () => {
       assert.match(call, /longitude=-105.27/);
       assert.match(call, /latitude=40.02/);
     }
+  });
+
+  it("keeps the dataset timestamp and retries no-data readings within its bounds", async () => {
+    const sampledLongitudes: string[] = [];
+    const weather = await fetchDigitalTwinLiveWeather(
+      "http://127.0.0.1:8000",
+      "boulder",
+      { longitude: -105.27, latitude: 40.02 },
+      {
+        fetchImpl: (async (input: string | URL | Request) => {
+          const url = new URL(String(input));
+          if (url.pathname.endsWith("/weather-datasets")) {
+            return Response.json({
+              items: [{
+                dataset_id: "weather:boulder:2026-08-12T18:00:00Z",
+                version: "2026-08-12T18:00:00Z",
+                bounds: { west: -106, south: 39, east: -104, north: 41 },
+                ready: true,
+              }],
+            });
+          }
+          if (url.pathname.endsWith("/map-layers")) {
+            return Response.json({
+              items: [
+                { layer_id: "wind-speed", name: "Wind speed", units: "m/s", band: "wind_velocity" },
+                { layer_id: "precipitation", name: "Precipitation", units: "mm", band: "precipitation_mm" },
+              ],
+            });
+          }
+          const longitude = url.searchParams.get("longitude") ?? "";
+          if (url.pathname.includes("wind-speed")) {
+            sampledLongitudes.push(longitude);
+            return Response.json({ value: longitude === "-105.27" ? null : 8 });
+          }
+          return Response.json({ value: null });
+        }) as typeof fetch,
+      },
+    );
+
+    assert.equal(weather.observedAt, "2026-08-12T18:00:00Z");
+    assert.equal(weather.windSpeedMph, 17.8954903364352);
+    assert.deepEqual(weather.readings, [
+      { band: "wind_velocity", label: "Wind speed", unit: "m/s", value: 8 },
+    ]);
+    assert.deepEqual(weather.unavailableReadingLabels, ["Precipitation"]);
+    assert.deepEqual(sampledLongitudes.slice(0, 2), ["-105.27", "-105"]);
   });
 });

@@ -54,7 +54,8 @@ test("run detail positions graphs beside or below the expandable map and provide
   assert.doesNotMatch(playbackWorkspaceSource, /absolute bottom-3 left-3 right-3/);
   assert.doesNotMatch(runDetailSource, /Run timeline/);
   assert.match(runTabsSource, /<TabsTrigger value="overview">Overview<\/TabsTrigger>/);
-  assert.match(runTabsSource, /text-sm font-medium text-primary">Tick \{tick\} completed/);
-  assert.match(runTabsSource, /--dt-status-ok-text/);
-  assert.match(runTabsSource, /--dt-status-failed-text/);
+  assert.match(runTabsSource, /fill-primary text-primary-foreground/);
+  assert.match(runTabsSource, /text-sm font-medium text-foreground">Tick \{tick\} completed/);
+  assert.match(runTabsSource, /fill-\[hsl\(var\(--dt-status-ok-text\)\)\]/);
+  assert.match(runTabsSource, /fill-destructive text-destructive-foreground/);
 });

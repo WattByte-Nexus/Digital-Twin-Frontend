@@ -123,7 +123,12 @@ type EngineHealthLoadState = "checking" | DigitalTwinEngineHealth;
 type LiveWeatherLoadState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; observedAt: string; readings: Awaited<ReturnType<typeof fetchDigitalTwinLiveWeather>>["readings"] }
+  | {
+      status: "ready";
+      observedAt: string;
+      readings: Awaited<ReturnType<typeof fetchDigitalTwinLiveWeather>>["readings"];
+      unavailableReadingLabels: string[];
+    }
   | { status: "error"; error: Error };
 
 const POWER_LINE_CASING_LAYER_ID =
@@ -179,6 +184,7 @@ function applyLiveWeather(
     date: observedAt.toISOString().slice(0, 10),
     hour: observedAt.getUTCHours(),
     minute: observedAt.getUTCMinutes(),
+    timeFormat: "24",
     season: seasonForDate(observedAt),
     temperature: weather.temperatureC ?? current.temperature,
     events: {
@@ -191,7 +197,12 @@ function applyLiveWeather(
 
 function liveWeatherStatusText(state: LiveWeatherLoadState): string | undefined {
   if (state.status === "loading") return "Loading live weather from the Digital Twin Engine…";
-  if (state.status === "ready") return `Live weather from the Digital Twin Engine · ${state.observedAt}`;
+  if (state.status === "ready") {
+    const unavailable = state.unavailableReadingLabels.length;
+    return unavailable > 0
+      ? `Live Engine weather · ${state.observedAt} · ${unavailable} ${unavailable === 1 ? "reading" : "readings"} unavailable`
+      : `Live Engine weather · ${state.observedAt}`;
+  }
   if (state.status === "error") return `Live weather unavailable · ${state.error.message}`;
   return undefined;
 }
@@ -480,6 +491,7 @@ export function DigitalTwinMapWorkspace({
             status: "ready",
             observedAt: weather.observedAt,
             readings: weather.readings,
+            unavailableReadingLabels: weather.unavailableReadingLabels,
           });
         },
         (cause: unknown) => {

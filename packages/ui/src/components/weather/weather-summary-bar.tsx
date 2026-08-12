@@ -6,7 +6,7 @@ export interface WeatherSummaryBarProps {
   hour: number;
   location: string;
   minute: number;
-  temperature: number;
+  temperature?: number;
   theme?: WeatherTheme;
 }
 
@@ -28,7 +28,7 @@ export function WeatherSummaryBar({
         <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background text-amber-500 shadow-sm">
           <CloudSun className="h-[18px] w-[18px]" aria-hidden="true" />
           <span className="absolute -bottom-0.5 -right-1 rounded-full border bg-foreground px-1 text-[9px] font-semibold leading-[15px] text-background">
-            {Math.round(temperature)}
+            {temperature === undefined ? "–" : Math.round(temperature)}
           </span>
         </div>
         <div className="min-w-0 leading-tight">

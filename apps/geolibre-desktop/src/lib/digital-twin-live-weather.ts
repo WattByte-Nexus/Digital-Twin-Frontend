@@ -8,6 +8,7 @@ type FetchLike = typeof fetch;
 export interface DigitalTwinLiveWeather {
   observedAt: string;
   readings: DigitalTwinLiveWeatherReading[];
+  unavailableReadingLabels: string[];
   temperatureC?: number;
   windDirectionDegrees?: number;
   windSpeedMph?: number;
@@ -26,8 +27,16 @@ export interface DigitalTwinWeatherPoint {
 }
 
 interface WeatherDataset {
+  bounds?: WeatherBounds;
   datasetId: string;
   observedAt: string;
+}
+
+interface WeatherBounds {
+  east: number;
+  north: number;
+  south: number;
+  west: number;
 }
 
 interface WeatherLayer {
@@ -66,7 +75,17 @@ function parseLatestDataset(value: unknown): WeatherDataset {
   if (!datasetId || !observedAt || Number.isNaN(Date.parse(observedAt))) {
     throw new Error("The Digital Twin Engine returned an invalid live weather dataset.");
   }
-  return { datasetId, observedAt };
+  const rawBounds = isRecord(dataset.bounds) ? dataset.bounds : undefined;
+  const west = finiteNumber(rawBounds?.west);
+  const south = finiteNumber(rawBounds?.south);
+  const east = finiteNumber(rawBounds?.east);
+  const north = finiteNumber(rawBounds?.north);
+  const bounds =
+    west !== null && south !== null && east !== null && north !== null &&
+    west < east && south < north
+      ? { west, south, east, north }
+      : undefined;
+  return { bounds, datasetId, observedAt };
 }
 
 function parseLayers(value: unknown): WeatherLayer[] {
@@ -94,7 +113,7 @@ async function sampleLayer(
   layer: WeatherLayer,
   point: DigitalTwinWeatherPoint,
   signal?: AbortSignal,
-): Promise<number> {
+): Promise<number | null> {
   const url = new URL(
     resolveDigitalTwinApiUrl(apiUrl, `/api/v1/map-layers/${encodeURIComponent(layer.layerId)}/data.json`),
   );
@@ -106,10 +125,53 @@ async function sampleLayer(
   }
   const body = (await response.json()) as unknown;
   const reading = isRecord(body) ? finiteNumber(body.value) : null;
-  if (reading === null) {
-    throw new Error(`The live ${layer.band.replaceAll("_", " ")} reading is unavailable here.`);
-  }
   return reading;
+}
+
+function samplePoints(
+  preferred: DigitalTwinWeatherPoint,
+  bounds?: WeatherBounds,
+): DigitalTwinWeatherPoint[] {
+  if (!bounds) return [preferred];
+  const center = {
+    longitude: (bounds.west + bounds.east) / 2,
+    latitude: (bounds.south + bounds.north) / 2,
+  };
+  const preferredInside =
+    preferred.longitude >= bounds.west &&
+    preferred.longitude <= bounds.east &&
+    preferred.latitude >= bounds.south &&
+    preferred.latitude <= bounds.north;
+  const longitudeInset = (bounds.east - bounds.west) / 4;
+  const latitudeInset = (bounds.north - bounds.south) / 4;
+  const candidates = [
+    ...(preferredInside ? [preferred] : []),
+    center,
+    { longitude: bounds.west + longitudeInset, latitude: center.latitude },
+    { longitude: bounds.east - longitudeInset, latitude: center.latitude },
+    { longitude: center.longitude, latitude: bounds.south + latitudeInset },
+    { longitude: center.longitude, latitude: bounds.north - latitudeInset },
+  ];
+  return candidates.filter(
+    (candidate, index) =>
+      candidates.findIndex(
+        (other) => other.longitude === candidate.longitude && other.latitude === candidate.latitude,
+      ) === index,
+  );
+}
+
+async function sampleAvailableLayer(
+  fetchImpl: FetchLike,
+  apiUrl: string,
+  layer: WeatherLayer,
+  points: DigitalTwinWeatherPoint[],
+  signal?: AbortSignal,
+): Promise<number | null> {
+  for (const point of points) {
+    const reading = await sampleLayer(fetchImpl, apiUrl, layer, point, signal);
+    if (reading !== null) return reading;
+  }
+  return null;
 }
 
 /**
@@ -159,14 +221,28 @@ export async function fetchDigitalTwinLiveWeather(
   }
   const layers = parseLayers((await layersResponse.json()) as unknown);
   if (layers.length === 0) throw new Error("The live weather dataset has no readable layers.");
-  const readings = await Promise.all(
+  const points = samplePoints(point, dataset.bounds);
+  const sampledLayers = await Promise.allSettled(
     layers.map(async (layer) => ({
-      band: layer.band,
-      label: layer.label,
-      unit: layer.unit,
-      value: await sampleLayer(fetchImpl, apiUrl, layer, point, options.signal),
+      layer,
+      value: await sampleAvailableLayer(fetchImpl, apiUrl, layer, points, options.signal),
     })),
   );
+  if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  const readings = sampledLayers.flatMap((result) =>
+    result.status === "fulfilled" && result.value.value !== null
+      ? [{
+          band: result.value.layer.band,
+          label: result.value.layer.label,
+          unit: result.value.layer.unit,
+          value: result.value.value,
+        }]
+      : [],
+  );
+  const availableBands = new Set(readings.map((reading) => reading.band));
+  const unavailableReadingLabels = layers
+    .filter((layer) => !availableBands.has(layer.band))
+    .map((layer) => layer.label);
   const valueByBand = new Map(readings.map((reading) => [reading.band, reading.value]));
   const windSpeedMetersPerSecond = valueByBand.get("wind_velocity");
   const windDirectionDegrees =
@@ -174,6 +250,7 @@ export async function fetchDigitalTwinLiveWeather(
   return {
     observedAt: dataset.observedAt,
     readings,
+    unavailableReadingLabels,
     temperatureC: valueByBand.get("temperature_c"),
     windDirectionDegrees:
       windDirectionDegrees === undefined

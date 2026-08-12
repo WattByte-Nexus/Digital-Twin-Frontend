@@ -48,6 +48,14 @@ export function WeatherSettingsPanel({
   );
   const [uncontrolledValue, setUncontrolledValue] = React.useState(resolvedInitial);
   const value = controlledValue ?? uncontrolledValue;
+  const autoReadingBands = new Set(autoWeatherReadings?.map((reading) => reading.id));
+  const additionalAutoReadings = autoWeatherReadings?.filter(
+    (reading) =>
+      !["temperature_c", "wind_velocity", "wind_direction", "wind_towards_direction"].includes(
+        reading.id,
+      ),
+  );
+  const liveTemperatureAvailable = autoReadingBands.has("temperature_c");
 
   const setValue = (update: React.SetStateAction<WeatherSettingsValue>) => {
     const nextValue = typeof update === "function" ? update(value) : update;
@@ -74,7 +82,11 @@ export function WeatherSettingsPanel({
     >
       <WeatherSummaryBar
         location={location}
-        temperature={value.temperature}
+        temperature={
+          value.mode === "auto" && autoWeatherReadings && !liveTemperatureAvailable
+            ? undefined
+            : value.temperature
+        }
         date={value.date}
         hour={value.hour}
         minute={value.minute}
@@ -98,11 +110,11 @@ export function WeatherSettingsPanel({
             </p>
           ) : null}
 
-          {value.mode === "auto" && autoWeatherReadings?.length ? (
+          {value.mode === "auto" && additionalAutoReadings?.length ? (
             <section aria-label="Live weather readings" className="rounded-md border bg-muted/30 p-3">
-              <h3 className="text-xs font-semibold text-foreground">Live Engine readings</h3>
+              <h3 className="text-xs font-semibold text-foreground">Additional Engine readings</h3>
               <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
-                {autoWeatherReadings.map((reading) => (
+                {additionalAutoReadings.map((reading) => (
                   <div key={reading.id} className="min-w-0">
                     <dt className="truncate text-[11px] text-muted-foreground">{reading.label}</dt>
                     <dd className="text-sm font-medium tabular-nums text-foreground">
@@ -165,6 +177,11 @@ export function WeatherSettingsPanel({
                     <SelectItem value="Winter">Winter</SelectItem>
                   </SelectContent>
                 </Select>
+                {value.mode === "auto" && autoWeatherReadings && !liveTemperatureAvailable ? (
+                  <div className="flex h-9 items-center justify-end rounded-md border bg-muted px-3 text-xs text-muted-foreground">
+                    Unavailable
+                  </div>
+                ) : (
                 <label className="relative">
                   <span className="sr-only">Temperature in Celsius</span>
                   <Input
@@ -182,22 +199,37 @@ export function WeatherSettingsPanel({
                     °C
                   </span>
                 </label>
+                )}
               </div>
             </div>
 
+            {value.mode === "manual" || autoReadingBands.has("wind_velocity") ||
+            autoReadingBands.has("wind_direction") ||
+            autoReadingBands.has("wind_towards_direction") ? (
             <div className="space-y-2 [@media(max-height:900px)]:space-y-1">
               <SectionLabel>Weather Events</SectionLabel>
               <div className="space-y-2 [@media(max-height:900px)]:space-y-1">
-                <WeatherEventRow label="Fog" value={value.events.fog} unit="%" onChange={(next) => updateEvent("fog", next)} />
-                <WeatherEventRow label="Rain" value={value.events.rain} unit="%" onChange={(next) => updateEvent("rain", next)} />
-                <WeatherEventRow label="Thunder" value={value.events.thunder} unit="%" onChange={(next) => updateEvent("thunder", next)} />
-                <WeatherEventRow label="Dust" value={value.events.dust} unit="%" onChange={(next) => updateEvent("dust", next)} />
-                <WeatherEventRow label="Cloud Coverage" value={value.events.cloudCoverage} unit="%" onChange={(next) => updateEvent("cloudCoverage", next)} />
-                <WeatherEventRow label="Wind" value={value.events.wind} unit="mph" step={0.1} onChange={(next) => updateEvent("wind", next)} />
-                <WeatherEventRow label="Wind Direction" value={value.events.windDirection} unit="°" maximum={360} onChange={(next) => updateEvent("windDirection", next)} />
-                <WeatherEventRow label="Snow" value={value.events.snow} unit="%" onChange={(next) => updateEvent("snow", next)} />
+                {value.mode === "manual" ? (
+                  <>
+                    <WeatherEventRow label="Fog" value={value.events.fog} unit="%" onChange={(next) => updateEvent("fog", next)} />
+                    <WeatherEventRow label="Rain" value={value.events.rain} unit="%" onChange={(next) => updateEvent("rain", next)} />
+                    <WeatherEventRow label="Thunder" value={value.events.thunder} unit="%" onChange={(next) => updateEvent("thunder", next)} />
+                    <WeatherEventRow label="Dust" value={value.events.dust} unit="%" onChange={(next) => updateEvent("dust", next)} />
+                    <WeatherEventRow label="Cloud Coverage" value={value.events.cloudCoverage} unit="%" onChange={(next) => updateEvent("cloudCoverage", next)} />
+                  </>
+                ) : null}
+                {value.mode === "manual" || autoReadingBands.has("wind_velocity") ? (
+                  <WeatherEventRow label="Wind" value={value.events.wind} unit="mph" step={0.1} onChange={(next) => updateEvent("wind", next)} />
+                ) : null}
+                {value.mode === "manual" || autoReadingBands.has("wind_direction") || autoReadingBands.has("wind_towards_direction") ? (
+                  <WeatherEventRow label="Wind Direction" value={value.events.windDirection} unit="°" maximum={360} onChange={(next) => updateEvent("windDirection", next)} />
+                ) : null}
+                {value.mode === "manual" ? (
+                  <WeatherEventRow label="Snow" value={value.events.snow} unit="%" onChange={(next) => updateEvent("snow", next)} />
+                ) : null}
               </div>
             </div>
+            ) : null}
           </fieldset>
         </div>
       </div>
