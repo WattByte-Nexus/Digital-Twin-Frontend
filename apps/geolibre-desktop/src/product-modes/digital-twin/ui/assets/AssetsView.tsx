@@ -86,6 +86,8 @@ interface EditorDraft {
   longitude: string;
   endLatitude: string;
   endLongitude: string;
+  elevationM: string;
+  endElevationM: string;
   heightM: string;
   canopyRadiusM: string;
   sourceRef: string;
@@ -133,6 +135,8 @@ function editorDraft(
       longitude: String(first?.lon ?? ""),
       endLatitude: String(last?.lat ?? ""),
       endLongitude: String(last?.lon ?? ""),
+      elevationM: String(first?.elevationM ?? ""),
+      endElevationM: String(last?.elevationM ?? ""),
       heightM: "",
       canopyRadiusM: "",
       sourceRef: "",
@@ -147,6 +151,8 @@ function editorDraft(
       longitude: String(asset.location.lon),
       endLatitude: "",
       endLongitude: "",
+      elevationM: "",
+      endElevationM: "",
       heightM: asset.heightM === null ? "" : String(asset.heightM),
       canopyRadiusM:
         asset.canopyRadiusM === null ? "" : String(asset.canopyRadiusM),
@@ -161,6 +167,8 @@ function editorDraft(
     longitude: "",
     endLatitude: "",
     endLongitude: "",
+    elevationM: "",
+    endElevationM: "",
     heightM: "",
     canopyRadiusM: "",
     sourceRef: "",
@@ -189,13 +197,29 @@ function positiveOptional(value: string, label: string): number | undefined {
   return number;
 }
 
+function finiteNumber(value: string, label: string): number {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`${label} must be a number.`);
+  return number;
+}
+
 function updatePayload(draft: EditorDraft): DigitalTwinAssetPatch {
   if (draft.kind === "power_line") {
     return {
       name: draft.name.trim() || null,
       coordinates: [
-        coordinate(draft.latitude, draft.longitude, "Start coordinate"),
-        coordinate(draft.endLatitude, draft.endLongitude, "End coordinate"),
+        {
+          ...coordinate(draft.latitude, draft.longitude, "Start coordinate"),
+          elevation_m: finiteNumber(draft.elevationM, "Start elevation"),
+        },
+        {
+          ...coordinate(
+            draft.endLatitude,
+            draft.endLongitude,
+            "End coordinate"
+          ),
+          elevation_m: finiteNumber(draft.endElevationM, "End elevation"),
+        },
       ],
     };
   }
@@ -275,6 +299,7 @@ function AssetEditor({
           : [
               await updateDigitalTwinAsset(
                 apiUrl,
+                asset?.regionId ?? "",
                 asset?.assetId ?? "",
                 updatePayload(draft)
               ),
@@ -466,32 +491,64 @@ function AssetEditor({
                   </div>
                 </div>
                 {draft.kind === "power_line" ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="asset-end-lat">End latitude</Label>
-                      <Input
-                        id="asset-end-lat"
-                        inputMode="decimal"
-                        onChange={(event) =>
-                          update("endLatitude", event.target.value)
-                        }
-                        required
-                        value={draft.endLatitude}
-                      />
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="asset-start-elevation">
+                          Start elevation (m)
+                        </Label>
+                        <Input
+                          id="asset-start-elevation"
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            update("elevationM", event.target.value)
+                          }
+                          required
+                          value={draft.elevationM}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="asset-end-elevation">
+                          End elevation (m)
+                        </Label>
+                        <Input
+                          id="asset-end-elevation"
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            update("endElevationM", event.target.value)
+                          }
+                          required
+                          value={draft.endElevationM}
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="asset-end-lon">End longitude</Label>
-                      <Input
-                        id="asset-end-lon"
-                        inputMode="decimal"
-                        onChange={(event) =>
-                          update("endLongitude", event.target.value)
-                        }
-                        required
-                        value={draft.endLongitude}
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="asset-end-lat">End latitude</Label>
+                        <Input
+                          id="asset-end-lat"
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            update("endLatitude", event.target.value)
+                          }
+                          required
+                          value={draft.endLatitude}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="asset-end-lon">End longitude</Label>
+                        <Input
+                          id="asset-end-lon"
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            update("endLongitude", event.target.value)
+                          }
+                          required
+                          value={draft.endLongitude}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  </>
                 ) : (
                   <>
                     <div className="grid grid-cols-2 gap-3">
@@ -575,7 +632,7 @@ function AssetProperties({
     setDeleting(true);
     setError(null);
     try {
-      await deleteDigitalTwinAsset(apiUrl, asset.assetId);
+      await deleteDigitalTwinAsset(apiUrl, asset.regionId, asset.assetId);
       onDeleted();
     } catch (cause) {
       setError(
@@ -598,6 +655,58 @@ function AssetProperties({
               asset.coordinates.at(-1)?.lon
             }`,
           },
+          {
+            label: "Support elevations",
+            value: `${asset.coordinates[0].elevationM.toLocaleString()}–${asset.coordinates[1].elevationM.toLocaleString()} m`,
+          },
+          ...(asset.conductor
+            ? [
+                {
+                  label: "Span length",
+                  value: `${asset.conductor.spanLengthM.toLocaleString()} m`,
+                },
+                {
+                  label: "Conductor diameter",
+                  value: `${(
+                    asset.conductor.conductorDiameterM * 1_000
+                  ).toLocaleString()} mm`,
+                },
+                {
+                  label: "Horizontal tension",
+                  value: `${asset.conductor.horizontalTensionN.toLocaleString()} N`,
+                },
+                {
+                  label: "Static sag",
+                  value:
+                    asset.conductor.staticSagM === null
+                      ? "Not available"
+                      : `${asset.conductor.staticSagM.toLocaleString()} m`,
+                },
+              ]
+            : []),
+          ...(asset.latestPhysics
+            ? [
+                {
+                  label: "Latest physics",
+                  value:
+                    asset.latestPhysics.status === "succeeded"
+                      ? `${asset.latestPhysics.source.toUpperCase()} · tick ${asset.latestPhysics.tick}`
+                      : `Failed · tick ${asset.latestPhysics.tick}`,
+                },
+                ...(asset.latestPhysics.status === "succeeded"
+                  ? [
+                      {
+                        label: "Wind speed",
+                        value: `${asset.latestPhysics.windSpeedMps.toLocaleString()} m/s`,
+                      },
+                      {
+                        label: "Max displacement",
+                        value: `${asset.latestPhysics.maxDisplacementM.toLocaleString()} m`,
+                      },
+                    ]
+                  : []),
+              ]
+            : []),
         ]
       : [
           {
@@ -717,6 +826,7 @@ export function AssetsView({
   const selectedId = assetIdFromLocation(location);
   const selected =
     assets.find((item) => item.asset.assetId === selectedId) ?? null;
+  const selectedRegionId = selected?.asset.regionId ?? null;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -754,9 +864,9 @@ export function AssetsView({
   }, [apiUrl, regions, requestKey]);
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || !selectedRegionId) return;
     const controller = new AbortController();
-    void fetchDigitalTwinAsset(apiUrl, selectedId, {
+    void fetchDigitalTwinAsset(apiUrl, selectedRegionId, selectedId, {
       signal: controller.signal,
     }).then(
       (asset) => {
@@ -792,7 +902,7 @@ export function AssetsView({
       }
     );
     return () => controller.abort();
-  }, [apiUrl, regions, selectedId]);
+  }, [apiUrl, regions, selectedId, selectedRegionId]);
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();

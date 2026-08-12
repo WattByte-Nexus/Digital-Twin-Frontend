@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
   ApiProblem,
-  buildAuthoritativeRegionAssets,
+  buildCanonicalRegionAssets,
   buildIgnitionPointFeature,
   buildOperationalPowerLineFeatures,
   buildPowerLineNetwork,
@@ -20,7 +20,6 @@ import {
   mergeRunProgress,
   normalizeApiBaseUrl,
   REPLAY_CACHE_MAX_FRAMES,
-  selectDemoAssetRegionIds,
   selectDemoRegions,
   selectedTreeSummary,
   SimulationReplayControl,
@@ -116,23 +115,23 @@ describe("digital-twin-demo bundled plugin", () => {
       features: [
         {
           type: "Feature",
-          properties: { kind: "operational_power_line", power_line_id: "span-1" },
+          properties: { kind: "power_line", asset_id: "span-1" },
           geometry: {
             type: "LineString",
             coordinates: [
-              [-105.2, 40],
-              [-105.1995, 40],
+              [-105.2, 40, 1_700],
+              [-105.1995, 40, 1_701],
             ],
           },
         },
         {
           type: "Feature",
-          properties: { kind: "operational_power_line", power_line_id: "span-2" },
+          properties: { kind: "power_line", asset_id: "span-2" },
           geometry: {
             type: "LineString",
             coordinates: [
-              [-105.19950002, 40.00000002],
-              [-105.1995, 40.0005],
+              [-105.19950002, 40.00000002, 1_701],
+              [-105.1995, 40.0005, 1_702],
             ],
           },
         },
@@ -148,9 +147,9 @@ describe("digital-twin-demo bundled plugin", () => {
     assert.deepEqual(
       network.poles.map((pole: { position: number[] }) => pole.position),
       [
-        [-105.2, 40, 0],
-        [-105.1995, 40, 0],
-        [-105.1995, 40.0005, 0],
+        [-105.2, 40, 1_691.5],
+        [-105.1995, 40, 1_692.5],
+        [-105.1995, 40.0005, 1_693.5],
       ],
     );
     assert.ok(
@@ -165,7 +164,7 @@ describe("digital-twin-demo bundled plugin", () => {
       network.conductors.every(
         (conductor: { path: number[][] }) =>
           conductor.path.length === 2 &&
-          conductor.path.every((coordinate) => coordinate[2] === 7.9),
+          conductor.path.every((coordinate) => coordinate[2] >= 1_700),
       ),
     );
     assert.deepEqual(network.conductors[0].path[1], network.conductors[2].path[0]);
@@ -382,15 +381,6 @@ describe("digital-twin-demo bundled plugin", () => {
       ]),
       [canonicalBoulder, golden],
     );
-    assert.deepEqual(
-      selectDemoAssetRegionIds([
-        canonicalBoulder,
-        { ...seededBoulder, region_id: "older-seeded-boulder" },
-        seededBoulder,
-        golden,
-      ]),
-      { "boulder-co": ["seeded-boulder", "older-seeded-boulder", "boulder-co"] },
-    );
   });
 
   it("maps arbitrary selected coordinates to ordered GeoJSON ignition points", () => {
@@ -478,19 +468,20 @@ describe("digital-twin-demo bundled plugin", () => {
     assert.equal(headers.get("X-Request-ID"), "request-1");
   });
 
-  it("loads operational line summaries and encoded line details through the API client", async () => {
+  it("loads canonical line summaries and encoded asset details through the API client", async () => {
     const calls: string[] = [];
     const client = createDigitalTwinClient("http://127.0.0.1:8000", {
       fetchImpl: async (input: string | URL | Request) => {
         const url = String(input);
         calls.push(url);
-        if (url.endsWith("/power-lines")) return Response.json([]);
+        if (url.endsWith("/assets")) return Response.json([]);
         return Response.json({
-          power_line_id: "line/7",
+          kind: "power_line",
+          asset_id: "line/7",
           region_id: "region/1",
           geometry: {
             type: "LineString",
-            coordinates: [[-105.1, 40], [-105, 40.1]],
+            coordinates: [[-105.1, 40, 1_700], [-105, 40.1, 1_701]],
             bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
           },
           conductor: {
@@ -509,28 +500,27 @@ describe("digital-twin-demo bundled plugin", () => {
       },
     });
 
-    await client.listPowerLines("region/1");
-    await client.getPowerLine("region/1", "line/7");
+    await client.listPowerLineAssets("region/1");
+    await client.getPowerLineAsset("region/1", "line/7");
 
     assert.deepEqual(calls, [
-      "http://127.0.0.1:8000/api/v1/regions/region%2F1/power-lines",
-      "http://127.0.0.1:8000/api/v1/regions/region%2F1/power-lines/line%2F7",
+      "http://127.0.0.1:8000/api/v1/regions/region%2F1/assets",
+      "http://127.0.0.1:8000/api/v1/regions/region%2F1/assets/line%2F7",
     ]);
   });
 
-  it("turns operational line summaries into pickable GeoJSON without public asset ids", () => {
+  it("turns canonical line assets into pickable GeoJSON", () => {
     assert.deepEqual(
       buildOperationalPowerLineFeatures([
         {
-          power_line_id: "line-7",
-          geometry: {
-            type: "LineString",
-            coordinates: [
-              [-105.1, 40],
-              [-105, 40.1],
-            ],
-            bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
-          },
+          kind: "power_line",
+          asset_id: "line-7",
+          region_id: "region-1",
+          name: null,
+          coordinates: [
+            { lon: -105.1, lat: 40, elevation_m: 1_700 },
+            { lon: -105, lat: 40.1, elevation_m: 1_701 },
+          ],
         },
       ]),
       {
@@ -538,12 +528,12 @@ describe("digital-twin-demo bundled plugin", () => {
         features: [
           {
             type: "Feature",
-            properties: { kind: "operational_power_line", power_line_id: "line-7" },
+            properties: { kind: "power_line", asset_id: "line-7" },
             geometry: {
               type: "LineString",
               coordinates: [
-                [-105.1, 40],
-                [-105, 40.1],
+                [-105.1, 40, 1_700],
+                [-105, 40.1, 1_701],
               ],
             },
           },
@@ -552,77 +542,67 @@ describe("digital-twin-demo bundled plugin", () => {
     );
   });
 
-  it("keeps asset trees while making operational lines the only rendered line inventory", () => {
-    const assets = {
-      type: "FeatureCollection",
-      features: [
-        treeFeature,
-        {
-          type: "Feature",
-          properties: { kind: "power_line", asset_id: "obsolete-static-line" },
-          geometry: { type: "LineString", coordinates: [[-105.2, 40], [-105.19, 40]] },
-        },
+  it("renders canonical line assets without a second tree source", () => {
+    const result = buildCanonicalRegionAssets([{
+      kind: "power_line",
+      asset_id: "canonical-line",
+      region_id: "region-1",
+      name: null,
+      coordinates: [
+        { lon: -105.1, lat: 40, elevation_m: 1_700 },
+        { lon: -105, lat: 40.1, elevation_m: 1_701 },
       ],
-    };
-    const result = buildAuthoritativeRegionAssets(assets, [{
-      power_line_id: "operational-line",
-      geometry: {
-        type: "LineString",
-        coordinates: [[-105.1, 40], [-105, 40.1]],
-        bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
-      },
     }]);
 
     assert.deepEqual(result.features.map((feature: { properties: { kind: string } }) => feature.properties.kind), [
-      "tree",
-      "operational_power_line",
+      "power_line",
     ]);
   });
 
-  it("accepts an empty operational inventory and rejects malformed summary coordinates", () => {
+  it("accepts an empty asset catalog and rejects malformed line coordinates", () => {
     assert.deepEqual(validatePowerLineSummaries([]), []);
     assert.throws(
       () => validatePowerLineSummaries([{
-        power_line_id: "line-7",
-        geometry: {
-          type: "LineString",
-          coordinates: [[-105.1, 40], [181, 40]],
-          bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
-        },
+        kind: "power_line",
+        asset_id: "line-7",
+        coordinates: [
+          { lon: -105.1, lat: 40, elevation_m: 1_700 },
+          { lon: 181, lat: 40, elevation_m: 1_701 },
+        ],
       }]),
       /coordinate 2/i,
     );
     assert.throws(
       () => validatePowerLineSummaries([{
-        power_line_id: "line-7",
-        geometry: {
-          type: "LineString",
-          coordinates: [["-105.1", 40], [-105, 40.1]],
-          bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
-        },
+        kind: "power_line",
+        asset_id: "line-7",
+        coordinates: [
+          { lon: "-105.1", lat: 40, elevation_m: 1_700 },
+          { lon: -105, lat: 40.1, elevation_m: 1_701 },
+        ],
       }]),
-      /numeric WGS84/i,
+      /finite number/i,
     );
     const summary = {
-      power_line_id: "line-7",
-      geometry: {
-        type: "LineString",
-        coordinates: [[-105.1, 40], [-105, 40.1]],
-        bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
-      },
+      kind: "power_line",
+      asset_id: "line-7",
+      coordinates: [
+        { lon: -105.1, lat: 40, elevation_m: 1_700 },
+        { lon: -105, lat: 40.1, elevation_m: 1_701 },
+      ],
     };
     assert.throws(() => validatePowerLineSummaries([summary, summary]), /duplicated/i);
   });
 
   it("builds explicit succeeded, failed, and awaiting-tick power-line detail states", () => {
     const base = {
-      power_line_id: "line-7",
+      asset_id: "line-7",
       region_id: "region-1",
       geometry: {
         type: "LineString",
         coordinates: [
-          [-105.1, 40],
-          [-105, 40.1],
+          [-105.1, 40, 1_700],
+          [-105, 40.1, 1_701],
         ],
         bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
       },
@@ -699,11 +679,11 @@ describe("digital-twin-demo bundled plugin", () => {
 
   it("validates detail IDs, conductor numbers, and physics discriminators", () => {
     const detail = {
-      power_line_id: "line-7",
+      asset_id: "line-7",
       region_id: "region-1",
       geometry: {
         type: "LineString",
-        coordinates: [[-105.1, 40], [-105, 40.1]],
+        coordinates: [[-105.1, 40, 1_700], [-105, 40.1, 1_701]],
         bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
       },
       conductor: {
@@ -720,24 +700,24 @@ describe("digital-twin-demo bundled plugin", () => {
       latest_physics: null,
     };
 
-    assert.equal(validatePowerLineDetail(detail, { regionId: "region-1", powerLineId: "line-7" }), detail);
-    assert.throws(() => validatePowerLineDetail({ ...detail, power_line_id: "wrong" }, { powerLineId: "line-7" }), /does not match/i);
+    assert.equal(validatePowerLineDetail(detail, { regionId: "region-1", assetId: "line-7" }), detail);
+    assert.throws(() => validatePowerLineDetail({ ...detail, asset_id: "wrong" }, { assetId: "line-7" }), /does not match/i);
     assert.throws(() => validatePowerLineDetail({ ...detail, conductor: { ...detail.conductor, span_length_m: "100" } }), /finite number/i);
     const { static_sag_m: _missingSag, ...conductorWithoutSag } = detail.conductor;
     assert.throws(() => validatePowerLineDetail({ ...detail, conductor: conductorWithoutSag }), /Static sag is required/i);
     assert.throws(() => validatePowerLineDetail({ ...detail, latest_physics: { status: "pending" } }), /unsupported status/i);
   });
 
-  it("requires operational line loading and clears stale map data during region switches", async () => {
+  it("requires canonical line loading and clears stale map data during region switches", async () => {
     const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
 
     assert.match(source, /this\.assetMap\.setData\(emptyFeatureCollection\(\), regionId\)/);
-    assert.match(source, /Could not load operational power lines:/);
+    assert.match(source, /Could not load power-line assets:/);
     assert.doesNotMatch(source, /Power-line details are unavailable/);
     assert.doesNotMatch(source, /return \[\];\s*\}\),\s*\]\);/);
   });
 
-  it("restores operational lines after style reload and aborts superseded detail requests", async () => {
+  it("restores power-line assets after style reload and aborts superseded detail requests", async () => {
     const source = await readFile(new URL("dist/index.js", pluginRoot), "utf8");
 
     assert.match(source, /this\.onStyleData = \(\) => this\.ensureLayers\(\)/);
@@ -1815,7 +1795,12 @@ describe("digital-twin-demo bundled plugin", () => {
 
   it("declares a matching bundled active-by-default plugin manifest", async () => {
     const manifest = JSON.parse(await readFile(new URL("plugin.json", pluginRoot), "utf8"));
-    const poleModel = await readFile(new URL("assets/13.8kv_power_pole.glb", pluginRoot));
+    const poleModel = await readFile(
+      new URL(
+        "../../assets/digital-twin/13.8kv_power_pole.glb",
+        pluginRoot
+      )
+    );
     const { default: plugin } = await import(
       "../apps/geolibre-desktop/public/plugins/digital-twin-demo/dist/index.js"
     );

@@ -19,12 +19,45 @@ const tree = {
   source_ref: "city-tree:1",
 };
 
+const powerLine = {
+  kind: "power_line",
+  asset_id: "asset-line-1",
+  region_id: "region/1",
+  coordinates: [
+    { lat: 40.01, lon: -105.27, elevation_m: 1_710.5 },
+    { lat: 40.02, lon: -105.26, elevation_m: 1_712.25 },
+  ],
+  name: "North feeder span",
+};
+
+const powerLineDetail = {
+  kind: "power_line",
+  asset_id: "asset-line-1",
+  region_id: "region/1",
+  name: "North feeder span",
+  geometry: {
+    type: "LineString",
+    coordinates: [
+      [-105.27, 40.01, 1_710.5],
+      [-105.26, 40.02, 1_712.25],
+    ],
+    bounds: {
+      west: -105.27,
+      south: 40.01,
+      east: -105.26,
+      north: 40.02,
+    },
+  },
+  conductor: null,
+  latest_physics: null,
+};
+
 describe("Digital Twin asset API", () => {
   it("loads and validates region assets and asset details", async () => {
     const urls: string[] = [];
     const fetchImpl: typeof fetch = async (input) => {
       urls.push(String(input));
-      return Response.json(urls.length === 1 ? [tree] : tree);
+      return Response.json(urls.length === 1 ? [tree, powerLine] : powerLineDetail);
     };
     const listed = await fetchDigitalTwinAssets(
       "http://engine.test/",
@@ -33,15 +66,93 @@ describe("Digital Twin asset API", () => {
     );
     const detail = await fetchDigitalTwinAsset(
       "http://engine.test/",
-      "asset-tree-1",
+      "region/1",
+      "asset-line-1",
       { fetchImpl }
     );
     assert.equal(listed[0]?.kind, "tree");
-    assert.deepEqual(detail, listed[0]);
+    assert.equal(listed[1]?.kind, "power_line");
+    assert.deepEqual(detail, {
+      kind: "power_line",
+      assetId: "asset-line-1",
+      regionId: "region/1",
+      coordinates: [
+        { lat: 40.01, lon: -105.27, elevationM: 1_710.5 },
+        { lat: 40.02, lon: -105.26, elevationM: 1_712.25 },
+      ],
+      name: "North feeder span",
+      bounds: {
+        west: -105.27,
+        south: 40.01,
+        east: -105.26,
+        north: 40.02,
+      },
+      conductor: null,
+      latestPhysics: null,
+    });
     assert.deepEqual(urls, [
       "http://engine.test/api/v1/regions/region%2F1/assets",
-      "http://engine.test/api/v1/assets/asset-tree-1",
+      "http://engine.test/api/v1/regions/region%2F1/assets/asset-line-1",
     ]);
+  });
+
+  it("retains enriched conductor inputs and latest physics on asset details", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      Response.json({
+        ...powerLineDetail,
+        conductor: {
+          mass_per_meter_kg_m: 0.433,
+          span_length_m: 45.071,
+          conductor_diameter_m: 0.01431,
+          horizontal_tension_n: 7_500,
+          air_density_kg_m3: 1.225,
+          drag_coefficient: 1,
+          static_sag_m: 0.3,
+          elastic_modulus_pa: 69_000_000_000,
+          cross_sectional_area_m2: 0.000125,
+        },
+        latest_physics: {
+          status: "succeeded",
+          source: "fem",
+          tick: 9,
+          line_snapshot: 3,
+          weather_version: "2026-08-12T18:00:00Z",
+          weather_source_ref: "weather-1",
+          feature_contract_version: "power-line-v1",
+          model_version: "model-1",
+          model_checksum: "a".repeat(64),
+          cached_from_tick: null,
+          routing_reason: "near_threshold",
+          solver_version: "solver-2",
+          surrogate_confidence: null,
+          wind_speed_mps: 18.4,
+          midspan_displacement_m: 1.2,
+          max_displacement_m: 1.5,
+          max_displacement_position_m: 22.5,
+          collision_envelope_m: {
+            min_x: 0,
+            max_x: 45.071,
+            min_y: -1.51,
+            max_y: 1.51,
+          },
+        },
+      });
+
+    const detail = await fetchDigitalTwinAsset(
+      "http://engine.test",
+      "region/1",
+      "asset-line-1",
+      { fetchImpl }
+    );
+
+    assert.equal(detail.kind, "power_line");
+    assert.equal(detail.conductor?.spanLengthM, 45.071);
+    assert.equal(
+      detail.latestPhysics?.status === "succeeded"
+        ? detail.latestPhysics.maxDisplacementM
+        : null,
+      1.5
+    );
   });
 
   it("uses the canonical CSV import, patch, and delete contracts", async () => {
@@ -73,19 +184,29 @@ describe("Digital Twin asset API", () => {
     });
     await updateDigitalTwinAsset(
       "http://engine.test",
+      "region/1",
       "asset-tree-1",
       { height_m: 14 },
       { fetchImpl }
     );
-    await deleteDigitalTwinAsset("http://engine.test", "asset-tree-1", {
-      fetchImpl,
-    });
+    await deleteDigitalTwinAsset(
+      "http://engine.test",
+      "region/1",
+      "asset-tree-1",
+      { fetchImpl }
+    );
     assert.deepEqual(
       requests.map(({ method, url }) => [method, url]),
       [
         ["POST", "http://engine.test/api/v1/regions/region%2F1/assets:csv"],
-        ["PATCH", "http://engine.test/api/v1/assets/asset-tree-1"],
-        ["DELETE", "http://engine.test/api/v1/assets/asset-tree-1"],
+        [
+          "PATCH",
+          "http://engine.test/api/v1/regions/region%2F1/assets/asset-tree-1",
+        ],
+        [
+          "DELETE",
+          "http://engine.test/api/v1/regions/region%2F1/assets/asset-tree-1",
+        ],
       ]
     );
     assert.ok(requests[0]?.body instanceof FormData);
@@ -115,9 +236,12 @@ describe("Digital Twin asset API", () => {
       );
     await assert.rejects(
       () =>
-        deleteDigitalTwinAsset("http://engine.test", "asset-tree-1", {
-          fetchImpl,
-        }),
+        deleteDigitalTwinAsset(
+          "http://engine.test",
+          "region-1",
+          "asset-tree-1",
+          { fetchImpl }
+        ),
       /Published assets cannot be deleted/
     );
   });

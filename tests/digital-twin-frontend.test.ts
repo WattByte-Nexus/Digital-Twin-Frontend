@@ -107,7 +107,7 @@ describe("Digital Twin frontend composition", () => {
   it("shows the live map controls while the scenario builder is open", () => {
     assert.match(
       workspaceSource,
-      /const showLiveMapChrome =\s*activeDestination === "live" \|\|\s*\(activeDestination === "scenarios" && scenarioBuilderOpen\)/
+      /const showLiveMapChrome =\s*!settingsOpen &&\s*\(activeDestination === "live" \|\|\s*\(activeDestination === "scenarios" && scenarioBuilderOpen\)\)/
     );
     assert.match(workspaceSource, /mapToolbar=\{\s*showLiveMapChrome \?/);
   });
@@ -115,7 +115,7 @@ describe("Digital Twin frontend composition", () => {
   it("keeps operational asset auto-fit from overriding the run camera", () => {
     assert.match(
       workspaceSource,
-      /if \(\s*!showLiveMapChrome \|\|\s*!mapInstance \|\|[\s\S]*?mapInstance\.fitBounds\([\s\S]*?\}, \[activeRegionId, mapInstance, powerLines, showLiveMapChrome\]\);/
+      /if \(\s*!showLiveMapChrome \|\|\s*!mapInstance \|\|[\s\S]*?mapInstance\.fitBounds\([\s\S]*?regionAssets,[\s\S]*?regionalPowerLines,[\s\S]*?showLiveMapChrome,?\s*\]\);/
     );
   });
 
@@ -190,19 +190,19 @@ describe("Digital Twin frontend composition", () => {
     assert.doesNotMatch(workspaceSource, /\/data\/usgs-lidar\/golden-city/);
   });
 
-  it("drapes operational power lines over terrain with native map layers", () => {
-    assert.match(workspaceSource, /mapInstance\.addSource\(POWER_LINE_SOURCE_ID/);
-    assert.match(workspaceSource, /type:\s*"line"/);
-    assert.match(workspaceSource, /mapInstance\.addLayer\([\s\S]*POWER_LINE_LAYER_ID/);
+  it("renders canonical power-line assets and poles in the shared deck overlay", () => {
+    assert.match(workspaceSource, /fetchDigitalTwinAssets/);
+    assert.match(workspaceSource, /createDigitalTwinPowerLineLayers/);
+    assert.match(workspaceSource, /resolveDigitalTwinPowerPoleModelUrl/);
     assert.match(workspaceSource, /deckLayers=\{deckLayers\}/);
-    assert.doesNotMatch(workspaceSource, /parameters:\s*\{\s*depthTest:\s*false/);
+    assert.doesNotMatch(workspaceSource, /fetchDigitalTwinPowerLines/);
     assert.doesNotMatch(workspaceSource, /new MapboxOverlay/);
   });
 
   it("opens an API-backed asset catalog from its own workspace destination", () => {
     assert.match(workspaceSource, /activeDestination === "assets"/);
     assert.match(workspaceSource, /<AssetsView/);
-    assert.match(workspaceSource, /powerLines\.lines\.map\(\(asset\) =>/);
+    assert.match(workspaceSource, /regionalPowerLines\.map\(\(asset\) =>/);
     assert.doesNotMatch(workspaceSource, /const WORKSPACE_ASSETS/);
     assert.match(assetsViewSource, /fetchDigitalTwinAssets/);
     assert.match(assetsViewSource, /importDigitalTwinAssetCsv/);

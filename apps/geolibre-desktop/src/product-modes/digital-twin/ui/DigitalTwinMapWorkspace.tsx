@@ -70,15 +70,19 @@ import {
 } from "../../../lib/digital-twin-runs";
 import { APP_VERSION } from "../../../lib/updates";
 import {
-  fetchDigitalTwinPowerLines,
-  powerLinesFeatureCollection,
-  type DigitalTwinPowerLine,
-} from "../../../lib/digital-twin-power-lines";
+  fetchDigitalTwinAssets,
+  type DigitalTwinAsset,
+  type DigitalTwinPowerLineAsset,
+} from "../../../lib/digital-twin-assets";
 import {
   fetchActiveDigitalTwinPointCloud,
   type DigitalTwinPointCloudResult,
 } from "../../../lib/digital-twin-point-cloud";
 import { createDigitalTwinPointCloudLayer } from "../digital-twin-lidar";
+import {
+  createDigitalTwinPowerLineLayers,
+  resolveDigitalTwinPowerPoleModelUrl,
+} from "../digital-twin-power-line-rendering";
 import {
   DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
   DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG,
@@ -108,10 +112,10 @@ type PointCloudLoadState =
   | { status: "loading" }
   | { status: "error"; error: Error };
 
-type PowerLineLoadState =
+type RegionAssetLoadState =
   | { status: "none" }
   | { status: "loading" }
-  | { status: "ready"; regionId: string; lines: DigitalTwinPowerLine[] }
+  | { status: "ready"; regionId: string; assets: DigitalTwinAsset[] }
   | { status: "error"; error: Error };
 
 type WeatherDataLoadState =
@@ -139,10 +143,6 @@ type LiveWeatherLoadState =
     }
   | { status: "error"; error: Error };
 
-const POWER_LINE_CASING_LAYER_ID =
-  "digital-twin-operational-power-lines-casing";
-const POWER_LINE_LAYER_ID = "digital-twin-operational-power-lines-line";
-const POWER_LINE_SOURCE_ID = "digital-twin-operational-power-lines";
 const FLOATING_MAP_ACTION_BUTTON_CLASS_NAME =
   "size-10 border border-border bg-background/95 text-foreground shadow-lg backdrop-blur";
 
@@ -432,9 +432,19 @@ export function DigitalTwinMapWorkspace({
   const [pointCloud, setPointCloud] = useState<PointCloudLoadState>({
     status: "none",
   });
-  const [powerLines, setPowerLines] = useState<PowerLineLoadState>({
+  const [regionAssets, setRegionAssets] = useState<RegionAssetLoadState>({
     status: "none",
   });
+  const regionalPowerLines = useMemo(
+    () =>
+      regionAssets.status === "ready"
+        ? regionAssets.assets.filter(
+            (asset): asset is DigitalTwinPowerLineAsset =>
+              asset.kind === "power_line"
+          )
+        : [],
+    [regionAssets]
+  );
   const [weatherData, setWeatherData] = useState<WeatherDataLoadState>({
     status: showWeather ? "loading" : "disabled",
   });
@@ -699,17 +709,21 @@ export function DigitalTwinMapWorkspace({
 
   useEffect(() => {
     if (!activeRegionId) {
-      setPowerLines({ status: "none" });
+      setRegionAssets({ status: "none" });
       return;
     }
     const controller = new AbortController();
-    setPowerLines({ status: "loading" });
-    void fetchDigitalTwinPowerLines(digitalTwinApiUrl, activeRegionId, {
+    setRegionAssets({ status: "loading" });
+    void fetchDigitalTwinAssets(digitalTwinApiUrl, activeRegionId, {
       signal: controller.signal,
     }).then(
-      (lines) => {
+      (assets) => {
         if (!controller.signal.aborted) {
-          setPowerLines({ status: "ready", regionId: activeRegionId, lines });
+          setRegionAssets({
+            status: "ready",
+            regionId: activeRegionId,
+            assets,
+          });
         }
       },
       (cause: unknown) => {
@@ -717,9 +731,9 @@ export function DigitalTwinMapWorkspace({
         const error =
           cause instanceof Error
             ? cause
-            : new Error("Power-line inventory request failed.");
-        console.error("Digital Twin power lines could not be loaded", error);
-        setPowerLines({ status: "error", error });
+            : new Error("Regional asset request failed.");
+        console.error("Digital Twin regional assets could not be loaded", error);
+        setRegionAssets({ status: "error", error });
       }
     );
     return () => controller.abort();
@@ -783,14 +797,14 @@ export function DigitalTwinMapWorkspace({
         tone: "degraded" as const,
       };
     }
-    if (powerLines.status === "loading" || weatherData.status === "loading") {
+    if (regionAssets.status === "loading" || weatherData.status === "loading") {
       return {
         label: "Loading",
         detail: "Weather & asset data",
         tone: "degraded" as const,
       };
     }
-    if (powerLines.status === "error") {
+    if (regionAssets.status === "error") {
       return {
         label: "Degraded",
         detail: "Asset data unavailable",
@@ -812,23 +826,21 @@ export function DigitalTwinMapWorkspace({
           : "Asset data loaded · Weather disabled",
       tone: "current" as const,
     };
-  }, [engineHealth, powerLines.status, weatherData]);
+  }, [engineHealth, regionAssets.status, weatherData]);
 
   useEffect(() => {
     if (
       !showLiveMapChrome ||
       !mapInstance ||
-      powerLines.status !== "ready" ||
-      powerLines.regionId !== activeRegionId ||
-      powerLines.lines.length === 0
+      regionAssets.status !== "ready" ||
+      regionAssets.regionId !== activeRegionId ||
+      regionalPowerLines.length === 0
     ) {
       return;
     }
-    const coordinates = powerLines.lines.flatMap(
-      (line) => line.geometry.coordinates
-    );
-    const longitudes = coordinates.map((position) => position[0]);
-    const latitudes = coordinates.map((position) => position[1]);
+    const coordinates = regionalPowerLines.flatMap((line) => line.coordinates);
+    const longitudes = coordinates.map((position) => position.lon);
+    const latitudes = coordinates.map((position) => position.lat);
     mapInstance.fitBounds(
       [
         [Math.min(...longitudes), Math.min(...latitudes)],
@@ -836,82 +848,28 @@ export function DigitalTwinMapWorkspace({
       ],
       { padding: 96, maxZoom: 16.5, duration: 500 }
     );
-  }, [activeRegionId, mapInstance, powerLines, showLiveMapChrome]);
-
-  useEffect(() => {
-    if (!mapInstance) return;
-
-    const removePowerLineLayers = () => {
-      if (mapInstance.getLayer(POWER_LINE_LAYER_ID)) {
-        mapInstance.removeLayer(POWER_LINE_LAYER_ID);
-      }
-      if (mapInstance.getLayer(POWER_LINE_CASING_LAYER_ID)) {
-        mapInstance.removeLayer(POWER_LINE_CASING_LAYER_ID);
-      }
-      if (mapInstance.getSource(POWER_LINE_SOURCE_ID)) {
-        mapInstance.removeSource(POWER_LINE_SOURCE_ID);
-      }
-    };
-
-    const syncPowerLineLayers = () => {
-      if (!mapInstance.getLayer(DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID)) {
-        return;
-      }
-      removePowerLineLayers();
-      if (
-        powerLines.status !== "ready" ||
-        powerLines.regionId !== activeRegionId ||
-        powerLines.lines.length === 0
-      ) {
-        return;
-      }
-
-      mapInstance.addSource(POWER_LINE_SOURCE_ID, {
-        type: "geojson",
-        data: powerLinesFeatureCollection(powerLines.lines),
-      });
-      const beforeId = mapInstance.getLayer(
-        DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID
-      )
-        ? DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID
-        : undefined;
-      mapInstance.addLayer(
-        {
-          id: POWER_LINE_CASING_LAYER_ID,
-          type: "line",
-          source: POWER_LINE_SOURCE_ID,
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: {
-            "line-color": "rgba(17, 24, 39, 0.9)",
-            "line-width": 6,
-          },
-        },
-        beforeId
-      );
-      mapInstance.addLayer(
-        {
-          id: POWER_LINE_LAYER_ID,
-          type: "line",
-          source: POWER_LINE_SOURCE_ID,
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#fbbf24", "line-width": 3 },
-        },
-        beforeId
-      );
-    };
-
-    syncPowerLineLayers();
-    mapInstance.on("load", syncPowerLineLayers);
-    mapInstance.on("style.load", syncPowerLineLayers);
-    return () => {
-      mapInstance.off("load", syncPowerLineLayers);
-      mapInstance.off("style.load", syncPowerLineLayers);
-      removePowerLineLayers();
-    };
-  }, [activeRegionId, mapInstance, powerLines]);
+  }, [
+    activeRegionId,
+    mapInstance,
+    regionAssets,
+    regionalPowerLines,
+    showLiveMapChrome,
+  ]);
 
   const deckLayers = useMemo<Layer[]>(() => {
     const layers: Layer[] = [];
+
+    if (
+      regionAssets.status === "ready" &&
+      regionAssets.regionId === activeRegionId &&
+      regionalPowerLines.length > 0
+    ) {
+      layers.push(
+        ...createDigitalTwinPowerLineLayers(regionalPowerLines, {
+          modelUrl: resolveDigitalTwinPowerPoleModelUrl(),
+        })
+      );
+    }
 
     if (
       showLidar &&
@@ -944,7 +902,14 @@ export function DigitalTwinMapWorkspace({
     }
 
     return layers;
-  }, [activeRegionId, displaySettings.pointClouds, pointCloud, showLidar]);
+  }, [
+    activeRegionId,
+    displaySettings.pointClouds,
+    pointCloud,
+    regionAssets,
+    regionalPowerLines,
+    showLidar,
+  ]);
 
   const activePointCloudStatus = pointCloudStatusText(
     pointCloud,
@@ -1001,20 +966,18 @@ export function DigitalTwinMapWorkspace({
   };
 
   const canZoomToSelectedRegion =
-    powerLines.status === "ready" &&
-    powerLines.regionId === activeRegionId &&
-    powerLines.lines.length > 0;
+    regionAssets.status === "ready" &&
+    regionAssets.regionId === activeRegionId &&
+    regionalPowerLines.length > 0;
 
   const zoomIn = () => mapRef.current?.zoomIn();
   const zoomOut = () => mapRef.current?.zoomOut();
 
   const zoomToSelectedRegion = () => {
     if (!canZoomToSelectedRegion) return;
-    const coordinates = powerLines.lines.flatMap(
-      (line) => line.geometry.coordinates
-    );
-    const longitudes = coordinates.map((position) => position[0]);
-    const latitudes = coordinates.map((position) => position[1]);
+    const coordinates = regionalPowerLines.flatMap((line) => line.coordinates);
+    const longitudes = coordinates.map((position) => position.lon);
+    const latitudes = coordinates.map((position) => position.lat);
     mapRef.current?.fitBounds(
       [
         [Math.min(...longitudes), Math.min(...latitudes)],
@@ -1199,13 +1162,13 @@ export function DigitalTwinMapWorkspace({
       </output>
 
       <output aria-live="polite" className="sr-only">
-        {powerLines.status === "loading"
-          ? "Power lines loading."
-          : powerLines.status === "ready"
-          ? `${powerLines.lines.length} operational power lines loaded.`
-          : powerLines.status === "error"
-          ? `Power lines failed to load: ${powerLines.error.message}`
-          : "No power lines loaded."}
+        {regionAssets.status === "loading"
+          ? "Regional assets loading."
+          : regionAssets.status === "ready"
+          ? `${regionalPowerLines.length} power-line assets and their poles loaded.`
+          : regionAssets.status === "error"
+          ? `Regional assets failed to load: ${regionAssets.error.message}`
+          : "No regional assets loaded."}
       </output>
     </div>
   );
@@ -1320,18 +1283,18 @@ export function DigitalTwinMapWorkspace({
               </CommandGroup>
               <CommandSeparator />
               <CommandGroup heading="Assets">
-                {powerLines.status === "ready" &&
-                powerLines.lines.length > 0 ? (
-                  powerLines.lines.map((asset) => (
+                {regionAssets.status === "ready" &&
+                regionalPowerLines.length > 0 ? (
+                  regionalPowerLines.map((asset) => (
                     <CommandItem
                       className="items-start py-2.5"
-                      key={asset.powerLineId}
+                      key={asset.assetId}
                       onSelect={() =>
                         openSearchResult(() => {
-                          navigateTo("assets", asset.powerLineId);
+                          navigateTo("assets", asset.assetId);
                         })
                       }
-                      value={`asset power line ${asset.powerLineId} ${
+                      value={`asset power line ${asset.assetId} ${
                         activeCatalogRegion?.name ??
                         activeRegion?.name ??
                         activeRegionId
@@ -1340,7 +1303,7 @@ export function DigitalTwinMapWorkspace({
                       <Zap aria-hidden="true" className="mt-0.5" />
                       <span className="min-w-0">
                         <span className="block truncate">
-                          {asset.powerLineId}
+                          {asset.name ?? asset.assetId}
                         </span>
                         <span className="block truncate text-xs text-muted-foreground">
                           Overhead power line ·{" "}
@@ -1353,9 +1316,9 @@ export function DigitalTwinMapWorkspace({
                   ))
                 ) : (
                   <CommandItem disabled>
-                    {powerLines.status === "loading"
+                    {regionAssets.status === "loading"
                       ? "Loading assets…"
-                      : powerLines.status === "error"
+                      : regionAssets.status === "error"
                       ? "Assets unavailable"
                       : "No assets published for this region"}
                   </CommandItem>

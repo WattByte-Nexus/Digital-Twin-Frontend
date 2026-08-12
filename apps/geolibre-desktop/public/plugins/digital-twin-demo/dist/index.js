@@ -13,7 +13,7 @@ const POWER_LINE_LAYER_ID = "digital-twin-demo-power-lines";
 const POWER_LINE_POLE_LAYER_ID = "digital-twin-demo-power-line-poles";
 const POWER_LINE_CONDUCTOR_LAYER_ID = "digital-twin-demo-power-line-conductors";
 const SELECTED_POWER_LINE_LAYER_ID = "digital-twin-demo-selected-power-line";
-const POWER_LINE_MODEL_PATH = "assets/13.8kv_power_pole.glb";
+const POWER_LINE_MODEL_PATH = "assets/digital-twin/13.8kv_power_pole.glb";
 export const DIGITAL_TWIN_MAP_ASSET_SELECTION_EVENT =
   "geolibre:digital-twin-map-asset-selection";
 // The GLB is 9.375 m tall in its authored coordinate system. Render it as a
@@ -23,7 +23,6 @@ export const DIGITAL_TWIN_MAP_ASSET_SELECTION_EVENT =
 const POWER_POLE_MODEL_HEIGHT_METERS = 9.375;
 const POWER_POLE_HEIGHT_AGL_METERS = 8.5;
 const POWER_POLE_MODEL_SCALE = POWER_POLE_HEIGHT_AGL_METERS / POWER_POLE_MODEL_HEIGHT_METERS;
-const CONDUCTOR_HEIGHT_METERS = POWER_POLE_HEIGHT_AGL_METERS - 0.6;
 const CONDUCTOR_OFFSETS_METERS = [-1.5, 1.5];
 const SELECTION_SOURCE_ID = "digital-twin-demo-selection-source";
 const SELECTION_HALO_LAYER_ID = "digital-twin-demo-selection-halo";
@@ -152,12 +151,14 @@ function validCoordinate(coordinate) {
 function responseCoordinate(value, label) {
   if (
     !Array.isArray(value) ||
-    value.length !== 2 ||
+    value.length !== 3 ||
     typeof value[0] !== "number" ||
     typeof value[1] !== "number" ||
+    typeof value[2] !== "number" ||
+    !Number.isFinite(value[2]) ||
     !validCoordinate(value)
   ) {
-    throw new Error(`${label} must be a numeric WGS84 position.`);
+    throw new Error(`${label} must be a 3D WGS84 position.`);
   }
   return value;
 }
@@ -221,18 +222,32 @@ function validatePowerLineGeometry(value, label) {
 }
 
 export function validatePowerLineSummaries(value) {
-  if (!Array.isArray(value)) throw new Error("Power-line inventory must be an array.");
-  const powerLineIds = new Set();
-  value.forEach((line, index) => {
+  if (!Array.isArray(value)) throw new Error("Asset catalog must be an array.");
+  const lines = value.filter((asset) => asset?.kind === "power_line");
+  const assetIds = new Set();
+  lines.forEach((line, index) => {
     if (!isRecord(line)) throw new Error(`Power line ${index + 1} must be an object.`);
-    const powerLineId = nonEmptyString(line.power_line_id, "Power line ID");
-    if (powerLineIds.has(powerLineId)) {
-      throw new Error(`Power line ID ${powerLineId} is duplicated.`);
+    const assetId = nonEmptyString(line.asset_id, "Asset ID");
+    if (assetIds.has(assetId)) {
+      throw new Error(`Asset ID ${assetId} is duplicated.`);
     }
-    powerLineIds.add(powerLineId);
-    validatePowerLineGeometry(line.geometry, `Power line ${powerLineId} geometry`);
+    assetIds.add(assetId);
+    if (!Array.isArray(line.coordinates) || line.coordinates.length !== 2) {
+      throw new Error(`Power line ${assetId} must include exactly two coordinates.`);
+    }
+    line.coordinates.forEach((coordinate, coordinateIndex) => {
+      if (!isRecord(coordinate)) {
+        throw new Error(`Power line ${assetId} coordinate ${coordinateIndex + 1} must be an object.`);
+      }
+      responseNumber(coordinate.lon, "Longitude", { minimum: -180 });
+      responseNumber(coordinate.lat, "Latitude", { minimum: -90 });
+      responseNumber(coordinate.elevation_m, "Elevation");
+      if (coordinate.lon > 180 || coordinate.lat > 90) {
+        throw new Error(`Power line ${assetId} coordinate ${coordinateIndex + 1} is invalid.`);
+      }
+    });
   });
-  return value;
+  return lines;
 }
 
 function validatePhysicsLineage(physics) {
@@ -270,9 +285,9 @@ function validatePhysicsLineage(physics) {
 
 export function validatePowerLineDetail(value, expected = {}) {
   if (!isRecord(value)) throw new Error("Power-line detail must be an object.");
-  const powerLineId = nonEmptyString(value.power_line_id, "Power line ID");
+  const powerLineId = nonEmptyString(value.asset_id, "Asset ID");
   const regionId = nonEmptyString(value.region_id, "Region ID");
-  if (expected.powerLineId != null && powerLineId !== expected.powerLineId) {
+  if (expected.assetId != null && powerLineId !== expected.assetId) {
     throw new Error("Power-line detail ID does not match the requested line.");
   }
   if (expected.regionId != null && regionId !== expected.regionId) {
@@ -336,28 +351,23 @@ export function validatePowerLineDetail(value, expected = {}) {
 export function buildOperationalPowerLineFeatures(value) {
   const lines = validatePowerLineSummaries(value);
   const features = lines.map((line) => {
-    const powerLineId = nonEmptyString(line?.power_line_id, "Power line ID");
-    const geometry = line?.geometry;
-    if (!isRecord(geometry) || geometry.type !== "LineString") {
-      throw new Error(`Power line ${powerLineId} must include a LineString geometry.`);
-    }
-    const coordinates = geometry.coordinates.map(validCoordinate);
+    const powerLineId = nonEmptyString(line?.asset_id, "Asset ID");
+    const coordinates = line.coordinates.map((coordinate) => [
+      coordinate.lon,
+      coordinate.lat,
+      coordinate.elevation_m,
+    ]);
     return {
       type: "Feature",
-      properties: { kind: "operational_power_line", power_line_id: powerLineId },
+      properties: { kind: "power_line", asset_id: powerLineId },
       geometry: { type: "LineString", coordinates },
     };
   });
   return emptyFeatureCollection(features);
 }
 
-export function buildAuthoritativeRegionAssets(assets, operationalLines) {
-  const assetCollection = asFeatureCollection(assets, "Engine assets");
-  const operationalCollection = buildOperationalPowerLineFeatures(operationalLines);
-  return emptyFeatureCollection([
-    ...assetCollection.features.filter((feature) => feature?.properties?.kind === "tree"),
-    ...operationalCollection.features,
-  ]);
+export function buildCanonicalRegionAssets(assets) {
+  return buildOperationalPowerLineFeatures(assets);
 }
 
 function metric(label, value) {
@@ -380,7 +390,7 @@ function humanizeToken(value) {
 
 export function buildPowerLineDetailView(detail) {
   validatePowerLineDetail(detail);
-  const powerLineId = nonEmptyString(detail.power_line_id, "Power line ID");
+  const powerLineId = nonEmptyString(detail.asset_id, "Asset ID");
   const regionId = nonEmptyString(detail.region_id, "Region ID");
   const conductor = detail.conductor;
   if (!isRecord(conductor)) throw new Error("Power-line conductor details are required.");
@@ -486,7 +496,7 @@ export function buildPowerLineDetailView(detail) {
 function powerLinePaths(collection) {
   const paths = [];
   for (const feature of collection.features) {
-    if (feature?.properties?.kind !== "operational_power_line") continue;
+    if (feature?.properties?.kind !== "power_line") continue;
     const geometry = feature?.geometry;
     const candidates =
       geometry?.type === "LineString"
@@ -495,7 +505,15 @@ function powerLinePaths(collection) {
           ? geometry.coordinates
           : [];
     for (const candidate of candidates) {
-      const path = candidate.map(validCoordinate).filter(Boolean);
+      const path = candidate
+        .map((coordinate) => {
+          const horizontalPosition = validCoordinate(coordinate);
+          const elevation = Number(coordinate?.[2]);
+          return horizontalPosition && Number.isFinite(elevation)
+            ? [...horizontalPosition, elevation]
+            : null;
+        })
+        .filter(Boolean);
       if (path.length >= 2) paths.push(path);
     }
   }
@@ -505,7 +523,7 @@ function powerLinePaths(collection) {
 export function selectableMapAssetKind(feature) {
   const kind = feature?.properties?.kind;
   if (kind === "tree") return "tree";
-  if (kind === "operational_power_line") return "power_line";
+  if (kind === "power_line") return "power_line";
   if (kind === "pole") return "pole";
   return null;
 }
@@ -541,7 +559,7 @@ function sharedPoleBearing(bearings) {
   return ((Math.atan2(vector.y, vector.x) * 90) / Math.PI + 180) % 180;
 }
 
-function conductorAttachment([longitude, latitude], bearing, offsetMeters) {
+function conductorAttachment([longitude, latitude, elevation], bearing, offsetMeters) {
   const metersPerLongitude = Math.max(
     Math.abs(111_320 * Math.cos((latitude * Math.PI) / 180)),
     1,
@@ -551,7 +569,7 @@ function conductorAttachment([longitude, latitude], bearing, offsetMeters) {
   return [
     longitude + (-Math.cos(radians) * offsetMeters) / metersPerLongitude,
     latitude + (Math.sin(radians) * offsetMeters) / metersPerLatitude,
-    CONDUCTOR_HEIGHT_METERS,
+    elevation,
   ];
 }
 
@@ -562,9 +580,10 @@ export function buildPowerLineNetwork(collection) {
     const key = coordinateKey(coordinate);
     let record = poleRecords.get(key);
     if (!record) {
-      record = { coordinate, bearings: [] };
+      record = { coordinate, elevations: [], bearings: [] };
       poleRecords.set(key, record);
     }
+    record.elevations.push(coordinate[2]);
     return record;
   };
 
@@ -584,7 +603,13 @@ export function buildPowerLineNetwork(collection) {
     return {
       id: `pole-${index + 1}`,
       kind: "pole",
-      position: [longitude, latitude, 0],
+      position: [
+        longitude,
+        latitude,
+        record.elevations.reduce((sum, elevation) => sum + elevation, 0) /
+          record.elevations.length -
+          POWER_POLE_HEIGHT_AGL_METERS,
+      ],
       bearing,
       scale: [POWER_POLE_MODEL_SCALE, POWER_POLE_MODEL_SCALE, POWER_POLE_MODEL_SCALE],
       // The supplied pole model's crossarm lies on local Z once stood upright.
@@ -625,25 +650,6 @@ export function selectDemoRegions(regions) {
     if (region.region_id === "golden-co" || name === "golden") golden = region;
   }
   return [canonicalBoulder ?? seededBoulder, golden].filter(Boolean);
-}
-
-export function selectDemoAssetRegionIds(regions) {
-  if (!Array.isArray(regions)) throw new Error("Regions must be an array.");
-  const seededBoulderIds = [];
-  let canonicalBoulderId = null;
-  for (const region of regions) {
-    if (!isRecord(region) || region.status !== "published") continue;
-    const name = typeof region.name === "string" ? region.name.trim().toLowerCase() : "";
-    if (region.region_id === "boulder-co") canonicalBoulderId = region.region_id;
-    if (name === "boulder demo" && typeof region.region_id === "string") {
-      seededBoulderIds.unshift(region.region_id);
-    }
-  }
-  const candidates = [
-    ...seededBoulderIds,
-    ...(canonicalBoulderId ? [canonicalBoulderId] : []),
-  ];
-  return candidates.length ? { "boulder-co": candidates } : {};
 }
 
 function httpUrl(value, label) {
@@ -863,21 +869,16 @@ export function createDigitalTwinClient(baseUrl, options = {}) {
     listRegions: (signal) => request("/api/v1/regions?limit=100", { signal }),
     getRegion: (regionId, signal) =>
       request(`/api/v1/regions/${encodeURIComponent(regionId)}`, { signal }),
-    getAssetsGeoJson: (regionId, signal) =>
-      request(`/api/v1/regions/${encodeURIComponent(regionId)}/assets.geojson`, {
-        signal,
-        cache: "no-cache",
-      }),
-    listPowerLines: async (regionId, signal) =>
-      validatePowerLineSummaries(await request(`/api/v1/regions/${encodeURIComponent(regionId)}/power-lines`, {
+    listPowerLineAssets: async (regionId, signal) =>
+      validatePowerLineSummaries(await request(`/api/v1/regions/${encodeURIComponent(regionId)}/assets`, {
         signal,
         cache: "no-cache",
       })),
-    getPowerLine: async (regionId, powerLineId, signal) =>
+    getPowerLineAsset: async (regionId, powerLineId, signal) =>
       validatePowerLineDetail(await request(
-        `/api/v1/regions/${encodeURIComponent(regionId)}/power-lines/${encodeURIComponent(powerLineId)}`,
+        `/api/v1/regions/${encodeURIComponent(regionId)}/assets/${encodeURIComponent(powerLineId)}`,
         { signal, cache: "no-cache" },
-      ), { regionId, powerLineId }),
+      ), { regionId, assetId: powerLineId }),
     getWeatherDatasets: (regionId, signal) =>
       request(`/api/v1/regions/${encodeURIComponent(regionId)}/weather-datasets?limit=100`, {
         signal,
@@ -1970,7 +1971,7 @@ class AssetMapController {
       let nearest = null;
       let nearestDistance = 10 ** 2;
       for (const feature of this.data.features) {
-        if (feature?.properties?.kind !== "operational_power_line") continue;
+        if (feature?.properties?.kind !== "power_line") continue;
         const coordinates = feature?.geometry?.coordinates;
         if (!Array.isArray(coordinates)) continue;
         for (let index = 1; index < coordinates.length; index += 1) {
@@ -1993,7 +1994,7 @@ class AssetMapController {
       let nearest = null;
       let nearestDistance = 24 ** 2;
       for (const feature of this.data.features) {
-        if (feature?.properties?.kind !== "operational_power_line") continue;
+        if (feature?.properties?.kind !== "power_line") continue;
         const geometry = feature?.geometry;
         const paths =
           geometry?.type === "LineString"
@@ -2131,10 +2132,7 @@ class AssetMapController {
   }
 
   poleModelUrl() {
-    return (
-      this.app.resolvePluginAssetUrl?.(PLUGIN_ID, POWER_LINE_MODEL_PATH) ??
-      new URL(`plugins/${PLUGIN_ID}/${POWER_LINE_MODEL_PATH}`, document.baseURI).href
-    );
+    return new URL(POWER_LINE_MODEL_PATH, document.baseURI).href;
   }
 
   renderPowerLineObjects() {
@@ -2202,7 +2200,7 @@ class AssetMapController {
         opacity: 1,
         metadata: {
           provider: "Digital Twin Engine",
-          description: "Canonical region trees and operational power lines. Click anywhere on the map to place an ignition point.",
+          description: "Canonical region power-line assets and poles. Click anywhere on the map to place an ignition point.",
           customLayerType: "digital-twin-assets",
           externalDeckLayer: true,
           identifiable: false,
@@ -2232,8 +2230,8 @@ class AssetMapController {
     try {
       map.setFilter(SELECTED_POWER_LINE_LAYER_ID, [
         "all",
-        ["==", ["get", "kind"], "operational_power_line"],
-        ["==", ["get", "power_line_id"], this.selectedPowerLineId ?? ""],
+        ["==", ["get", "kind"], "power_line"],
+        ["==", ["get", "asset_id"], this.selectedPowerLineId ?? ""],
       ]);
     } catch {
       // A style transition can remove the layer between getLayer and setFilter.
@@ -2351,7 +2349,7 @@ class AssetMapController {
           id: POWER_LINE_LAYER_ID,
           type: "line",
           source: ASSET_SOURCE_ID,
-          filter: ["==", ["get", "kind"], "operational_power_line"],
+          filter: ["==", ["get", "kind"], "power_line"],
           paint: {
             "line-color": "#2d3542",
             "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 15, 4],
@@ -2366,8 +2364,8 @@ class AssetMapController {
           source: ASSET_SOURCE_ID,
           filter: [
             "all",
-            ["==", ["get", "kind"], "operational_power_line"],
-            ["==", ["get", "power_line_id"], this.selectedPowerLineId ?? ""],
+            ["==", ["get", "kind"], "power_line"],
+            ["==", ["get", "asset_id"], this.selectedPowerLineId ?? ""],
           ],
           paint: {
             "line-color": "#f06b18",
@@ -3206,7 +3204,6 @@ class DigitalTwinDemoPanel {
     this.client = null;
     this.region = null;
     this.regions = [];
-    this.assetRegionIds = {};
     this.weatherDatasets = [];
     this.visualizationCatalogs = [];
     this.selectedTrees = new Map();
@@ -3622,7 +3619,6 @@ class DigitalTwinDemoPanel {
       if (abort.signal.aborted || this.destroyed) return;
       const catalogRegions = asPageItems(regionPage);
       this.regions = selectDemoRegions(catalogRegions);
-      this.assetRegionIds = selectDemoAssetRegionIds(catalogRegions);
       this.populateRegions();
       const readySources = Array.isArray(sources)
         ? sources.filter((source) => source?.ready).length
@@ -3678,7 +3674,6 @@ class DigitalTwinDemoPanel {
     this.powerLineDetailAbort?.abort();
     this.powerLineDetailAbort = null;
     this.assetMap.closePowerLinePopup(false);
-    const assetRegionIds = this.assetRegionIds[regionId] ?? [regionId];
     this.assetMap.setRegions(this.regions, regionId);
     const selectedRegion = this.regions.find(
       (candidate) => candidate?.region_id === regionId,
@@ -3699,24 +3694,23 @@ class DigitalTwinDemoPanel {
     this.assetMap.setData(emptyFeatureCollection(), regionId);
     this.regionMeta.textContent = "Loading region assets and input catalog…";
     try {
-      const operationalLinesRequest = this.client
-        .listPowerLines(regionId, abort.signal)
+      const powerLineAssetsRequest = this.client
+        .listPowerLineAssets(regionId, abort.signal)
         .catch((error) => {
           if (abort.signal.aborted) throw error;
-          throw new Error(`Could not load operational power lines: ${this.errorMessage(error)}`, {
+          throw new Error(`Could not load power-line assets: ${this.errorMessage(error)}`, {
             cause: error,
           });
         });
-      const [region, assets, weatherPage, operationalLines] = await Promise.all([
+      const [region, assets, weatherPage] = await Promise.all([
         this.client.getRegion(regionId, abort.signal),
-        this.loadFirstPopulatedAssets(assetRegionIds, abort.signal),
+        powerLineAssetsRequest,
         this.client.getWeatherDatasets(regionId, abort.signal),
-        operationalLinesRequest,
       ]);
       if (abort.signal.aborted || this.destroyed) return;
       this.region = region;
       this.weatherDatasets = asPageItems(weatherPage);
-      const mappedAssets = buildAuthoritativeRegionAssets(assets, operationalLines);
+      const mappedAssets = buildCanonicalRegionAssets(assets);
       this.assetMap.setData(mappedAssets, region.name ?? region.region_id);
       this.renderRegionMeta(mappedAssets);
       this.populateWeather();
@@ -3756,18 +3750,8 @@ class DigitalTwinDemoPanel {
     else queuePresentation();
   }
 
-  async loadFirstPopulatedAssets(regionIds, signal) {
-    let fallback = emptyFeatureCollection();
-    for (const regionId of regionIds) {
-      const assets = await this.client.getAssetsGeoJson(regionId, signal);
-      fallback = assets;
-      if (asFeatureCollection(assets).features.length > 0) return assets;
-    }
-    return fallback;
-  }
-
   async inspectPowerLine(feature, anchor) {
-    const powerLineId = feature?.properties?.power_line_id;
+    const powerLineId = feature?.properties?.asset_id;
     if (
       !this.client ||
       !this.region ||
@@ -3786,7 +3770,7 @@ class DigitalTwinDemoPanel {
     this.assetMap.showPowerLinePopup(anchor, loadingPowerLinePopup(powerLineId), close);
     this.assetMap.setSelectedPowerLine(powerLineId);
     try {
-      const detail = await this.client.getPowerLine(
+      const detail = await this.client.getPowerLineAsset(
         this.region.region_id,
         powerLineId,
         abort.signal,
@@ -3812,7 +3796,7 @@ class DigitalTwinDemoPanel {
   renderRegionMeta(assets) {
     const features = asFeatureCollection(assets).features;
     const trees = features.filter((feature) => feature?.properties?.kind === "tree").length;
-    const lines = features.filter((feature) => feature?.properties?.kind === "operational_power_line").length;
+    const lines = features.filter((feature) => feature?.properties?.kind === "power_line").length;
     const bounds = boundsFromRegion(this.region);
     this.regionMeta.replaceChildren(
       el("strong", "", this.region.name ?? this.region.region_id),
