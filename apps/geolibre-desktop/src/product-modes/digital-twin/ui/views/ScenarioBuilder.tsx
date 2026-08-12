@@ -348,18 +348,6 @@ export function ScenarioBuilder({
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-background">
       <div className="absolute inset-0">{mapSlot}</div>
 
-      <Button
-        aria-label="Back to scenarios"
-        className="absolute left-4 top-4 z-20 border bg-background/95 text-foreground shadow-lg backdrop-blur"
-        onClick={onClose}
-        size="icon"
-        title="Back to scenarios"
-        type="button"
-        variant="secondary"
-      >
-        <ArrowLeft aria-hidden="true" />
-      </Button>
-
       <Popover>
         <FloatingMapPanel
           aria-label="Simulation run setup"
