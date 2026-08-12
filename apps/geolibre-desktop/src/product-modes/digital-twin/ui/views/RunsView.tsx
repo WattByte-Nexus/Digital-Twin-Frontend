@@ -21,6 +21,7 @@ import {
   SelectMenuContent,
   SelectMenuItem,
   SelectMenuValue,
+  SortableTableHeader,
   Separator,
   Table,
   TableBody,
@@ -79,6 +80,17 @@ const RUN_STATUSES: DigitalTwinRunStatus[] = [
   "CANCELLED",
 ];
 
+type RunSortKey =
+  | "status"
+  | "scenario"
+  | "region"
+  | "run"
+  | "trigger"
+  | "horizon"
+  | "ignitions"
+  | "snapshots";
+type SortDirection = "asc" | "desc";
+
 function RunStatusBadge({ status }: Pick<DigitalTwinRunRecord, "status">) {
   const variant =
     status === "FAILED"
@@ -115,7 +127,40 @@ export function RunsView({
   const [filters, setFilters] = useState<DigitalTwinRunFilters>(
     DEFAULT_DIGITAL_TWIN_RUN_FILTERS,
   );
-  const visibleRuns = useMemo(() => filterDigitalTwinRuns(runs, filters), [filters, runs]);
+  const [sortKey, setSortKey] = useState<RunSortKey>("run");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const visibleRuns = useMemo(() => {
+    const valueFor = (run: DigitalTwinRunRecord) => {
+      switch (sortKey) {
+        case "status":
+          return digitalTwinRunStatusLabel(run.status);
+        case "scenario":
+          return run.scenarioId ?? "";
+        case "region":
+          return run.regionName;
+        case "run":
+          return run.id;
+        case "trigger":
+          return run.triggerKind;
+        case "horizon":
+          return run.durationHours ?? Number.POSITIVE_INFINITY;
+        case "ignitions":
+          return run.ignitionPoints.length;
+        case "snapshots":
+          return run.completedTicks;
+      }
+    };
+
+    return [...filterDigitalTwinRuns(runs, filters)].sort((left, right) => {
+      const a = valueFor(left);
+      const b = valueFor(right);
+      const comparison =
+        typeof a === "number" && typeof b === "number"
+          ? a - b
+          : String(a).localeCompare(String(b), undefined, { numeric: true });
+      return comparison * (sortDirection === "asc" ? 1 : -1);
+    });
+  }, [filters, runs, sortDirection, sortKey]);
   const scenarios = useMemo(
     () =>
       [...new Set(runs.flatMap((run) => (run.scenarioId ? [run.scenarioId] : [])))].sort(
@@ -171,6 +216,14 @@ export function RunsView({
     key: Key,
     value: DigitalTwinRunFilters[Key],
   ) => setFilters((current) => ({ ...current, [key]: value }));
+  const sort = (key: RunSortKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -363,14 +416,46 @@ export function RunsView({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Scenario</TableHead>
-                    <TableHead>Region</TableHead>
-                    <TableHead>Run</TableHead>
-                    <TableHead>Trigger</TableHead>
-                    <TableHead>Horizon</TableHead>
-                    <TableHead>Ignitions</TableHead>
-                    <TableHead>Snapshots</TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "status"} direction={sortDirection} onClick={() => sort("status")}>
+                        Status
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "scenario"} direction={sortDirection} onClick={() => sort("scenario")}>
+                        Scenario
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "region"} direction={sortDirection} onClick={() => sort("region")}>
+                        Region
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "run"} direction={sortDirection} onClick={() => sort("run")}>
+                        Run
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "trigger"} direction={sortDirection} onClick={() => sort("trigger")}>
+                        Trigger
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "horizon"} direction={sortDirection} onClick={() => sort("horizon")}>
+                        Horizon
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "ignitions"} direction={sortDirection} onClick={() => sort("ignitions")}>
+                        Ignitions
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "snapshots"} direction={sortDirection} onClick={() => sort("snapshots")}>
+                        Snapshots
+                      </SortableTableHeader>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

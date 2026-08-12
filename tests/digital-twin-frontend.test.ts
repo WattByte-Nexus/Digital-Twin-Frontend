@@ -190,17 +190,13 @@ describe("Digital Twin frontend composition", () => {
     assert.doesNotMatch(workspaceSource, /\/data\/usgs-lidar\/golden-city/);
   });
 
-  it("composes operational layers through one shared deck surface", () => {
-    assert.match(workspaceSource, /new GeoJsonLayer/);
+  it("drapes operational power lines over terrain with native map layers", () => {
+    assert.match(workspaceSource, /mapInstance\.addSource\(POWER_LINE_SOURCE_ID/);
+    assert.match(workspaceSource, /type:\s*"line"/);
+    assert.match(workspaceSource, /mapInstance\.addLayer\([\s\S]*POWER_LINE_LAYER_ID/);
     assert.match(workspaceSource, /deckLayers=\{deckLayers\}/);
-    assert.equal(
-      workspaceSource.match(
-        /beforeId:\s*DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID/g
-      )?.length,
-      3
-    );
+    assert.doesNotMatch(workspaceSource, /parameters:\s*\{\s*depthTest:\s*false/);
     assert.doesNotMatch(workspaceSource, /new MapboxOverlay/);
-    assert.doesNotMatch(workspaceSource, /addSource\(POWER_LINE_SOURCE_ID/);
   });
 
   it("opens an API-backed asset catalog from its own workspace destination", () => {
@@ -253,10 +249,10 @@ describe("Digital Twin frontend composition", () => {
     );
   });
 
-  it("starts point clouds at an interactive LOD with screen-sized points", () => {
-    assert.match(lidarSource, /maximumScreenSpaceError:\s*16/);
+  it("starts point clouds at an interactive LOD with spacing-sized surfels", () => {
+    assert.match(lidarSource, /maximumScreenSpaceError:\s*4/);
     assert.match(lidarSource, /maximumMemoryUsage:\s*512/);
-    assert.match(lidarSource, /sizeUnits:\s*"pixels"/);
+    assert.match(lidarSource, /sizeUnits:\s*"meters"/);
     assert.match(workspaceSource, /missing RGB is shown in cyan/);
   });
 

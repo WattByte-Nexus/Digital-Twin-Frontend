@@ -3,12 +3,13 @@ import { Input } from "../input";
 import { Label } from "../label";
 import { clampWeatherValue } from "./types";
 
-const INTEGER_DRAFT = /^\d*$/;
-const DECIMAL_DRAFT = /^\d*(?:\.\d*)?$/;
+const INTEGER_DRAFT = /^-?\d*$/;
+const DECIMAL_DRAFT = /^-?\d*(?:\.\d*)?$/;
 
 export interface WeatherEventRowProps {
   label: string;
   maximum?: number;
+  minimum?: number;
   onChange: (value: number) => void;
   step?: number;
   unit: string;
@@ -20,6 +21,7 @@ export function WeatherEventRow({
   value,
   unit,
   maximum = 100,
+  minimum = 0,
   step = 1,
   onChange,
 }: WeatherEventRowProps) {
@@ -34,15 +36,19 @@ export function WeatherEventRow({
 
   const commitDraft = () => {
     editingRef.current = false;
-    const parsed = draft === "" || draft === "." ? 0 : Number(draft);
-    const next = clampWeatherValue(parsed, 0, maximum);
+    const parsed =
+      draft === "" || draft === "." || draft === "-" ? 0 : Number(draft);
+    const next = clampWeatherValue(parsed, minimum, maximum);
     setDraft(String(next));
     onChange(next);
   };
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_104px] items-center gap-2">
-      <Label className="truncate text-[11px] font-medium text-muted-foreground" htmlFor={id}>
+      <Label
+        className="truncate text-[11px] font-medium text-muted-foreground"
+        htmlFor={id}
+      >
         {label}
       </Label>
       <div className="relative">
@@ -58,14 +64,17 @@ export function WeatherEventRow({
           }}
           onChange={(event) => {
             const raw = event.target.value;
-            const validDraft = acceptsDecimal ? DECIMAL_DRAFT.test(raw) : INTEGER_DRAFT.test(raw);
+            const validDraft = acceptsDecimal
+              ? DECIMAL_DRAFT.test(raw)
+              : INTEGER_DRAFT.test(raw);
             if (!validDraft) return;
 
             setDraft(raw);
-            if (raw === "" || raw === ".") return;
+            if (raw === "" || raw === "." || raw === "-") return;
 
             const next = Number(raw);
-            if (Number.isFinite(next)) onChange(clampWeatherValue(next, 0, maximum));
+            if (Number.isFinite(next))
+              onChange(clampWeatherValue(next, minimum, maximum));
           }}
           onBlur={commitDraft}
         />

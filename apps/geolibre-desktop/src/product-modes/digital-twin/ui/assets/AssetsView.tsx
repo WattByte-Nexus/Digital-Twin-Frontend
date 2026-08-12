@@ -1,6 +1,11 @@
 import {
   Badge,
   Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
   FilterSearch,
   Input,
   Label,
@@ -12,6 +17,7 @@ import {
   SelectMenuValue,
   Separator,
   Skeleton,
+  SortableTableHeader,
   Table,
   TableBody,
   TableCell,
@@ -24,8 +30,6 @@ import {
   type SurfaceTheme,
 } from "@geolibre/ui";
 import {
-  ArrowDown,
-  ArrowUp,
   Cable,
   ChevronRight,
   FileText,
@@ -224,31 +228,6 @@ function PropertyRows({
         </div>
       ))}
     </dl>
-  );
-}
-
-function SortHeader({
-  active,
-  children,
-  direction,
-  onClick,
-}: {
-  active: boolean;
-  children: ReactNode;
-  direction: SortDirection;
-  onClick: () => void;
-}) {
-  const Icon = direction === "asc" ? ArrowUp : ArrowDown;
-  return (
-    <Button
-      className="-ms-3 h-8 gap-1.5 px-3 text-xs"
-      onClick={onClick}
-      size="sm"
-      variant="ghost"
-    >
-      {children}
-      {active ? <Icon aria-hidden="true" className="size-3.5" /> : null}
-    </Button>
   );
 }
 
@@ -882,7 +861,7 @@ export function AssetsView({
     <TooltipProvider delayDuration={300}>
       <div className="flex h-full min-h-0 bg-background">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <header className="flex flex-wrap items-start justify-between gap-4 px-6 pb-4 pt-6 lg:px-8">
+          <header className="flex flex-wrap items-center justify-between gap-4 px-5 pb-2 pt-5 lg:px-7">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Assets</h1>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -910,7 +889,7 @@ export function AssetsView({
               </Button>
             </div>
           </header>
-          <div className="flex flex-wrap gap-2 px-6 pb-4 lg:px-8">
+          <div className="flex flex-wrap gap-2 px-5 pb-5 pt-2 lg:px-7">
             <FilterSearch
               className="min-w-64 flex-1"
               onValueChange={setQuery}
@@ -948,46 +927,58 @@ export function AssetsView({
             </SelectMenu>
           </div>
           {error ? (
-            <div
-              className="mx-6 mb-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm lg:mx-8"
-              role="alert"
-            >
-              <TriangleAlert className="size-4 text-destructive" />
-              {error.message}
-            </div>
+            <Card className="mx-5 mb-4 bg-destructive/5 lg:mx-7">
+              <CardContent className="flex flex-wrap items-center gap-3 px-5">
+                <TriangleAlert aria-hidden="true" className="size-5 text-destructive" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground">Assets could not be loaded</p>
+                  <p className="text-sm text-muted-foreground">{error.message}</p>
+                </div>
+                <Button onClick={() => setRequestKey((value) => value + 1)} variant="outline">
+                  Try again
+                </Button>
+              </CardContent>
+            </Card>
           ) : null}
-          <div className="min-h-0 flex-1 px-6 pb-6 lg:px-8">
-            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
-              <ScrollArea className="min-h-0 flex-1">
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="px-5 pb-5 lg:px-7 lg:pb-7">
+              <Card className="gap-0 overflow-hidden py-0">
+                <CardHeader className="px-5 py-4">
+                  <CardTitle className="text-base">Asset catalog</CardTitle>
+                  <CardDescription>
+                    {visible.length} of {assets.length} assets
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
                 <Table>
-                  <TableHeader className="sticky top-0 z-10 bg-card">
+                  <TableHeader>
                     <TableRow>
                       <TableHead className="px-4">
-                        <SortHeader
+                        <SortableTableHeader
                           active={sortKey === "name"}
                           direction={sortDirection}
                           onClick={() => sort("name")}
                         >
                           Asset
-                        </SortHeader>
+                        </SortableTableHeader>
                       </TableHead>
                       <TableHead>
-                        <SortHeader
+                        <SortableTableHeader
                           active={sortKey === "region"}
                           direction={sortDirection}
                           onClick={() => sort("region")}
                         >
                           Region
-                        </SortHeader>
+                        </SortableTableHeader>
                       </TableHead>
                       <TableHead>
-                        <SortHeader
+                        <SortableTableHeader
                           active={sortKey === "type"}
                           direction={sortDirection}
                           onClick={() => sort("type")}
                         >
                           Type
-                        </SortHeader>
+                        </SortableTableHeader>
                       </TableHead>
                       <TableHead className="w-10" />
                     </TableRow>
@@ -1052,21 +1043,22 @@ export function AssetsView({
                   </TableBody>
                 </Table>
                 {!loading && !visible.length ? (
-                  <div className="grid min-h-72 place-items-center text-center">
+                  <div className="grid min-h-64 place-items-center p-6 text-center">
                     <div>
-                      <SearchX className="mx-auto size-8 text-muted-foreground" />
-                      <p className="mt-3 text-sm font-medium">
+                      <SearchX className="mx-auto size-7 text-muted-foreground" />
+                      <p className="mt-3 font-medium text-foreground">
                         No matching assets
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Adjust the filters or refresh the Digital Twin API.
                       </p>
                     </div>
                   </div>
                 ) : null}
-              </ScrollArea>
-              <div className="border-t border-separator px-4 py-2.5 text-xs text-muted-foreground">
-                {visible.length} of {assets.length} assets · sorted by {sortKey}
-              </div>
+                </CardContent>
+              </Card>
             </div>
-          </div>
+          </ScrollArea>
         </main>
         {panelMode === "view" && selected ? (
           <AssetProperties

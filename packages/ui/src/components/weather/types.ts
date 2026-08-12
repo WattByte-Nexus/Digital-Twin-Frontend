@@ -4,14 +4,15 @@ export type WeatherMode = "auto" | "manual";
 export type WeatherTheme = SurfaceTheme;
 export type TimeFormat = "12" | "24";
 export type WeatherEventKey =
-  | "fog"
-  | "rain"
-  | "thunder"
-  | "dust"
-  | "cloudCoverage"
   | "wind"
   | "windDirection"
-  | "snow";
+  | "dewPoint"
+  | "relativeHumidity"
+  | "windGust"
+  | "precipitationLastHour"
+  | "barometricPressure"
+  | "seaLevelPressure"
+  | "visibility";
 
 export interface WeatherSettingsValue {
   mode: WeatherMode;
@@ -31,12 +32,17 @@ export interface WeatherLiveReading {
   value: number;
 }
 
-export type WeatherSettingsInitialValue = Omit<Partial<WeatherSettingsValue>, "events"> & {
+export type WeatherSettingsInitialValue = Omit<
+  Partial<WeatherSettingsValue>,
+  "events"
+> & {
   events?: Partial<WeatherSettingsValue["events"]>;
 };
 
 export interface WeatherSettingsPanelProps {
+  autoWeatherCondition?: string;
   autoWeatherReadings?: readonly WeatherLiveReading[];
+  autoWeatherSource?: string;
   autoWeatherStatus?: string;
   className?: string;
   initialValue?: WeatherSettingsInitialValue;
@@ -47,14 +53,15 @@ export interface WeatherSettingsPanelProps {
 }
 
 export const DEFAULT_WEATHER_EVENTS: WeatherSettingsValue["events"] = {
-  fog: 0,
-  rain: 0,
-  thunder: 0,
-  dust: 0,
-  cloudCoverage: 0,
   wind: 20.4,
   windDirection: 270,
-  snow: 0,
+  dewPoint: 0,
+  relativeHumidity: 0,
+  windGust: 0,
+  precipitationLastHour: 0,
+  barometricPressure: 0,
+  seaLevelPressure: 0,
+  visibility: 0,
 };
 
 export const DEFAULT_WEATHER_SETTINGS: WeatherSettingsValue = {
@@ -68,7 +75,11 @@ export const DEFAULT_WEATHER_SETTINGS: WeatherSettingsValue = {
   events: DEFAULT_WEATHER_EVENTS,
 };
 
-export function clampWeatherValue(value: number, minimum: number, maximum: number) {
+export function clampWeatherValue(
+  value: number,
+  minimum: number,
+  maximum: number
+) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 

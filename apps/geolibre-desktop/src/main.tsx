@@ -35,7 +35,7 @@ import "./lib/lidar-style";
 import "./lib/rtl-text";
 import "./lib/swipe-style";
 import { registerSW } from "virtual:pwa-register";
-import { TooltipProvider } from "@geolibre/ui";
+import { Toaster, TooltipProvider } from "@geolibre/ui";
 import { I18nextProvider } from "react-i18next";
 // Initializes i18next (resolves the UI language from the `?locale`/`?lang` query
 // param, stored settings, or the browser) before React renders, so the first
@@ -129,6 +129,7 @@ void Promise.all([
     ReactDOM.createRoot(document.getElementById("root")!).render(
       <React.StrictMode>
         <I18nextProvider i18n={i18n}>
+          <Toaster closeButton position="bottom-right" />
           <AppErrorBoundary>
             <TooltipProvider delayDuration={200}>
               <App />

@@ -684,17 +684,20 @@ export function ScenarioBuilder({
                         </div>
                       </div>
                       <div>
-                        <h4 className="text-xs font-medium">Weather events</h4>
+                        <h4 className="text-xs font-medium">Weather observations</h4>
                         <div className="mt-2 grid grid-cols-4 divide-x overflow-hidden rounded-md border border-input">
                           {[
-                            ["Rain", weather.events.rain],
-                            ["Fog", weather.events.fog],
-                            ["Cloud", weather.events.cloudCoverage],
-                            ["Snow", weather.events.snow],
-                          ].map(([label, value]) => (
+                            ["Humidity", weather.events.relativeHumidity, "%"],
+                            ["Gust", weather.events.windGust, "mph"],
+                            ["Precip.", weather.events.precipitationLastHour, "mm"],
+                            ["Visibility", weather.events.visibility, "km"],
+                          ].map(([label, value, unit]) => (
                             <div className="px-2 py-2 text-center" key={label}>
                               <p className="text-[10px] text-muted-foreground">{label}</p>
-                              <p className="mt-1 text-xs font-medium tabular-nums">{value}%</p>
+                              <p className="mt-1 text-xs font-medium tabular-nums">
+                                {value}
+                                {unit}
+                              </p>
                             </div>
                           ))}
                         </div>

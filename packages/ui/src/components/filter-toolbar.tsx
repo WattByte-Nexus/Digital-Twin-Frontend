@@ -56,7 +56,7 @@ function FilterSearch({
         className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
       />
       <Input
-        className="h-8 border-input bg-card pl-8 pr-8 text-xs shadow-none hover:border-foreground/25 focus-visible:border-ring"
+        className="h-9 border-input bg-card pl-8 pr-8 text-xs shadow-none hover:border-foreground/25 focus-visible:border-ring"
         onChange={(event) => onValueChange(event.target.value)}
         placeholder={placeholder}
         type="search"
@@ -86,10 +86,10 @@ function FilterSelectTrigger({
   return (
     <SelectTrigger
       className={cn(
-        "h-8 min-w-40 border-input bg-card text-xs font-medium shadow-none hover:bg-surface-hover",
+        "h-9 min-w-40 border-input bg-card text-xs font-medium shadow-none hover:bg-surface-hover",
         className,
       )}
-      size="sm"
+      size="default"
       {...props}
     />
   );
@@ -99,10 +99,10 @@ function FilterButton({ className, ...props }: ButtonProps) {
   return (
     <Button
       className={cn(
-        "h-8 gap-1.5 border-input bg-card px-2.5 text-xs shadow-none hover:bg-surface-hover",
+        "h-9 gap-1.5 border-input bg-card px-2.5 text-xs shadow-none hover:bg-surface-hover",
         className,
       )}
-      size="sm"
+      size="default"
       type="button"
       variant="outline"
       {...props}

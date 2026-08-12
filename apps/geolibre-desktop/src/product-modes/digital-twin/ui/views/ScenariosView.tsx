@@ -25,6 +25,7 @@ import {
   SelectMenuContent,
   SelectMenuItem,
   SelectMenuValue,
+  SortableTableHeader,
   Table,
   TableBody,
   TableCell,
@@ -60,6 +61,14 @@ import {
 import { ScenarioBuilder, type ScenarioMapController } from "./ScenarioBuilder";
 
 type ScenarioStatus = "Ready" | "Draft" | "Completed" | "Review";
+type ScenarioSortKey =
+  | "name"
+  | "location"
+  | "conditions"
+  | "ignitionSources"
+  | "updated"
+  | "status";
+type SortDirection = "asc" | "desc";
 
 interface Scenario {
   id: string;
@@ -209,6 +218,8 @@ export function ScenariosView({
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("all");
   const [status, setStatus] = useState<ScenarioStatus | "All">("All");
+  const [sortKey, setSortKey] = useState<ScenarioSortKey>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const activeFilterCount = [location !== "all", status !== "All"].filter(Boolean).length;
 
   useEffect(() => {
@@ -224,7 +235,7 @@ export function ScenariosView({
 
   const filteredScenarios = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
-    return SCENARIOS.filter(
+    const filtered = SCENARIOS.filter(
       (scenario) =>
         (status === "All" || scenario.status === status) &&
         (location === "all" || scenario.location === location) &&
@@ -233,7 +244,25 @@ export function ScenariosView({
             .toLocaleLowerCase()
             .includes(normalizedQuery)),
     );
-  }, [location, query, status]);
+    return [...filtered].sort((left, right) => {
+      const a = left[sortKey];
+      const b = right[sortKey];
+      const comparison =
+        typeof a === "number" && typeof b === "number"
+          ? a - b
+          : String(a).localeCompare(String(b), undefined, { numeric: true });
+      return comparison * (sortDirection === "asc" ? 1 : -1);
+    });
+  }, [location, query, sortDirection, sortKey, status]);
+
+  const sort = (key: ScenarioSortKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  };
 
   if (builderOpen) {
     return (
@@ -397,12 +426,36 @@ export function ScenariosView({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Scenario</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Conditions</TableHead>
-                    <TableHead>Ignitions</TableHead>
-                    <TableHead>Updated</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "name"} direction={sortDirection} onClick={() => sort("name")}>
+                        Scenario
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "location"} direction={sortDirection} onClick={() => sort("location")}>
+                        Location
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "conditions"} direction={sortDirection} onClick={() => sort("conditions")}>
+                        Conditions
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "ignitionSources"} direction={sortDirection} onClick={() => sort("ignitionSources")}>
+                        Ignitions
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "updated"} direction={sortDirection} onClick={() => sort("updated")}>
+                        Updated
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
+                      <SortableTableHeader active={sortKey === "status"} direction={sortDirection} onClick={() => sort("status")}>
+                        Status
+                      </SortableTableHeader>
+                    </TableHead>
                     <TableHead className="w-12"><span className="sr-only">Actions</span></TableHead>
                   </TableRow>
                 </TableHeader>

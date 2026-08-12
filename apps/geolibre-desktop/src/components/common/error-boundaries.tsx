@@ -1,4 +1,9 @@
-import { Button, ErrorBoundary, type ErrorBoundaryFallbackProps } from "@geolibre/ui";
+import {
+  Button,
+  ErrorBoundary,
+  toast,
+  type ErrorBoundaryFallbackProps,
+} from "@geolibre/ui";
 import { AlertTriangle, RefreshCw, X } from "lucide-react";
 import type { ErrorInfo, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,43 +34,25 @@ function reportBoundaryError(label: string, error: Error, info?: ErrorInfo): voi
 
 export { reportBoundaryError };
 
+function reportAndToastBoundaryError(label: string, error: Error, info?: ErrorInfo): void {
+  reportBoundaryError(label, error, info);
+  toast.error(`${label} failed`, {
+    description: error.message || String(error),
+    duration: 8_000,
+  });
+}
+
 /**
  * Top-level boundary. A render error anywhere not caught by a more specific
- * boundary lands here and shows a full-screen recovery panel rather than a
- * blank page. Reloading is the surest recovery for an error this high in the
- * tree, so the primary action reloads the app; "Try again" attempts an in-place
- * recovery without losing unsaved work.
+ * boundary is reported in a toast and diagnostics instead of rendering a
+ * full-page recovery screen. Routine workspace failures are isolated by the
+ * section boundaries below, keeping the rest of the shell available.
  */
 export function AppErrorBoundary({ children }: { children: ReactNode }) {
   return (
     <ErrorBoundary
-      onError={(error, info) => reportBoundaryError("Application", error, info)}
-      fallback={({ error, reset }) => (
-        <div
-          role="alert"
-          className="flex h-full w-full flex-col items-center justify-center gap-4 bg-background p-8 text-center"
-        >
-          <AlertTriangle className="h-10 w-10 text-destructive" />
-          <div className="space-y-1">
-            <h1 className="text-lg font-semibold">Something went wrong</h1>
-            <p className="max-w-md text-sm text-muted-foreground">
-              GeoLibre hit an unexpected error and could not continue. Your work may be unsaved —
-              try recovering before reloading.
-            </p>
-            <p className="max-w-md break-words font-mono text-xs text-muted-foreground/80">
-              {/* Non-Error throws (common from plugin code) have no .message. */}
-              {error.message || String(error)}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={reset}>
-              <RefreshCw className="h-4 w-4" />
-              Try again
-            </Button>
-            <Button onClick={() => window.location.reload()}>Reload app</Button>
-          </div>
-        </div>
-      )}
+      onError={(error, info) => reportAndToastBoundaryError("Application", error, info)}
+      fallback={() => null}
     >
       {children}
     </ErrorBoundary>
@@ -104,7 +91,7 @@ export function SectionErrorBoundary({
   return (
     <ErrorBoundary
       resetKeys={resetKeys}
-      onError={(error, info) => reportBoundaryError(label, error, info)}
+      onError={(error, info) => reportAndToastBoundaryError(label, error, info)}
       fallback={({ reset }) => (
         <SectionErrorFallback
           label={label}
@@ -128,7 +115,7 @@ export function SectionErrorBoundary({
 export function SilentErrorBoundary({ label, children }: { label: string; children: ReactNode }) {
   return (
     <ErrorBoundary
-      onError={(error, info) => reportBoundaryError(label, error, info)}
+      onError={(error, info) => reportAndToastBoundaryError(label, error, info)}
       fallback={() => null}
     >
       {children}

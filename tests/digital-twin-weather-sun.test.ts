@@ -6,7 +6,10 @@ import {
   TERRAIN_GROUND_LAYER_ID,
 } from "../packages/map/src/satellite-terrain-style";
 import { DEFAULT_WEATHER_SETTINGS } from "../packages/ui/src/components/weather/types";
-import { weatherSettingsDateMs } from "../apps/geolibre-desktop/src/product-modes/digital-twin/weather-settings-time";
+import {
+  mountainWeatherDateTime,
+  weatherSettingsDateMs,
+} from "../apps/geolibre-desktop/src/product-modes/digital-twin/weather-settings-time";
 import { createWeatherSunSimulationController } from "../apps/geolibre-desktop/src/product-modes/digital-twin/weather-sun-simulation";
 import {
   timeOfDayIllumination,
@@ -48,11 +51,8 @@ describe("weatherSettingsDateMs", () => {
   it("tracks the current instant in automatic mode", () => {
     const now = Date.UTC(2026, 7, 7, 12, 30);
     assert.equal(
-      weatherSettingsDateMs(
-        { ...DEFAULT_WEATHER_SETTINGS, mode: "auto" },
-        now,
-      ),
-      now,
+      weatherSettingsDateMs({ ...DEFAULT_WEATHER_SETTINGS, mode: "auto" }, now),
+      now
     );
   });
 
@@ -61,17 +61,37 @@ describe("weatherSettingsDateMs", () => {
     assert.equal(
       weatherSettingsDateMs(
         { ...DEFAULT_WEATHER_SETTINGS, date: "not-a-date" },
-        now,
+        now
       ),
-      now,
+      now
     );
     assert.equal(
       weatherSettingsDateMs(
         { ...DEFAULT_WEATHER_SETTINGS, date: "2026-02-31" },
-        now,
+        now
       ),
-      now,
+      now
     );
+  });
+});
+
+describe("mountainWeatherDateTime", () => {
+  it("uses Mountain Daylight Time in summer", () => {
+    assert.deepEqual(mountainWeatherDateTime("2026-08-12T18:07:00Z"), {
+      date: "2026-08-12",
+      hour: 12,
+      minute: 7,
+      month: 8,
+    });
+  });
+
+  it("uses Mountain Standard Time and the local date in winter", () => {
+    assert.deepEqual(mountainWeatherDateTime("2026-01-01T03:15:00Z"), {
+      date: "2025-12-31",
+      hour: 20,
+      minute: 15,
+      month: 12,
+    });
   });
 });
 
@@ -138,11 +158,13 @@ describe("createWeatherSunSimulationController", () => {
       getCenter: () => ({ lat: 40, lng: -105 }),
       getLayer: (id: string) => (layers.has(id) ? { id } : undefined),
       getLight: () => ({ anchor: "viewport", intensity: 0.5 }),
-      getPaintProperty: (id: string, property: string) => paint.get(`${id}:${property}`),
+      getPaintProperty: (id: string, property: string) =>
+        paint.get(`${id}:${property}`),
       getSky: () => undefined,
       getSource: (id: string) => sources.get(id),
       isStyleLoaded: () => styleLoaded,
-      off: (event: string, listener: () => void) => listeners.get(event)?.delete(listener),
+      off: (event: string, listener: () => void) =>
+        listeners.get(event)?.delete(listener),
       on: (event: string, listener: () => void) => {
         const eventListeners = listeners.get(event) ?? new Set();
         eventListeners.add(listener);
@@ -168,7 +190,7 @@ describe("createWeatherSunSimulationController", () => {
           hour: 2,
           minute: 0,
         },
-        (overlay) => lightingOverlays.push(overlay),
+        (overlay) => lightingOverlays.push(overlay)
       );
 
       assert.ok(lightingOverlays.length > 0);
@@ -178,15 +200,19 @@ describe("createWeatherSunSimulationController", () => {
       for (const listener of listeners.get("style.load") ?? []) listener();
       assert.ok(skies.length > 0);
       assert.equal(
-        typeof paint.get(`${TERRAIN_GROUND_LAYER_ID}:hillshade-illumination-direction`),
-        "number",
+        typeof paint.get(
+          `${TERRAIN_GROUND_LAYER_ID}:hillshade-illumination-direction`
+        ),
+        "number"
       );
       assert.equal(
-        typeof paint.get(`${TERRAIN_GROUND_LAYER_ID}:hillshade-illumination-altitude`),
-        "number",
+        typeof paint.get(
+          `${TERRAIN_GROUND_LAYER_ID}:hillshade-illumination-altitude`
+        ),
+        "number"
       );
       assert.ok(
-        (paint.get(`${SATELLITE_LAYER_ID}:raster-brightness-max`) as number) < 1,
+        (paint.get(`${SATELLITE_LAYER_ID}:raster-brightness-max`) as number) < 1
       );
 
       controller.destroy();

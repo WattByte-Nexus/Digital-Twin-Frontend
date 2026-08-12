@@ -8,12 +8,7 @@ export type TerrainCameraTargetMap = Pick<
   | "setCenterElevation"
 >;
 
-/**
- * Keeps MapLibre's camera target in the same vertical reference frame as a
- * streamed 3D dataset. MapLibre otherwise targets sea level until its DEM can
- * resolve the center elevation, which can clip high-altitude geometry before
- * deck.gl reaches rasterization.
- */
+/** Keep the camera target in the active 3D dataset's vertical reference frame. */
 export function syncTerrainCameraTarget(
   map: TerrainCameraTargetMap,
   cameraTargetElevation?: number

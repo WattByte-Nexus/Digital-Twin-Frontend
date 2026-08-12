@@ -1,5 +1,4 @@
 import type { Layer } from "@deck.gl/core";
-import { GeoJsonLayer } from "@deck.gl/layers";
 import { SatelliteTerrainMap } from "@geolibre/map";
 import {
   Button,
@@ -62,6 +61,7 @@ import {
 } from "../../../lib/digital-twin-status";
 import { fetchDigitalTwinLiveWeather } from "../../../lib/digital-twin-live-weather";
 import {
+  digitalTwinRunStatusLabel,
   fetchDigitalTwinRunCatalog,
   submitDigitalTwinScenarioRun,
   type DigitalTwinRunCatalog,
@@ -89,9 +89,8 @@ import {
   timeOfDayLightingOverlay,
   type TimeOfDayLightingOverlay,
 } from "../weather-time-of-day-presentation";
-import {
-  type ScenarioRunRequest,
-} from "./simulation-flow";
+import { mountainWeatherDateTime } from "../weather-settings-time";
+import { type ScenarioRunRequest } from "./simulation-flow";
 import { PersistentDigitalTwinMapHost } from "./PersistentDigitalTwinMapHost";
 import { AssetsView } from "./assets/AssetsView";
 import { SectionErrorBoundary } from "../../../components/common/error-boundaries";
@@ -125,8 +124,14 @@ type LiveWeatherLoadState =
   | { status: "loading" }
   | {
       status: "ready";
+      condition?: string;
+      nearestStation?: Awaited<
+        ReturnType<typeof fetchDigitalTwinLiveWeather>
+      >["nearestStation"];
       observedAt: string;
-      readings: Awaited<ReturnType<typeof fetchDigitalTwinLiveWeather>>["readings"];
+      readings: Awaited<
+        ReturnType<typeof fetchDigitalTwinLiveWeather>
+      >["readings"];
       unavailableReadingLabels: string[];
     }
   | { status: "error"; error: Error };
@@ -134,6 +139,7 @@ type LiveWeatherLoadState =
 const POWER_LINE_CASING_LAYER_ID =
   "digital-twin-operational-power-lines-casing";
 const POWER_LINE_LAYER_ID = "digital-twin-operational-power-lines-line";
+const POWER_LINE_SOURCE_ID = "digital-twin-operational-power-lines";
 const FLOATING_MAP_ACTION_BUTTON_CLASS_NAME =
   "size-10 border border-border bg-background/95 text-foreground shadow-lg backdrop-blur";
 
@@ -168,45 +174,153 @@ function pointCloudStatusText(
     : "Point-cloud build failed.";
 }
 
-function seasonForDate(date: Date): string {
-  const month = date.getUTCMonth();
-  if (month >= 2 && month <= 4) return "Spring";
-  if (month >= 5 && month <= 7) return "Summer";
-  if (month >= 8 && month <= 10) return "Autumn";
+function seasonForMonth(month: number): string {
+  if (month >= 3 && month <= 5) return "Spring";
+  if (month >= 6 && month <= 8) return "Summer";
+  if (month >= 9 && month <= 11) return "Autumn";
   return "Winter";
 }
 
 function applyLiveWeather(
   current: WeatherSettingsValue,
-  weather: Awaited<ReturnType<typeof fetchDigitalTwinLiveWeather>>,
+  weather: Awaited<ReturnType<typeof fetchDigitalTwinLiveWeather>>
 ): WeatherSettingsValue {
-  const observedAt = new Date(weather.observedAt);
+  const observedAt = mountainWeatherDateTime(weather.observedAt);
+  const readings = new Map(
+    weather.readings
+      .map(presentLiveWeatherReading)
+      .map((reading) => [reading.band, reading.value])
+  );
+  const readingOrCurrent = (band: string, currentValue: number) =>
+    readings.get(band) ?? currentValue;
   return {
     ...current,
-    date: observedAt.toISOString().slice(0, 10),
-    hour: observedAt.getUTCHours(),
-    minute: observedAt.getUTCMinutes(),
+    date: observedAt.date,
+    hour: observedAt.hour,
+    minute: observedAt.minute,
     timeFormat: "24",
-    season: seasonForDate(observedAt),
-    temperature: weather.temperatureC ?? current.temperature,
+    season: seasonForMonth(observedAt.month),
+    temperature:
+      weather.temperatureC === undefined
+        ? current.temperature
+        : Math.round(weather.temperatureC * 10) / 10,
     events: {
       ...current.events,
-      wind: weather.windSpeedMph ?? current.events.wind,
-      windDirection: weather.windDirectionDegrees ?? current.events.windDirection,
+      wind:
+        weather.windSpeedMph === undefined
+          ? current.events.wind
+          : Math.round(weather.windSpeedMph * 10) / 10,
+      windDirection:
+        weather.windDirectionDegrees === undefined
+          ? current.events.windDirection
+          : Math.round(weather.windDirectionDegrees),
+      dewPoint: readingOrCurrent("dew_point_c", current.events.dewPoint),
+      relativeHumidity: readingOrCurrent(
+        "relative_humidity_pct",
+        current.events.relativeHumidity
+      ),
+      windGust: readingOrCurrent("wind_gust_m_s", current.events.windGust),
+      precipitationLastHour: readingOrCurrent(
+        "precipitation_last_hour_m",
+        current.events.precipitationLastHour
+      ),
+      barometricPressure: readingOrCurrent(
+        "barometric_pressure_pa",
+        current.events.barometricPressure
+      ),
+      seaLevelPressure: readingOrCurrent(
+        "sea_level_pressure_pa",
+        current.events.seaLevelPressure
+      ),
+      visibility: readingOrCurrent("visibility_m", current.events.visibility),
     },
   };
 }
 
-function liveWeatherStatusText(state: LiveWeatherLoadState): string | undefined {
-  if (state.status === "loading") return "Loading live weather from the Digital Twin Engine…";
+function liveWeatherStatusText(
+  state: LiveWeatherLoadState
+): string | undefined {
+  if (state.status === "loading")
+    return "Loading live weather from the Digital Twin Engine…";
   if (state.status === "ready") {
+    const observedAt = mountainWeatherDateTime(state.observedAt);
+    const localTimestamp = `${observedAt.date} ${String(
+      observedAt.hour
+    ).padStart(2, "0")}:${String(observedAt.minute).padStart(
+      2,
+      "0"
+    )} Mountain Time`;
     const unavailable = state.unavailableReadingLabels.length;
     return unavailable > 0
-      ? `Live Engine weather · ${state.observedAt} · ${unavailable} ${unavailable === 1 ? "reading" : "readings"} unavailable`
-      : `Live Engine weather · ${state.observedAt}`;
+      ? `Live Engine weather · ${localTimestamp} · ${unavailable} ${
+          unavailable === 1 ? "reading" : "readings"
+        } unavailable`
+      : `Live Engine weather · ${localTimestamp}`;
   }
-  if (state.status === "error") return `Live weather unavailable · ${state.error.message}`;
+  if (state.status === "error")
+    return `Live weather unavailable · ${state.error.message}`;
   return undefined;
+}
+
+function presentLiveWeatherReading(
+  reading: Awaited<
+    ReturnType<typeof fetchDigitalTwinLiveWeather>
+  >["readings"][number]
+) {
+  const rounded = (value: number, digits = 1) => {
+    const scale = 10 ** digits;
+    return Math.round(value * scale) / scale;
+  };
+  switch (reading.band) {
+    case "wind_gust_m_s":
+      return {
+        ...reading,
+        label: "Wind gust",
+        unit: "mph",
+        value: rounded(reading.value * 2.2369362920544),
+      };
+    case "precipitation_last_hour_m":
+      return {
+        ...reading,
+        label: "Precipitation (last hour)",
+        unit: "mm",
+        value: rounded(reading.value * 1_000, 2),
+      };
+    case "barometric_pressure_pa":
+      return {
+        ...reading,
+        label: "Barometric pressure",
+        unit: "hPa",
+        value: rounded(reading.value / 100),
+      };
+    case "sea_level_pressure_pa":
+      return {
+        ...reading,
+        label: "Sea-level pressure",
+        unit: "hPa",
+        value: rounded(reading.value / 100),
+      };
+    case "visibility_m":
+      return {
+        ...reading,
+        label: "Visibility",
+        unit: "km",
+        value: rounded(reading.value / 1_000),
+      };
+    default:
+      return { ...reading, value: rounded(reading.value) };
+  }
+}
+
+function liveWeatherSourceText(
+  state: LiveWeatherLoadState
+): string | undefined {
+  if (state.status !== "ready" || !state.nearestStation) return undefined;
+  const station = state.nearestStation;
+  const distance = station.distanceKm.toLocaleString(undefined, {
+    maximumFractionDigits: 1,
+  });
+  return `${station.id} · ${distance} km away · ${station.provider} · ${station.qualityStatus}`;
 }
 
 export interface DigitalTwinMapWorkspaceProps {
@@ -263,19 +377,6 @@ const WORKSPACE_ALERTS = [
     description: "Denver Feeder 12 · 21 min ago",
     regionId: "denver",
     severity: "medium" as const,
-  },
-];
-
-const WORKSPACE_RUNS = [
-  {
-    id: "run-wildfire-exposure",
-    name: "Wildfire exposure · Boulder County",
-    description: "Completed · 12 min ago · Maya Chen",
-  },
-  {
-    id: "run-peak-load",
-    name: "Peak load contingency · Denver Metro",
-    description: "Running · 64% · System operator",
   },
 ];
 
@@ -384,6 +485,9 @@ export function DigitalTwinMapWorkspace({
   const [runCatalogError, setRunCatalogError] = useState<Error | null>(null);
   const [runCatalogLoading, setRunCatalogLoading] = useState(true);
   const [runCatalogRequest, setRunCatalogRequest] = useState(0);
+  const activeCatalogRegion = runCatalog.regions.find(
+    (region) => region.id === activeRegionId
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -416,12 +520,19 @@ export function DigitalTwinMapWorkspace({
     const checkHealth = () => {
       void checkDigitalTwinEngineHealth(digitalTwinApiUrl, {
         signal: controller.signal,
-      }).then((health) => {
-        if (!disposed) setEngineHealth(health);
-      }, (cause: unknown) => {
-        if (disposed || (cause instanceof Error && cause.name === "AbortError")) return;
-        setEngineHealth("offline");
-      });
+      }).then(
+        (health) => {
+          if (!disposed) setEngineHealth(health);
+        },
+        (cause: unknown) => {
+          if (
+            disposed ||
+            (cause instanceof Error && cause.name === "AbortError")
+          )
+            return;
+          setEngineHealth("offline");
+        }
+      );
     };
     setEngineHealth("checking");
     checkHealth();
@@ -460,11 +571,14 @@ export function DigitalTwinMapWorkspace({
     }
   };
 
-  const handleWeatherSettingsChange = useCallback((nextValue: WeatherSettingsValue) => {
-    weatherSettingsRef.current = nextValue;
-    setWeatherSettings(nextValue);
-    weatherSunRef.current?.update(nextValue);
-  }, []);
+  const handleWeatherSettingsChange = useCallback(
+    (nextValue: WeatherSettingsValue) => {
+      weatherSettingsRef.current = nextValue;
+      setWeatherSettings(nextValue);
+      weatherSunRef.current?.update(nextValue);
+    },
+    []
+  );
 
   useEffect(() => {
     if (weatherSettings.mode !== "auto") {
@@ -478,12 +592,17 @@ export function DigitalTwinMapWorkspace({
     const refresh = () => {
       const center = mapInstance.getCenter();
       setLiveWeather((current) =>
-        current.status === "ready" ? current : { status: "loading" },
+        current.status === "ready" ? current : { status: "loading" }
       );
-      void fetchDigitalTwinLiveWeather(digitalTwinApiUrl, activeRegionId, {
-        longitude: center.lng,
-        latitude: center.lat,
-      }, { signal: controller.signal }).then(
+      void fetchDigitalTwinLiveWeather(
+        digitalTwinApiUrl,
+        activeRegionId,
+        {
+          longitude: center.lng,
+          latitude: center.lat,
+        },
+        { signal: controller.signal }
+      ).then(
         (weather) => {
           if (disposed) return;
           const current = weatherSettingsRef.current;
@@ -491,18 +610,27 @@ export function DigitalTwinMapWorkspace({
           handleWeatherSettingsChange(applyLiveWeather(current, weather));
           setLiveWeather({
             status: "ready",
+            condition: weather.condition,
+            nearestStation: weather.nearestStation,
             observedAt: weather.observedAt,
             readings: weather.readings,
             unavailableReadingLabels: weather.unavailableReadingLabels,
           });
         },
         (cause: unknown) => {
-          if (disposed || (cause instanceof Error && cause.name === "AbortError")) return;
+          if (
+            disposed ||
+            (cause instanceof Error && cause.name === "AbortError")
+          )
+            return;
           setLiveWeather({
             status: "error",
-            error: cause instanceof Error ? cause : new Error("Live weather request failed."),
+            error:
+              cause instanceof Error
+                ? cause
+                : new Error("Live weather request failed."),
           });
-        },
+        }
       );
     };
 
@@ -513,7 +641,13 @@ export function DigitalTwinMapWorkspace({
       controller.abort();
       window.clearInterval(interval);
     };
-  }, [activeRegionId, digitalTwinApiUrl, handleWeatherSettingsChange, mapInstance, weatherSettings.mode]);
+  }, [
+    activeRegionId,
+    digitalTwinApiUrl,
+    handleWeatherSettingsChange,
+    mapInstance,
+    weatherSettings.mode,
+  ]);
 
   useEffect(() => {
     if (!showLidar || !activeRegionId) {
@@ -592,7 +726,10 @@ export function DigitalTwinMapWorkspace({
       return;
     }
     if (!activeRegionId) {
-      setWeatherData({ status: "error", error: new Error("No active region selected.") });
+      setWeatherData({
+        status: "error",
+        error: new Error("No active region selected."),
+      });
       return;
     }
     const controller = new AbortController();
@@ -609,37 +746,65 @@ export function DigitalTwinMapWorkspace({
         if (controller.signal.aborted) return;
         setWeatherData({
           status: "error",
-          error: cause instanceof Error ? cause : new Error("Weather data request failed."),
+          error:
+            cause instanceof Error
+              ? cause
+              : new Error("Weather data request failed."),
         });
-      },
+      }
     );
     return () => controller.abort();
   }, [activeRegionId, digitalTwinApiUrl, showWeather]);
 
   const monitoringStatus = useMemo(() => {
     if (engineHealth === "checking") {
-      return { label: "Connecting", detail: "Checking Engine", tone: "degraded" as const };
+      return {
+        label: "Connecting",
+        detail: "Checking Engine",
+        tone: "degraded" as const,
+      };
     }
     if (engineHealth === "offline") {
-      return { label: "Offline", detail: "Engine health check failed", tone: "offline" as const };
+      return {
+        label: "Offline",
+        detail: "Engine health check failed",
+        tone: "offline" as const,
+      };
     }
     if (engineHealth === "degraded") {
-      return { label: "Degraded", detail: "Engine is not ready", tone: "degraded" as const };
+      return {
+        label: "Degraded",
+        detail: "Engine is not ready",
+        tone: "degraded" as const,
+      };
     }
     if (powerLines.status === "loading" || weatherData.status === "loading") {
-      return { label: "Loading", detail: "Weather & asset data", tone: "degraded" as const };
+      return {
+        label: "Loading",
+        detail: "Weather & asset data",
+        tone: "degraded" as const,
+      };
     }
     if (powerLines.status === "error") {
-      return { label: "Degraded", detail: "Asset data unavailable", tone: "degraded" as const };
+      return {
+        label: "Degraded",
+        detail: "Asset data unavailable",
+        tone: "degraded" as const,
+      };
     }
     if (weatherData.status === "error") {
-      return { label: "Degraded", detail: "Weather data unavailable", tone: "degraded" as const };
+      return {
+        label: "Degraded",
+        detail: "Weather data unavailable",
+        tone: "degraded" as const,
+      };
     }
     return {
       label: "Current",
-      detail: weatherData.status === "ready"
-        ? "Weather & asset data loaded"
-        : "Asset data loaded · Weather disabled",
+      detail:
+        weatherData.status === "ready"
+          ? "Weather & asset data loaded"
+          : "Asset data loaded · Weather disabled",
       tone: "current" as const,
     };
   }, [engineHealth, powerLines.status, weatherData]);
@@ -667,6 +832,78 @@ export function DigitalTwinMapWorkspace({
       { padding: 96, maxZoom: 16.5, duration: 500 }
     );
   }, [activeRegionId, mapInstance, powerLines, showLiveMapChrome]);
+
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    const removePowerLineLayers = () => {
+      if (mapInstance.getLayer(POWER_LINE_LAYER_ID)) {
+        mapInstance.removeLayer(POWER_LINE_LAYER_ID);
+      }
+      if (mapInstance.getLayer(POWER_LINE_CASING_LAYER_ID)) {
+        mapInstance.removeLayer(POWER_LINE_CASING_LAYER_ID);
+      }
+      if (mapInstance.getSource(POWER_LINE_SOURCE_ID)) {
+        mapInstance.removeSource(POWER_LINE_SOURCE_ID);
+      }
+    };
+
+    const syncPowerLineLayers = () => {
+      if (!mapInstance.getLayer(DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID)) {
+        return;
+      }
+      removePowerLineLayers();
+      if (
+        powerLines.status !== "ready" ||
+        powerLines.regionId !== activeRegionId ||
+        powerLines.lines.length === 0
+      ) {
+        return;
+      }
+
+      mapInstance.addSource(POWER_LINE_SOURCE_ID, {
+        type: "geojson",
+        data: powerLinesFeatureCollection(powerLines.lines),
+      });
+      const beforeId = mapInstance.getLayer(
+        DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID
+      )
+        ? DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID
+        : undefined;
+      mapInstance.addLayer(
+        {
+          id: POWER_LINE_CASING_LAYER_ID,
+          type: "line",
+          source: POWER_LINE_SOURCE_ID,
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "rgba(17, 24, 39, 0.9)",
+            "line-width": 6,
+          },
+        },
+        beforeId
+      );
+      mapInstance.addLayer(
+        {
+          id: POWER_LINE_LAYER_ID,
+          type: "line",
+          source: POWER_LINE_SOURCE_ID,
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#fbbf24", "line-width": 3 },
+        },
+        beforeId
+      );
+    };
+
+    syncPowerLineLayers();
+    mapInstance.on("load", syncPowerLineLayers);
+    mapInstance.on("style.load", syncPowerLineLayers);
+    return () => {
+      mapInstance.off("load", syncPowerLineLayers);
+      mapInstance.off("style.load", syncPowerLineLayers);
+      removePowerLineLayers();
+    };
+  }, [activeRegionId, mapInstance, powerLines]);
 
   const deckLayers = useMemo<Layer[]>(() => {
     const layers: Layer[] = [];
@@ -701,47 +938,8 @@ export function DigitalTwinMapWorkspace({
       );
     }
 
-    if (
-      powerLines.status === "ready" &&
-      powerLines.regionId === activeRegionId
-    ) {
-      const data = powerLinesFeatureCollection(powerLines.lines);
-      layers.push(
-        new GeoJsonLayer({
-          id: POWER_LINE_CASING_LAYER_ID,
-          beforeId: DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
-          data,
-          filled: false,
-          stroked: true,
-          pickable: false,
-          lineWidthUnits: "pixels",
-          getLineColor: [17, 24, 39, 230],
-          getLineWidth: 6,
-          parameters: { depthTest: false },
-        }),
-        new GeoJsonLayer({
-          id: POWER_LINE_LAYER_ID,
-          beforeId: DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
-          data,
-          filled: false,
-          stroked: true,
-          pickable: true,
-          lineWidthUnits: "pixels",
-          getLineColor: [251, 191, 36, 255],
-          getLineWidth: 3,
-          parameters: { depthTest: false },
-        })
-      );
-    }
-
     return layers;
-  }, [
-    activeRegionId,
-    displaySettings.pointClouds,
-    pointCloud,
-    powerLines,
-    showLidar,
-  ]);
+  }, [activeRegionId, displaySettings.pointClouds, pointCloud, showLidar]);
 
   const activePointCloudStatus = pointCloudStatusText(
     pointCloud,
@@ -750,7 +948,8 @@ export function DigitalTwinMapWorkspace({
   );
   const activePointCloudCameraTargetElevation =
     pointCloud.status === "ready" &&
-    pointCloudCameraTarget?.datasetKey === pointCloudDatasetKey(pointCloud.dataset)
+    pointCloudCameraTarget?.datasetKey ===
+      pointCloudDatasetKey(pointCloud.dataset)
       ? pointCloudCameraTarget.elevationMeters
       : undefined;
   useEffect(() => {
@@ -803,7 +1002,9 @@ export function DigitalTwinMapWorkspace({
 
   const zoomToSelectedRegion = () => {
     if (!canZoomToSelectedRegion) return;
-    const coordinates = powerLines.lines.flatMap((line) => line.geometry.coordinates);
+    const coordinates = powerLines.lines.flatMap(
+      (line) => line.geometry.coordinates
+    );
     const longitudes = coordinates.map((position) => position[0]);
     const latitudes = coordinates.map((position) => position[1]);
     mapRef.current?.fitBounds(
@@ -811,7 +1012,7 @@ export function DigitalTwinMapWorkspace({
         [Math.min(...longitudes), Math.min(...latitudes)],
         [Math.max(...longitudes), Math.max(...latitudes)],
       ],
-      { padding: 96, maxZoom: 16.5, duration: 500 },
+      { padding: 96, maxZoom: 16.5, duration: 500 }
     );
   };
 
@@ -833,14 +1034,21 @@ export function DigitalTwinMapWorkspace({
     onNavigate?.(destination, resourceId);
   };
 
-  const launchSimulation = async (request: ScenarioRunRequest, idempotencyKey: string) => {
-    const submission = await submitDigitalTwinScenarioRun(digitalTwinApiUrl, {
-      regionId: request.regionId,
-      durationHours: request.durationHours,
-      ignitionPoints: request.ignitionPoints,
-      windSpeedMph: request.weather.events.wind,
-      windDirectionDegrees: request.weather.events.windDirection,
-    }, { idempotencyKey });
+  const launchSimulation = async (
+    request: ScenarioRunRequest,
+    idempotencyKey: string
+  ) => {
+    const submission = await submitDigitalTwinScenarioRun(
+      digitalTwinApiUrl,
+      {
+        regionId: request.regionId,
+        durationHours: request.durationHours,
+        ignitionPoints: request.ignitionPoints,
+        windSpeedMph: request.weather.events.wind,
+        windDirectionDegrees: request.weather.events.windDirection,
+      },
+      { idempotencyKey }
+    );
     setRunCatalogRequest((current) => current + 1);
     navigateTo("runs", submission.runId);
   };
@@ -913,16 +1121,24 @@ export function DigitalTwinMapWorkspace({
 
           {showWeather && activeDestination === "live" ? (
             <WeatherSettingsFloatingPanel
-              autoWeatherReadings={
+              autoWeatherCondition={
                 liveWeather.status === "ready"
-                  ? liveWeather.readings.map((reading) => ({
-                      id: reading.band,
-                      label: reading.label,
-                      unit: reading.unit,
-                      value: reading.value,
-                    }))
+                  ? liveWeather.condition
                   : undefined
               }
+              autoWeatherReadings={
+                liveWeather.status === "ready"
+                  ? liveWeather.readings
+                      .map(presentLiveWeatherReading)
+                      .map((reading) => ({
+                        id: reading.band,
+                        label: reading.label,
+                        unit: reading.unit,
+                        value: reading.value,
+                      }))
+                  : undefined
+              }
+              autoWeatherSource={liveWeatherSourceText(liveWeather)}
               autoWeatherStatus={liveWeatherStatusText(liveWeather)}
               theme={activeThemeMode}
               location="Boulder County, Colorado"
@@ -1031,6 +1247,7 @@ export function DigitalTwinMapWorkspace({
           />
 
           <CommandDialog
+            className="top-[8%] translate-y-0"
             description="Look up regions, grid assets, alerts, and simulation runs."
             onOpenChange={setSearchOpen}
             open={searchOpen}
@@ -1043,7 +1260,7 @@ export function DigitalTwinMapWorkspace({
                 No matching regions, assets, alerts, or runs.
               </CommandEmpty>
               <CommandGroup heading="Regions">
-                {regions.map((region) => (
+                {runCatalog.regions.map((region) => (
                   <CommandItem
                     className="items-start py-2.5"
                     key={region.id}
@@ -1053,13 +1270,15 @@ export function DigitalTwinMapWorkspace({
                         selectRegion(region.id);
                       })
                     }
-                    value={`region ${region.name} ${region.description}`}
+                    value={`region ${region.name} ${region.status}`}
                   >
                     <MapPinned aria-hidden="true" className="mt-0.5" />
                     <span className="min-w-0">
                       <span className="block truncate">{region.name}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {region.description}
+                        {region.status === "published"
+                          ? "Published operational area"
+                          : "Draft operational area"}
                       </span>
                     </span>
                   </CommandItem>
@@ -1067,7 +1286,8 @@ export function DigitalTwinMapWorkspace({
               </CommandGroup>
               <CommandSeparator />
               <CommandGroup heading="Assets">
-                {powerLines.status === "ready" && powerLines.lines.length > 0 ? (
+                {powerLines.status === "ready" &&
+                powerLines.lines.length > 0 ? (
                   powerLines.lines.map((asset) => (
                     <CommandItem
                       className="items-start py-2.5"
@@ -1077,13 +1297,22 @@ export function DigitalTwinMapWorkspace({
                           navigateTo("assets", asset.powerLineId);
                         })
                       }
-                      value={`asset power line ${asset.powerLineId} ${activeRegion?.name ?? activeRegionId}`}
+                      value={`asset power line ${asset.powerLineId} ${
+                        activeCatalogRegion?.name ??
+                        activeRegion?.name ??
+                        activeRegionId
+                      }`}
                     >
                       <Zap aria-hidden="true" className="mt-0.5" />
                       <span className="min-w-0">
-                        <span className="block truncate">{asset.powerLineId}</span>
+                        <span className="block truncate">
+                          {asset.powerLineId}
+                        </span>
                         <span className="block truncate text-xs text-muted-foreground">
-                          Overhead power line · {activeRegion?.name ?? activeRegionId}
+                          Overhead power line ·{" "}
+                          {activeCatalogRegion?.name ??
+                            activeRegion?.name ??
+                            activeRegionId}
                         </span>
                       </span>
                     </CommandItem>
@@ -1093,8 +1322,8 @@ export function DigitalTwinMapWorkspace({
                     {powerLines.status === "loading"
                       ? "Loading assets…"
                       : powerLines.status === "error"
-                        ? "Assets unavailable"
-                        : "No assets published for this region"}
+                      ? "Assets unavailable"
+                      : "No assets published for this region"}
                   </CommandItem>
                 )}
               </CommandGroup>
@@ -1124,18 +1353,21 @@ export function DigitalTwinMapWorkspace({
               </CommandGroup>
               <CommandSeparator />
               <CommandGroup heading="Runs">
-                {WORKSPACE_RUNS.map((run) => (
+                {runCatalog.runs.map((run) => (
                   <CommandItem
                     className="items-start py-2.5"
                     key={run.id}
-                    onSelect={() => openSearchResult(() => navigateTo("runs"))}
-                    value={`run ${run.name} ${run.description}`}
+                    onSelect={() =>
+                      openSearchResult(() => navigateTo("runs", run.id))
+                    }
+                    value={`run ${run.id} ${run.simulationId} ${run.regionName} ${run.status}`}
                   >
                     <History aria-hidden="true" className="mt-0.5" />
                     <span className="min-w-0">
-                      <span className="block truncate">{run.name}</span>
+                      <span className="block truncate">{run.id}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {run.description}
+                        {digitalTwinRunStatusLabel(run.status)} ·{" "}
+                        {run.regionName}
                       </span>
                     </span>
                   </CommandItem>
@@ -1273,44 +1505,58 @@ export function DigitalTwinMapWorkspace({
               label="Asset catalog"
               resetKeys={[activeRegionId, location]}
             >
-            <AssetsView
-              apiUrl={digitalTwinApiUrl}
-              location={location}
-              onOpenAsset={(assetId) => navigateTo("assets", assetId || undefined)}
-              regions={regions}
-              theme={activeThemeMode}
-            />
+              <AssetsView
+                apiUrl={digitalTwinApiUrl}
+                location={location}
+                onOpenAsset={(assetId) =>
+                  navigateTo("assets", assetId || undefined)
+                }
+                regions={regions}
+                theme={activeThemeMode}
+              />
             </SectionErrorBoundary>
           ) : activeDestination === "scenarios" ? (
-            <ScenariosView
-              activeRegionId={activeRegionId}
-              creationRequest={scenarioCreationRequest}
-              mapControllerRef={interactionMapControllerRef}
-              mapSlot={mapHost}
-              onBuilderOpenChange={setScenarioBuilderOpen}
-              onRun={launchSimulation}
-              regions={regions}
-              theme={activeThemeMode}
-            />
+            <SectionErrorBoundary
+              fallbackClassName="h-full w-full"
+              label="Scenario catalog"
+              resetKeys={[activeRegionId, location]}
+            >
+              <ScenariosView
+                activeRegionId={activeRegionId}
+                creationRequest={scenarioCreationRequest}
+                mapControllerRef={interactionMapControllerRef}
+                mapSlot={mapHost}
+                onBuilderOpenChange={setScenarioBuilderOpen}
+                onRun={launchSimulation}
+                regions={regions}
+                theme={activeThemeMode}
+              />
+            </SectionErrorBoundary>
           ) : activeDestination === "runs" ? (
-            <RunsView
-              apiUrl={digitalTwinApiUrl}
-              error={runCatalogError}
-              isLoading={runCatalogLoading}
-              location={location}
-              mapControllerRef={interactionMapControllerRef}
-              mapSlot={mapHost}
-              onCreateScenario={() => {
-                setScenarioCreationRequest((request) => request + 1);
-                navigateTo("scenarios");
-              }}
-              onOpenRun={(runId) => navigateTo("runs", runId)}
-              onRefresh={() => setRunCatalogRequest((request) => request + 1)}
-              onReturnToRuns={() => navigateTo("runs")}
-              regions={runCatalog.regions}
-              runs={runCatalog.runs}
-              theme={activeThemeMode}
-            />
+            <SectionErrorBoundary
+              fallbackClassName="h-full w-full"
+              label="Run catalog"
+              resetKeys={[activeRegionId, location]}
+            >
+              <RunsView
+                apiUrl={digitalTwinApiUrl}
+                error={runCatalogError}
+                isLoading={runCatalogLoading}
+                location={location}
+                mapControllerRef={interactionMapControllerRef}
+                mapSlot={mapHost}
+                onCreateScenario={() => {
+                  setScenarioCreationRequest((request) => request + 1);
+                  navigateTo("scenarios");
+                }}
+                onOpenRun={(runId) => navigateTo("runs", runId)}
+                onRefresh={() => setRunCatalogRequest((request) => request + 1)}
+                onReturnToRuns={() => navigateTo("runs")}
+                regions={runCatalog.regions}
+                runs={runCatalog.runs}
+                theme={activeThemeMode}
+              />
+            </SectionErrorBoundary>
           ) : (
             mapHost
           )}

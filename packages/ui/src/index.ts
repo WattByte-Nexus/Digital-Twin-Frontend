@@ -30,6 +30,8 @@ export {
   type DigitalTwinMapStatusProps,
 } from "./components/digital-twin-map-status";
 export { Button, buttonVariants, type ButtonProps } from "./components/button";
+export { Toaster } from "./components/sonner";
+export { toast } from "sonner";
 export {
   FloatingMapPanel,
   FloatingMapPanelDragHandle,
@@ -169,6 +171,11 @@ export {
   TableHead,
   TableCell,
 } from "./components/table";
+export {
+  SortableTableHeader,
+  type SortDirection,
+  type SortableTableHeaderProps,
+} from "./components/sortable-table-header";
 export {
   SimulationPopover,
   type SimulationPopoverProps,

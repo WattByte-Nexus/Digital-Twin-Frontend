@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  ADAPTIVE_SURFEL_VERTEX_INJECTION,
   createDigitalTwinPointCloudLayer,
   GAUSSIAN_SURFEL_FRAGMENT_INJECTION,
-  GAUSSIAN_SURFEL_VERTEX_INJECTION,
   GaussianSurfelPointCloudLayer,
   MISSING_POINT_RGB_VERTEX_INJECTION,
   POINT_CLOUD_TILESET_LOAD_OPTIONS,
@@ -45,11 +45,11 @@ describe("Digital Twin LiDAR fusion layer", () => {
 
     assert.equal(layer.props.id, "digital-twin-point-cloud-golden-lidar");
     assert.equal(layer.props.data, DATASET.tilesetUrl);
-    assert.equal(layer.props.pointSize, 1.5);
+    assert.equal(layer.props.pointSize, 0.375);
     assert.equal(layer.props.pickable, false);
     assert.equal(layer.props.operation, "draw");
     assert.equal(layer.props.loadOptions, POINT_CLOUD_TILESET_LOAD_OPTIONS);
-    assert.equal(layer.props.loadOptions?.tileset?.maximumScreenSpaceError, 16);
+    assert.equal(layer.props.loadOptions?.tileset?.maximumScreenSpaceError, 4);
     assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 512);
     assert.equal(layer.props.loadOptions?.tileset?.maxRequests, 12);
     assert.equal(layer.props.loadOptions?.tileset?.debounceTime, 100);
@@ -63,7 +63,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
       layer.props._subLayerProps?.pointcloud?.type,
       VisibleRgbPointCloudLayer
     );
-    assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "pixels");
+    assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "meters");
     assert.equal(layer.props.beforeId, "digital-twin-reference-road-labels");
     assert.match(
       MISSING_POINT_RGB_VERTEX_INJECTION,
@@ -73,6 +73,9 @@ describe("Digital Twin LiDAR fusion layer", () => {
       MISSING_POINT_RGB_VERTEX_INJECTION,
       /vec4\(0\.22, 0\.74, 0\.97, 0\.90\)/
     );
+    assert.match(ADAPTIVE_SURFEL_VERTEX_INJECTION, /clamp\(/);
+    assert.match(ADAPTIVE_SURFEL_VERTEX_INJECTION, /1\.5/);
+    assert.match(ADAPTIVE_SURFEL_VERTEX_INJECTION, /10\.0/);
   });
 
   it("enables Gaussian surfels only when the quality mode is requested", () => {
@@ -85,9 +88,6 @@ describe("Digital Twin LiDAR fusion layer", () => {
       layer.props._subLayerProps?.pointcloud?.type,
       GaussianSurfelPointCloudLayer
     );
-    assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /clamp\(/);
-    assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /1\.5/);
-    assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /18\.0/);
     assert.match(GAUSSIAN_SURFEL_FRAGMENT_INJECTION, /exp\(/);
     assert.match(GAUSSIAN_SURFEL_FRAGMENT_INJECTION, /geometry\.uv/);
   });

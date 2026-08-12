@@ -8,6 +8,14 @@ export const MISSING_POINT_RGB_VERTEX_INJECTION = `
   }
 `;
 
+export const ADAPTIVE_SURFEL_VERTEX_INJECTION = `
+  float projectedSurfelRadius = length(size.xy);
+  if (projectedSurfelRadius > 0.0) {
+    float clampedSurfelRadius = clamp(projectedSurfelRadius, 1.5, 10.0);
+    size.xy *= clampedSurfelRadius / projectedSurfelRadius;
+  }
+`;
+
 /** Preserve source RGB, but keep malformed/missing zero-RGB tiles visible. */
 export class VisibleRgbPointCloudLayer extends PointCloudLayer {
   static layerName = "VisibleRgbPointCloudLayer";
@@ -19,19 +27,12 @@ export class VisibleRgbPointCloudLayer extends PointCloudLayer {
       inject: {
         ...shaders.inject,
         "vs:DECKGL_FILTER_COLOR": MISSING_POINT_RGB_VERTEX_INJECTION,
+        "vs:DECKGL_FILTER_SIZE": ADAPTIVE_SURFEL_VERTEX_INJECTION,
       },
     };
   }
 
 }
-
-export const GAUSSIAN_SURFEL_VERTEX_INJECTION = `
-  float projectedSurfelRadius = length(size.xy);
-  if (projectedSurfelRadius > 0.0) {
-    float clampedSurfelRadius = clamp(projectedSurfelRadius, 1.5, 18.0);
-    size.xy *= clampedSurfelRadius / projectedSurfelRadius;
-  }
-`;
 
 export const GAUSSIAN_SURFEL_FRAGMENT_INJECTION = `
   float gaussianRadiusSquared = dot(geometry.uv, geometry.uv);
@@ -60,8 +61,6 @@ export class GaussianSurfelPointCloudLayer extends VisibleRgbPointCloudLayer {
       ...shaders,
       inject: {
         ...shaders.inject,
-        "vs:DECKGL_FILTER_COLOR": MISSING_POINT_RGB_VERTEX_INJECTION,
-        "vs:DECKGL_FILTER_SIZE": GAUSSIAN_SURFEL_VERTEX_INJECTION,
         "fs:DECKGL_FILTER_COLOR": GAUSSIAN_SURFEL_FRAGMENT_INJECTION,
       },
     };
@@ -72,7 +71,7 @@ export const POINT_CLOUD_TILESET_LOAD_OPTIONS = {
   tileset: {
     // Start with the hierarchy's previews and refine only after the camera
     // settles. Native leaves remain available without blocking interaction.
-    maximumScreenSpaceError: 16,
+    maximumScreenSpaceError: 4,
     maximumMemoryUsage: 512,
     memoryAdjustedScreenSpaceError: true,
     throttleRequests: true,
@@ -115,8 +114,8 @@ interface DigitalTwinPointCloudLayerCallbacks {
   beforeId?: string;
 }
 
-function pointSizeForSpacing(minimumSpacingMeters: number): number {
-  return Math.min(3, Math.max(1.5, minimumSpacingMeters * 3));
+function pointRadiusForSpacing(minimumSpacingMeters: number): number {
+  return Math.max(0.05, minimumSpacingMeters * 0.75);
 }
 
 /**
@@ -162,7 +161,7 @@ export function createDigitalTwinPointCloudLayer(
   return new Tile3DLayer({
     id: `digital-twin-point-cloud-${dataset.datasetId}`,
     data: dataset.tilesetUrl,
-    pointSize: pointSizeForSpacing(dataset.minimumSpacingMeters),
+    pointSize: pointRadiusForSpacing(dataset.minimumSpacingMeters),
     pickable: false,
     operation: "draw",
     beforeId,
@@ -173,7 +172,7 @@ export function createDigitalTwinPointCloudLayer(
           renderMode === "gaussian"
             ? GaussianSurfelPointCloudLayer
             : VisibleRgbPointCloudLayer,
-        sizeUnits: "pixels",
+        sizeUnits: "meters",
       },
     },
     onTilesetLoad: (loadedTileset) => {
