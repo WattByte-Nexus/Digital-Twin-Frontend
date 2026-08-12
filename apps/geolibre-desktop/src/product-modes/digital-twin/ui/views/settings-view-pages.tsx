@@ -35,7 +35,6 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import {
-  ScopeLegend,
   SettingRow,
   SettingsCard,
   SettingsRows,
@@ -74,7 +73,6 @@ export function AccountPreferencesPage() {
 
   return (
     <SettingsPageBody>
-      <ScopeLegend />
       <SettingsCard
         description="These choices follow your account across workspaces."
         title="Interface"
@@ -174,7 +172,6 @@ export function WorkspaceMapPage({
 
   return (
     <SettingsPageBody>
-      <ScopeLegend />
       <SettingsCard
         action={
           <Badge variant="secondary">

@@ -12,7 +12,6 @@ import {
   SelectMenuItem,
   SelectMenuTrigger,
   SelectMenuValue,
-  Separator,
   Switch,
   cn,
 } from "@geolibre/ui";
@@ -132,19 +131,6 @@ export function SettingsSelect({
         ))}
       </SelectMenuContent>
     </SelectMenu>
-  );
-}
-
-export function ScopeLegend() {
-  return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border py-4 text-xs text-muted-foreground">
-      <span>Setting scope</span>
-      <Separator className="h-4" orientation="vertical" />
-      <Badge variant="outline">Personal</Badge>
-      <Badge variant="outline">Workspace</Badge>
-      <Badge variant="outline">Organization</Badge>
-      <Badge variant="outline">Engine-managed</Badge>
-    </div>
   );
 }
 
