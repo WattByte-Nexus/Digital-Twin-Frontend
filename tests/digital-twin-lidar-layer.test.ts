@@ -74,7 +74,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
       /vec4\(0\.22, 0\.74, 0\.97, 0\.90\)/
     );
     assert.match(ADAPTIVE_SURFEL_VERTEX_INJECTION, /clamp\(/);
-    assert.match(ADAPTIVE_SURFEL_VERTEX_INJECTION, /1\.5/);
+    assert.match(ADAPTIVE_SURFEL_VERTEX_INJECTION, /2\.0/);
     assert.match(ADAPTIVE_SURFEL_VERTEX_INJECTION, /10\.0/);
   });
 

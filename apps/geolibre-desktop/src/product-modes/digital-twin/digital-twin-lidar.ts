@@ -11,7 +11,7 @@ export const MISSING_POINT_RGB_VERTEX_INJECTION = `
 export const ADAPTIVE_SURFEL_VERTEX_INJECTION = `
   float projectedSurfelRadius = length(size.xy);
   if (projectedSurfelRadius > 0.0) {
-    float clampedSurfelRadius = clamp(projectedSurfelRadius, 1.5, 10.0);
+    float clampedSurfelRadius = clamp(projectedSurfelRadius, 2.0, 10.0);
     size.xy *= clampedSurfelRadius / projectedSurfelRadius;
   }
 `;
