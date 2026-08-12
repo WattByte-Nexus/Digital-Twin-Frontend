@@ -197,7 +197,6 @@ export function buildSatelliteTerrainStyle({
       "sky-horizon-blend": 0.8,
     },
     ...(referenceOverlay?.glyphs ? { glyphs: referenceOverlay.glyphs } : {}),
-    ...(referenceOverlay?.sprite ? { sprite: referenceOverlay.sprite } : {}),
     ...(elevationEnabled
       ? {
           terrain: {

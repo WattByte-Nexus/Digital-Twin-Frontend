@@ -2,6 +2,28 @@ import { Tile3DLayer } from "@deck.gl/geo-layers";
 import { PointCloudLayer } from "@deck.gl/layers";
 import type { DigitalTwinReadyPointCloudDataset } from "../../lib/digital-twin-point-cloud";
 
+export const MISSING_POINT_RGB_VERTEX_INJECTION = `
+  if (color.r + color.g + color.b < 0.003) {
+    color = vec4(0.22, 0.74, 0.97, 0.90);
+  }
+`;
+
+/** Preserve source RGB, but keep malformed/missing zero-RGB tiles visible. */
+export class VisibleRgbPointCloudLayer extends PointCloudLayer {
+  static layerName = "VisibleRgbPointCloudLayer";
+
+  override getShaders() {
+    const shaders = super.getShaders();
+    return {
+      ...shaders,
+      inject: {
+        ...shaders.inject,
+        "vs:DECKGL_FILTER_COLOR": MISSING_POINT_RGB_VERTEX_INJECTION,
+      },
+    };
+  }
+}
+
 export const GAUSSIAN_SURFEL_VERTEX_INJECTION = `
   float projectedSurfelRadius = length(size.xy);
   if (projectedSurfelRadius > 0.0) {
@@ -28,7 +50,7 @@ export const GAUSSIAN_SURFEL_FRAGMENT_INJECTION = `
  * Full 3D Gaussian reconstruction is a separate path that requires multi-view
  * imagery rather than the single orthophoto used by this dataset.
  */
-export class GaussianSurfelPointCloudLayer extends PointCloudLayer {
+export class GaussianSurfelPointCloudLayer extends VisibleRgbPointCloudLayer {
   static layerName = "GaussianSurfelPointCloudLayer";
 
   override getShaders() {
@@ -37,6 +59,7 @@ export class GaussianSurfelPointCloudLayer extends PointCloudLayer {
       ...shaders,
       inject: {
         ...shaders.inject,
+        "vs:DECKGL_FILTER_COLOR": MISSING_POINT_RGB_VERTEX_INJECTION,
         "vs:DECKGL_FILTER_SIZE": GAUSSIAN_SURFEL_VERTEX_INJECTION,
         "fs:DECKGL_FILTER_COLOR": GAUSSIAN_SURFEL_FRAGMENT_INJECTION,
       },
@@ -87,6 +110,7 @@ interface DigitalTwinPointCloudLayerCallbacks {
   onReady?: () => void;
   onDiagnostics?: (snapshot: DigitalTwinPointCloudDiagnostics) => void;
   renderMode?: DigitalTwinPointCloudRenderMode;
+  beforeId?: string;
 }
 
 function pointSizeForSpacing(minimumSpacingMeters: number): number {
@@ -107,7 +131,8 @@ export function createDigitalTwinPointCloudLayer(
     onReady,
     onDiagnostics,
     renderMode = "opaque",
-  }: DigitalTwinPointCloudLayerCallbacks,
+    beforeId,
+  }: DigitalTwinPointCloudLayerCallbacks
 ): Tile3DLayer {
   let firstTileLoaded = false;
   let tileset: PointCloudTilesetDiagnosticsSource | null = null;
@@ -136,13 +161,14 @@ export function createDigitalTwinPointCloudLayer(
     pointSize: pointSizeForSpacing(dataset.minimumSpacingMeters),
     pickable: false,
     operation: "draw",
+    beforeId,
     loadOptions: POINT_CLOUD_TILESET_LOAD_OPTIONS,
     _subLayerProps: {
       pointcloud: {
         type:
           renderMode === "gaussian"
             ? GaussianSurfelPointCloudLayer
-            : PointCloudLayer,
+            : VisibleRgbPointCloudLayer,
         sizeUnits: "pixels",
       },
     },
@@ -162,7 +188,7 @@ export function createDigitalTwinPointCloudLayer(
     // declaration naming the string arguments in the opposite order.
     onTileError: (_tile, message, url) => {
       reportError(
-        new Error(`${dataset.name} tile failed to load: ${message} (${url})`),
+        new Error(`${dataset.name} tile failed to load: ${message} (${url})`)
       );
     },
     onError: (error) => {

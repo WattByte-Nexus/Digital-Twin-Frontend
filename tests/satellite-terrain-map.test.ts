@@ -15,21 +15,32 @@ import {
   TERRAIN_SOURCE_ID,
 } from "../packages/map/src/satellite-terrain-style";
 import {
-  addSatelliteReferenceOverlay,
   DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
-  loadSatelliteReferenceOverlay,
   SATELLITE_REFERENCE_SOURCE_ID,
   setSatelliteReferenceVisibility,
 } from "../packages/map/src/satellite-reference-overlay";
 
 const satelliteTerrainMapSource = readFileSync(
   new URL("../packages/map/src/SatelliteTerrainMap.tsx", import.meta.url),
-  "utf8",
+  "utf8"
+);
+const satelliteTerrainConfigSource = readFileSync(
+  new URL(
+    "../apps/geolibre-desktop/src/product-modes/digital-twin/satellite-terrain-config.ts",
+    import.meta.url
+  ),
+  "utf8"
 );
 
 test("satellite terrain map includes its reference overlay in the initial style", () => {
-  assert.match(satelliteTerrainMapSource, /referenceOverlay:\s*options\.referenceOverlay/);
-  assert.doesNotMatch(satelliteTerrainMapSource, /loadSatelliteReferenceOverlay\(/);
+  assert.match(
+    satelliteTerrainMapSource,
+    /referenceOverlay:\s*options\.referenceOverlay/
+  );
+  assert.doesNotMatch(
+    satelliteTerrainMapSource,
+    /loadSatelliteReferenceOverlay\(/
+  );
 });
 
 test("satellite terrain map owns one portable interleaved deck surface", () => {
@@ -37,7 +48,67 @@ test("satellite terrain map owns one portable interleaved deck surface", () => {
   assert.match(satelliteTerrainMapSource, /interleaved:\s*true/);
   assert.match(satelliteTerrainMapSource, /deckLayers/);
   assert.match(satelliteTerrainMapSource, /powerPreference:\s*"low-power"/);
-  assert.doesNotMatch(satelliteTerrainMapSource, /powerPreference:\s*"high-performance"/);
+  assert.doesNotMatch(
+    satelliteTerrainMapSource,
+    /powerPreference:\s*"high-performance"/
+  );
+});
+
+test("Digital Twin ships a sprite-free operational reference stack in the initial style", () => {
+  assert.match(
+    satelliteTerrainConfigSource,
+    /url:\s*"https:\/\/tiles\.openfreemap\.org\/planet"/
+  );
+  assert.match(
+    satelliteTerrainConfigSource,
+    /glyphs:\s*"https:\/\/tiles\.openfreemap\.org\/fonts\/\{fontstack\}\/\{range\}\.pbf"/
+  );
+  assert.match(
+    satelliteTerrainConfigSource,
+    /DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID/
+  );
+  assert.match(
+    satelliteTerrainConfigSource,
+    /category:\s*"roads"[\s\S]*?type:\s*"line"/
+  );
+  assert.match(
+    satelliteTerrainConfigSource,
+    /category:\s*"placeLabels"[\s\S]*?type:\s*"symbol"/
+  );
+  assert.doesNotMatch(satelliteTerrainConfigSource, /\bsprite\s*:/);
+});
+
+test("every reference toolbar switch owns at least one concrete map layer", () => {
+  for (const category of [
+    "placeLabels",
+    "roads",
+    "roadLabels",
+    "poiLabels",
+    "water",
+    "waterLabels",
+    "boundaries",
+    "buildings",
+    "parks",
+  ]) {
+    assert.match(
+      satelliteTerrainConfigSource,
+      new RegExp(`category:\\s*"${category}"`),
+      `${category} must own a reference layer`
+    );
+  }
+});
+
+test("road hierarchy retains the previous Liberty colors and class separation", () => {
+  assert.match(satelliteTerrainConfigSource, /road-major-casing/);
+  assert.match(satelliteTerrainConfigSource, /road-motorway/);
+  assert.match(satelliteTerrainConfigSource, /road-trunk-primary/);
+  assert.match(satelliteTerrainConfigSource, /road-secondary/);
+  assert.match(satelliteTerrainConfigSource, /road-minor/);
+  assert.match(satelliteTerrainConfigSource, /road-service/);
+  assert.match(satelliteTerrainConfigSource, /road-path/);
+  assert.match(satelliteTerrainConfigSource, /"line-color": "#e9ac77"/);
+  assert.match(satelliteTerrainConfigSource, /"line-color": "#fea"/);
+  assert.match(satelliteTerrainConfigSource, /"line-color": "#cfcdca"/);
 });
 
 test("satellite terrain style orders imagery, terrain, and reference details", () => {
@@ -206,11 +277,13 @@ test("satellite terrain style uses a dark map treatment in dark mode", () => {
     "raster-contrast": 0.15,
   };
   assert.deepEqual(
-    style.layers.find((layer) => layer.id === TERRAIN_BACKGROUND_LAYER_ID)?.paint,
+    style.layers.find((layer) => layer.id === TERRAIN_BACKGROUND_LAYER_ID)
+      ?.paint,
     { "background-color": "#07111f" }
   );
   assert.deepEqual(
-    style.layers.find((layer) => layer.id === SATELLITE_FALLBACK_LAYER_ID)?.paint,
+    style.layers.find((layer) => layer.id === SATELLITE_FALLBACK_LAYER_ID)
+      ?.paint,
     rasterPaint
   );
   assert.deepEqual(
@@ -324,60 +397,6 @@ test("satellite reference categories toggle independently", () => {
   ]);
 });
 
-test("satellite reference details hydrate onto an already-running map", () => {
-  const calls: unknown[] = [];
-  const map = {
-    addLayer: (layer: unknown) => calls.push(["addLayer", layer]),
-    addSource: (id: string, source: unknown) => calls.push(["addSource", id, source]),
-    addSprite: (id: string, url: string) => calls.push(["addSprite", id, url]),
-    getGlyphs: () => null,
-    getLayer: () => undefined,
-    getSource: () => undefined,
-    getSprite: () => [],
-    setGlyphs: (url: string) => calls.push(["setGlyphs", url]),
-    setSprite: (url: string) => calls.push(["setSprite", url]),
-  };
-  const source = {
-    type: "vector" as const,
-    tiles: ["https://reference.example/{z}/{x}/{y}.pbf"],
-  };
-
-  addSatelliteReferenceOverlay(
-    map as unknown as Parameters<typeof addSatelliteReferenceOverlay>[0],
-    {
-      source,
-      glyphs: "https://reference.example/fonts/{fontstack}/{range}.pbf",
-      sprite: "https://reference.example/sprite",
-      layers: [
-        {
-          category: "roads",
-          layer: {
-            id: "digital-twin-reference-road",
-            type: "line",
-            source: SATELLITE_REFERENCE_SOURCE_ID,
-          },
-        },
-      ],
-    },
-    { ...DEFAULT_SATELLITE_REFERENCE_VISIBILITY, roads: false },
-  );
-
-  assert.deepEqual(calls, [
-    ["setGlyphs", "https://reference.example/fonts/{fontstack}/{range}.pbf"],
-    ["setSprite", "https://reference.example/sprite"],
-    ["addSource", SATELLITE_REFERENCE_SOURCE_ID, source],
-    [
-      "addLayer",
-      {
-        id: "digital-twin-reference-road",
-        type: "line",
-        source: SATELLITE_REFERENCE_SOURCE_ID,
-        layout: { visibility: "none" },
-      },
-    ],
-  ]);
-});
-
 test("fallback imagery remains beneath the primary while detailed tiles load", () => {
   const style = buildSatelliteTerrainStyle({
     satelliteFallbackSource: {
@@ -414,73 +433,6 @@ test("fallback imagery remains beneath the primary while detailed tiles load", (
       },
     ]
   );
-});
-
-test("reference overlay preserves bridge, tunnel, and 3D building layers", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () =>
-    new Response(
-      JSON.stringify({
-        version: 8,
-        sources: {
-          liberty: {
-            type: "vector",
-            tiles: ["https://reference.example/{z}/{x}/{y}.pbf"],
-          },
-        },
-        layers: [
-          {
-            id: "road_motorway",
-            type: "line",
-            source: "liberty",
-            "source-layer": "transportation",
-          },
-          {
-            id: "bridge_motorway",
-            type: "line",
-            source: "liberty",
-            "source-layer": "transportation",
-          },
-          {
-            id: "tunnel_motorway",
-            type: "line",
-            source: "liberty",
-            "source-layer": "transportation",
-          },
-          {
-            id: "building-footprint",
-            type: "fill",
-            source: "liberty",
-            "source-layer": "building",
-          },
-          {
-            id: "building-3d",
-            type: "fill-extrusion",
-            source: "liberty",
-            "source-layer": "building",
-          },
-        ],
-      })
-    );
-
-  try {
-    const overlay = await loadSatelliteReferenceOverlay(
-      "https://reference.example/style.json"
-    );
-
-    assert.deepEqual(
-      overlay.layers.map(({ layer }) => layer.id),
-      [
-        "digital-twin-reference-road_motorway",
-        "digital-twin-reference-bridge_motorway",
-        "digital-twin-reference-tunnel_motorway",
-        "digital-twin-reference-building-footprint",
-        "digital-twin-reference-building-3d",
-      ]
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
 });
 
 test("satellite imagery toggles independently from elevation", () => {

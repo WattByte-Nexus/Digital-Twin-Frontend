@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { PointCloudLayer } from "@deck.gl/layers";
 import {
   createDigitalTwinPointCloudLayer,
   GAUSSIAN_SURFEL_FRAGMENT_INJECTION,
   GAUSSIAN_SURFEL_VERTEX_INJECTION,
   GaussianSurfelPointCloudLayer,
+  MISSING_POINT_RGB_VERTEX_INJECTION,
   POINT_CLOUD_TILESET_LOAD_OPTIONS,
+  VisibleRgbPointCloudLayer,
 } from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-lidar";
 import type { DigitalTwinReadyPointCloudDataset } from "../apps/geolibre-desktop/src/lib/digital-twin-point-cloud";
 import { DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS } from "../packages/ui/src/components/digital-twin-map-toolbar";
@@ -37,6 +38,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
 
   it("streams the full-resolution RGB dataset within the interactive scene budget", () => {
     const layer = createDigitalTwinPointCloudLayer(DATASET, {
+      beforeId: "digital-twin-reference-road-labels",
       onError: () => {},
       onReady: () => {},
     });
@@ -47,23 +49,30 @@ describe("Digital Twin LiDAR fusion layer", () => {
     assert.equal(layer.props.pickable, false);
     assert.equal(layer.props.operation, "draw");
     assert.equal(layer.props.loadOptions, POINT_CLOUD_TILESET_LOAD_OPTIONS);
-    assert.equal(
-      layer.props.loadOptions?.tileset?.maximumScreenSpaceError,
-      16,
-    );
+    assert.equal(layer.props.loadOptions?.tileset?.maximumScreenSpaceError, 16);
     assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 512);
     assert.equal(layer.props.loadOptions?.tileset?.maxRequests, 12);
     assert.equal(layer.props.loadOptions?.tileset?.debounceTime, 100);
     assert.equal(layer.props.loadOptions?.tileset?.updateTransforms, false);
-    assert.equal(layer.props.loadOptions?.tileset?.memoryAdjustedScreenSpaceError, true);
+    assert.equal(
+      layer.props.loadOptions?.tileset?.memoryAdjustedScreenSpaceError,
+      true
+    );
     assert.equal(layer.props.loadOptions?.tileset?.throttleRequests, true);
     assert.equal(
       layer.props._subLayerProps?.pointcloud?.type,
-      PointCloudLayer,
+      VisibleRgbPointCloudLayer
     );
     assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "pixels");
     assert.equal(layer.props.beforeId, "digital-twin-reference-road-labels");
-    assert.deepEqual(layer.props.getPointColor, [56, 189, 248, 230]);
+    assert.match(
+      MISSING_POINT_RGB_VERTEX_INJECTION,
+      /color\.r \+ color\.g \+ color\.b/
+    );
+    assert.match(
+      MISSING_POINT_RGB_VERTEX_INJECTION,
+      /vec4\(0\.22, 0\.74, 0\.97, 0\.90\)/
+    );
   });
 
   it("enables Gaussian surfels only when the quality mode is requested", () => {
@@ -74,7 +83,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
 
     assert.equal(
       layer.props._subLayerProps?.pointcloud?.type,
-      GaussianSurfelPointCloudLayer,
+      GaussianSurfelPointCloudLayer
     );
     assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /clamp\(/);
     assert.match(GAUSSIAN_SURFEL_VERTEX_INJECTION, /1\.5/);

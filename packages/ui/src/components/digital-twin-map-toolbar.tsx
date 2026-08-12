@@ -156,7 +156,7 @@ export function DigitalTwinMapToolbar({
             onCheckedChange={(checked) => set("roadLabels", checked === true)}
           >
             <Route />
-            Road names &amp; shields
+            Road names &amp; route numbers
           </MenubarCheckboxItem>
           <MenubarCheckboxItem
             checked={value.poiLabels}

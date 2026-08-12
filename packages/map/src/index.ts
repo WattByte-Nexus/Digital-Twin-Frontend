@@ -14,7 +14,6 @@ export {
 } from "./SatelliteTerrainMap";
 export {
   DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
-  loadSatelliteReferenceOverlay,
   SATELLITE_REFERENCE_LAYER_PREFIX,
   SATELLITE_REFERENCE_SOURCE_ID,
   setSatelliteReferenceVisibility,

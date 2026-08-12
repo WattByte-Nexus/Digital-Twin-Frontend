@@ -69,7 +69,10 @@ import {
   type DigitalTwinPointCloudResult,
 } from "../../../lib/digital-twin-point-cloud";
 import { createDigitalTwinPointCloudLayer } from "../digital-twin-lidar";
-import { DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG } from "../satellite-terrain-config";
+import {
+  DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
+  DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG,
+} from "../satellite-terrain-config";
 import {
   createWeatherSunSimulationController,
   type WeatherSunSimulationController,
@@ -128,7 +131,7 @@ function pointCloudStatusText(
   }
   if (pointCloud.status === "ready") {
     return readyDatasetKey === pointCloudDatasetKey(pointCloud.dataset)
-      ? `${pointCloud.dataset.name} ready.`
+      ? `${pointCloud.dataset.name} ready. Source RGB is preserved; missing RGB is shown in cyan.`
       : `${pointCloud.dataset.name} tiles loading.`;
   }
   if (pointCloud.status === "queued") return "Point-cloud build queued.";
@@ -481,6 +484,7 @@ export function DigitalTwinMapWorkspace({
       const datasetKey = pointCloudDatasetKey(pointCloud.dataset);
       layers.push(
         createDigitalTwinPointCloudLayer(pointCloud.dataset, {
+          beforeId: DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
           onError: (error) => {
             console.error(`${pointCloud.dataset.name} could not be loaded`, error);
             setPointCloud((current) =>
@@ -503,6 +507,7 @@ export function DigitalTwinMapWorkspace({
       layers.push(
         new GeoJsonLayer({
           id: POWER_LINE_CASING_LAYER_ID,
+          beforeId: DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
           data,
           filled: false,
           stroked: true,
@@ -514,6 +519,7 @@ export function DigitalTwinMapWorkspace({
         }),
         new GeoJsonLayer({
           id: POWER_LINE_LAYER_ID,
+          beforeId: DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
           data,
           filled: false,
           stroked: true,

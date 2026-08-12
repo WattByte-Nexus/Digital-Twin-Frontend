@@ -186,14 +186,36 @@ describe("Digital Twin frontend composition", () => {
   it("composes operational layers through one shared deck surface", () => {
     assert.match(workspaceSource, /new GeoJsonLayer/);
     assert.match(workspaceSource, /deckLayers=\{deckLayers\}/);
+    assert.equal(
+      workspaceSource.match(
+        /beforeId:\s*DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID/g
+      )?.length,
+      3
+    );
     assert.doesNotMatch(workspaceSource, /new MapboxOverlay/);
     assert.doesNotMatch(workspaceSource, /addSource\(POWER_LINE_SOURCE_ID/);
+  });
+
+  it("wires every view toolbar action to the persistent map instance", () => {
+    assert.match(
+      workspaceSource,
+      /const changeViewMode = \(mode: "3d" \| "plan"\)[\s\S]*?mapRef\.current\?\.easeTo/
+    );
+    assert.match(
+      workspaceSource,
+      /onResetOrientation=\{\(\) => \{[\s\S]*?bearing: 0/
+    );
+    assert.match(
+      workspaceSource,
+      /referenceOverlayVisibility=\{displaySettings\}/
+    );
   });
 
   it("starts point clouds at an interactive LOD with screen-sized points", () => {
     assert.match(lidarSource, /maximumScreenSpaceError:\s*16/);
     assert.match(lidarSource, /maximumMemoryUsage:\s*512/);
     assert.match(lidarSource, /sizeUnits:\s*"pixels"/);
+    assert.match(workspaceSource, /missing RGB is shown in cyan/);
   });
 
   it("does not ship the obsolete frontend-bundled Golden point cloud", () => {
