@@ -882,12 +882,12 @@ export function DigitalTwinMapWorkspace({
 
       {showLiveMapChrome ? (
         <>
-          <div className="absolute right-4 top-[4.5rem] z-10">
+          <div className="absolute right-4 top-14 z-10 flex size-10 items-center justify-center">
             <Button
               type="button"
               variant="secondary"
               size="icon"
-              className="border bg-background/95 text-foreground shadow-lg backdrop-blur"
+              className="border border-border bg-background/95 text-foreground shadow-lg backdrop-blur"
               disabled={!canZoomToSelectedRegion}
               aria-label="Zoom to selected region"
               title="Zoom to selected region"
@@ -927,7 +927,7 @@ export function DigitalTwinMapWorkspace({
                   type="button"
                   variant="secondary"
                   size="icon"
-                  className="border bg-background/95 text-foreground shadow-lg backdrop-blur"
+                  className="border border-border bg-background/95 text-foreground shadow-lg backdrop-blur"
                   aria-label="Open weather settings"
                   title="Weather settings"
                 >
