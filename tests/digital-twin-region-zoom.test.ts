@@ -14,9 +14,13 @@ test("the selected region can be fitted from both map and command-palette contro
     workspaceSource,
     /const FLOATING_MAP_ACTION_BUTTON_CLASS_NAME =\s*"size-10 border border-border/,
   );
-  assert.equal(
-    workspaceSource.match(/className=\{FLOATING_MAP_ACTION_BUTTON_CLASS_NAME\}/g)?.length,
-    2,
+  assert.match(
+    workspaceSource,
+    /className=\{`\$\{FLOATING_MAP_ACTION_BUTTON_CLASS_NAME\} border-foreground`\}[\s\S]*?aria-label="Zoom to selected region"/,
+  );
+  assert.match(
+    workspaceSource,
+    /className=\{FLOATING_MAP_ACTION_BUTTON_CLASS_NAME\}[\s\S]*?aria-label="Open weather settings"/,
   );
   assert.match(workspaceSource, /const zoomToSelectedRegion = \(\) => \{/);
   assert.match(

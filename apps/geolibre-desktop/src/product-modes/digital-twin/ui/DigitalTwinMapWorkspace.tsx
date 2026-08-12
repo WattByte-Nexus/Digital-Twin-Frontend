@@ -889,7 +889,7 @@ export function DigitalTwinMapWorkspace({
               type="button"
               variant="secondary"
               size="icon"
-              className={FLOATING_MAP_ACTION_BUTTON_CLASS_NAME}
+              className={`${FLOATING_MAP_ACTION_BUTTON_CLASS_NAME} border-foreground`}
               disabled={!canZoomToSelectedRegion}
               aria-label="Zoom to selected region"
               title="Zoom to selected region"
