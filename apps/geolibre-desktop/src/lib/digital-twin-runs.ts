@@ -38,6 +38,7 @@ export interface DigitalTwinRunRecord {
   deltaTHours: number | null;
   completedTicks: number;
   expectedTicks: number | null;
+  burnedAreaHectares: number | null;
   resultAvailable: boolean;
   failureCode: string | null;
 }
@@ -207,6 +208,15 @@ function parseRun(
       ? Math.round(trigger.durationHours / trigger.deltaTHours)
       : null;
   const failure = isRecord(value.failure) ? value.failure : {};
+  const metrics = isRecord(value.metrics) ? value.metrics : {};
+  const reportedBurnedAreaHectares = finiteNumber(metrics.burned_area_hectares);
+  const burnedAreaHectares =
+    reportedBurnedAreaHectares !== null && reportedBurnedAreaHectares >= 0
+      ? reportedBurnedAreaHectares
+      : null;
+  if (status === "COMPLETED" && burnedAreaHectares === null) {
+    throw new Error(`Run ${id} has invalid burned-area metrics.`);
+  }
   return {
     id,
     simulationId,
@@ -220,6 +230,7 @@ function parseRun(
     deltaTHours: trigger.deltaTHours,
     completedTicks,
     expectedTicks,
+    burnedAreaHectares,
     resultAvailable: nonEmptyString(value.final_result_ref) !== null,
     failureCode: nonEmptyString(failure.code),
   };

@@ -81,6 +81,14 @@ function RunMetadataTable({ run }: { run: DigitalTwinRunRecord }) {
           <TableCell className="text-right tabular-nums">{run.tick_refs.filter(({ tick }) => tick > 0).length}</TableCell>
         </TableRow>
         <TableRow>
+          <TableCell className="w-2/5 text-muted-foreground">Area consumed</TableCell>
+          <TableCell className="text-right tabular-nums">
+            {run.metrics
+              ? `${run.metrics.burned_area_hectares.toLocaleString(undefined, { maximumFractionDigits: 2 })} ha`
+              : "Not available"}
+          </TableCell>
+        </TableRow>
+        <TableRow>
           <TableCell className="w-2/5 text-muted-foreground">Final result</TableCell>
           <TableCell className="text-right">{run.final_result_ref ? "Available" : "Not available"}</TableCell>
         </TableRow>

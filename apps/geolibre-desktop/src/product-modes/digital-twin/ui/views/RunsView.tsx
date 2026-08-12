@@ -88,6 +88,7 @@ type RunSortKey =
   | "trigger"
   | "horizon"
   | "ignitions"
+  | "area"
   | "snapshots";
 type SortDirection = "asc" | "desc";
 
@@ -105,6 +106,12 @@ function RunStatusBadge({ status }: Pick<DigitalTwinRunRecord, "status">) {
 
 function formatHours(value: number | null): string {
   return value === null ? "Not reported" : `${value.toLocaleString()} h`;
+}
+
+function formatArea(value: number | null): string {
+  return value === null
+    ? "Not available"
+    : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ha`;
 }
 
 export function RunsView({
@@ -146,6 +153,8 @@ export function RunsView({
           return run.durationHours ?? Number.POSITIVE_INFINITY;
         case "ignitions":
           return run.ignitionPoints.length;
+        case "area":
+          return run.burnedAreaHectares ?? Number.POSITIVE_INFINITY;
         case "snapshots":
           return run.completedTicks;
       }
@@ -452,6 +461,11 @@ export function RunsView({
                       </SortableTableHeader>
                     </TableHead>
                     <TableHead>
+                      <SortableTableHeader active={sortKey === "area"} direction={sortDirection} onClick={() => sort("area")}>
+                        Area consumed
+                      </SortableTableHeader>
+                    </TableHead>
+                    <TableHead>
                       <SortableTableHeader active={sortKey === "snapshots"} direction={sortDirection} onClick={() => sort("snapshots")}>
                         Snapshots
                       </SortableTableHeader>
@@ -481,6 +495,9 @@ export function RunsView({
                         {formatHours(run.durationHours)}
                       </TableCell>
                       <TableCell className="tabular-nums">{run.ignitionPoints.length}</TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {formatArea(run.burnedAreaHectares)}
+                      </TableCell>
                       <TableCell className="tabular-nums">
                         {run.completedTicks}{run.expectedTicks === null ? "" : ` / ${run.expectedTicks}`}
                       </TableCell>

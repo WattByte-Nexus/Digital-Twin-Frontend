@@ -69,6 +69,7 @@ test("fetchDigitalTwinRunCatalog loads every region and run page from the API", 
             grid_geometry: {},
             tick_refs: [],
             final_result_ref: null,
+            metrics: null,
             failure: null,
           },
         ],
@@ -96,6 +97,12 @@ test("fetchDigitalTwinRunCatalog loads every region and run page from the API", 
               { tick: 2, world_state_ref: "state://tick/2" },
             ],
             final_result_ref: "state://result/2",
+            metrics: {
+              final_burning_cells: 12,
+              final_burned_cells: 44,
+              burned_area_hectares: 5.04,
+              peak_spread_rate_hectares_per_hour: 2.7,
+            },
             failure: null,
           },
         ],
@@ -132,6 +139,7 @@ test("fetchDigitalTwinRunCatalog loads every region and run page from the API", 
     deltaTHours: 1,
     completedTicks: 0,
     expectedTicks: 4,
+    burnedAreaHectares: null,
     resultAvailable: false,
     failureCode: null,
   });
@@ -139,6 +147,7 @@ test("fetchDigitalTwinRunCatalog loads every region and run page from the API", 
   assert.equal(catalog.runs[1].triggerKind, "manual");
   assert.equal(catalog.runs[1].durationHours, 2);
   assert.equal(catalog.runs[1].completedTicks, 2);
+  assert.equal(catalog.runs[1].burnedAreaHectares, 5.04);
 });
 
 test("filterDigitalTwinRuns filters authoritative API fields", () => {
@@ -156,6 +165,7 @@ test("filterDigitalTwinRuns filters authoritative API fields", () => {
       deltaTHours: 1,
       completedTicks: 1,
       expectedTicks: 4,
+      burnedAreaHectares: null,
       resultAvailable: false,
       failureCode: null,
     },
@@ -172,6 +182,7 @@ test("filterDigitalTwinRuns filters authoritative API fields", () => {
       deltaTHours: 0.5,
       completedTicks: 4,
       expectedTicks: 4,
+      burnedAreaHectares: 5.04,
       resultAvailable: true,
       failureCode: null,
     },

@@ -59,4 +59,5 @@ test("run detail positions graphs beside or below the expandable map and provide
   assert.match(runTabsSource, /text-sm font-medium text-foreground">Tick \{tick\} completed/);
   assert.match(runTabsSource, /fill-\[hsl\(var\(--dt-status-ok-text\)\)\]/);
   assert.match(runTabsSource, /fill-destructive text-destructive-foreground/);
+  assert.match(runTabsSource, /run\.metrics\.burned_area_hectares/);
 });

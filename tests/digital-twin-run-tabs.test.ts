@@ -26,6 +26,12 @@ const run: DigitalTwinRunRecord = {
     { tick: 2, world_state_ref: "state://tick-2" },
   ],
   final_result_ref: "state://final",
+  metrics: {
+    final_burning_cells: 12,
+    final_burned_cells: 44,
+    burned_area_hectares: 5.04,
+    peak_spread_rate_hectares_per_hour: 2.7,
+  },
   failure: null,
 };
 

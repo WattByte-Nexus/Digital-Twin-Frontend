@@ -41,6 +41,12 @@ export interface DigitalTwinRunRecord {
   grid_geometry: Record<string, unknown>;
   tick_refs: Array<{ tick: number; world_state_ref: string }>;
   final_result_ref: string | null;
+  metrics: {
+    final_burning_cells: number;
+    final_burned_cells: number;
+    burned_area_hectares: number;
+    peak_spread_rate_hectares_per_hour: number;
+  } | null;
   failure: { error_type?: string; message?: string; detail?: string } | null;
 }
 
