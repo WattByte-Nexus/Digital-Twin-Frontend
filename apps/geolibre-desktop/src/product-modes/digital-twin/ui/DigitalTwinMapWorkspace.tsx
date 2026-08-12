@@ -1097,7 +1097,7 @@ export function DigitalTwinMapWorkspace({
 
       {showLiveMapChrome ? (
         <>
-          <div className="absolute left-4 top-16 z-10 flex flex-col gap-2">
+          <div className="absolute left-4 top-4 z-10 flex flex-col gap-2">
             <Button
               type="button"
               variant="secondary"

@@ -40,7 +40,7 @@ test("the selected region can be fitted from both map and command-palette contro
 test("the map exposes matching zoom controls in its top-left corner", () => {
   assert.match(
     workspaceSource,
-    /className="absolute left-4 top-16 z-10 flex flex-col gap-2"/,
+    /className="absolute left-4 top-4 z-10 flex flex-col gap-2"/,
   );
   assert.match(
     workspaceSource,
