@@ -58,6 +58,18 @@ if (!process.env.VITE_GOOGLE_MAPS_API_KEY) {
   }
 }
 
+// Mapbox Satellite uses a public client token. Accept either the Vite-prefixed
+// name used by the browser bundle or a bare local/CI variable.
+if (!process.env.VITE_MAPBOX_ACCESS_TOKEN) {
+  const mapboxAccessToken =
+    process.env.MAPBOX_ACCESS_TOKEN ||
+    FILE_ENV.VITE_MAPBOX_ACCESS_TOKEN ||
+    FILE_ENV.MAPBOX_ACCESS_TOKEN;
+  if (mapboxAccessToken) {
+    process.env.VITE_MAPBOX_ACCESS_TOKEN = mapboxAccessToken;
+  }
+}
+
 // Cesium Ion token for the 3D-globe view: same bare→prefixed bridge as the
 // Google Maps key. A bare `CESIUM_TOKEN` (shell or .env file) is surfaced as
 // `VITE_CESIUM_TOKEN` so `import.meta.env` exposes it, and getCesiumIonToken()

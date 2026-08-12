@@ -415,6 +415,14 @@ VITE_MAPILLARY_ACCESS_TOKEN=your_mapillary_access_token
 
 For Google Street View, enable the Maps Embed API for the key in Google Cloud. For Mapillary, create an app in the Mapillary developer dashboard and use its client access token.
 
+The **Digital Twin satellite map** uses a single Mapbox Satellite imagery pyramid so every zoom level shares the same provider and color treatment. Add a public Mapbox access token at build time or in Settings → Environment Variables:
+
+```env
+VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_public_access_token
+```
+
+The bare `MAPBOX_ACCESS_TOKEN` name also works for local and CI builds. The map shows a credential prompt instead of mixing in imagery from another provider when no token is available.
+
 The optional **Cesium 3D-globe view** — a split-pane globe rendered with [CesiumJS](https://cesium.com/platform/cesiumjs/) alongside the 2D MapLibre map — needs a [Cesium Ion](https://ion.cesium.com/) access token for its world imagery and terrain. Create a free Ion account, copy your default access token, and set it at build time:
 
 ```env

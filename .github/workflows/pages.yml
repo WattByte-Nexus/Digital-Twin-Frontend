@@ -66,6 +66,8 @@ jobs:
           # bare name below so vite.config.ts can expose local/CI test setups.
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          # Public Mapbox token used by the Digital Twin satellite map.
+          VITE_MAPBOX_ACCESS_TOKEN: ${{ secrets.VITE_MAPBOX_ACCESS_TOKEN }}
           # Mapillary access token, baked into the client bundle so the
           # Mapillary/Street View plugins work without each visitor pasting a
           # token. It ends up publicly readable in the served JS, so it is not a

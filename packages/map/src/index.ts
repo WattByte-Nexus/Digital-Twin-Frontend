@@ -24,8 +24,6 @@ export {
 } from "./satellite-reference-overlay";
 export {
   buildSatelliteTerrainStyle,
-  SATELLITE_FALLBACK_LAYER_ID,
-  SATELLITE_FALLBACK_SOURCE_ID,
   SATELLITE_LAYER_ID,
   SATELLITE_SOURCE_ID,
   setElevationEnabled,

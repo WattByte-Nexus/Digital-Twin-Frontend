@@ -3,8 +3,6 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   buildSatelliteTerrainStyle,
-  SATELLITE_FALLBACK_LAYER_ID,
-  SATELLITE_FALLBACK_SOURCE_ID,
   SATELLITE_LAYER_ID,
   SATELLITE_SOURCE_ID,
   setElevationEnabled,
@@ -23,6 +21,10 @@ import { syncTerrainCameraTarget } from "../packages/map/src/terrain-camera-targ
 
 const satelliteTerrainMapSource = readFileSync(
   new URL("../packages/map/src/SatelliteTerrainMap.tsx", import.meta.url),
+  "utf8"
+);
+const mapboxAttributionLogoSource = readFileSync(
+  new URL("../packages/map/src/MapboxAttributionLogo.tsx", import.meta.url),
   "utf8"
 );
 const satelliteTerrainConfigSource = readFileSync(
@@ -78,15 +80,13 @@ test("terrain camera follows a loaded 3D dataset elevation", () => {
   assert.equal(centerElevation, 0);
 });
 
-test("Digital Twin ships a sprite-free operational reference stack in the initial style", () => {
+test("Digital Twin ships a Mapbox Streets operational reference stack in the initial style", () => {
   assert.match(
     satelliteTerrainConfigSource,
-    /url:\s*"https:\/\/tiles\.openfreemap\.org\/planet"/
+    /streetsTileJsonUrl:\s*string/
   );
-  assert.match(
-    satelliteTerrainConfigSource,
-    /glyphs:\s*"https:\/\/tiles\.openfreemap\.org\/fonts\/\{fontstack\}\/\{range\}\.pbf"/
-  );
+  assert.match(satelliteTerrainConfigSource, /url:\s*streetsTileJsonUrl/);
+  assert.doesNotMatch(satelliteTerrainConfigSource, /tiles\.openfreemap\.org/);
   assert.match(
     satelliteTerrainConfigSource,
     /DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID/
@@ -100,6 +100,39 @@ test("Digital Twin ships a sprite-free operational reference stack in the initia
     /category:\s*"placeLabels"[\s\S]*?type:\s*"symbol"/
   );
   assert.doesNotMatch(satelliteTerrainConfigSource, /\bsprite\s*:/);
+});
+
+test("Digital Twin reference layers use the Mapbox Streets v8 source schema", () => {
+  for (const sourceLayer of [
+    "admin",
+    "building",
+    "landuse",
+    "natural_label",
+    "place_label",
+    "poi_label",
+    "road",
+    "water",
+    "waterway",
+  ]) {
+    assert.match(
+      satelliteTerrainConfigSource,
+      new RegExp(`"source-layer": "${sourceLayer}"`)
+    );
+  }
+  for (const obsoleteSourceLayer of [
+    "boundary",
+    "park",
+    "place",
+    "poi",
+    "transportation",
+    "transportation_name",
+    "water_name",
+  ]) {
+    assert.doesNotMatch(
+      satelliteTerrainConfigSource,
+      new RegExp(`"source-layer": "${obsoleteSourceLayer}"`)
+    );
+  }
 });
 
 test("every reference toolbar switch owns at least one concrete map layer", () => {
@@ -137,11 +170,6 @@ test("road hierarchy retains the previous Liberty colors and class separation", 
 
 test("satellite terrain style orders imagery, terrain, and reference details", () => {
   const style = buildSatelliteTerrainStyle({
-    satelliteFallbackSource: {
-      tiles: ["https://fallback.example/{z}/{x}/{y}.jpg"],
-      tileSize: 256,
-      maxzoom: 16,
-    },
     satelliteSource: {
       tiles: ["https://imagery.example/{z}/{x}/{y}.jpg"],
       tileSize: 256,
@@ -180,17 +208,10 @@ test("satellite terrain style orders imagery, terrain, and reference details", (
   });
 
   assert.deepEqual(Object.keys(style.sources), [
-    SATELLITE_FALLBACK_SOURCE_ID,
     SATELLITE_SOURCE_ID,
     TERRAIN_SOURCE_ID,
     SATELLITE_REFERENCE_SOURCE_ID,
   ]);
-  assert.deepEqual(style.sources[SATELLITE_FALLBACK_SOURCE_ID], {
-    type: "raster",
-    tiles: ["https://fallback.example/{z}/{x}/{y}.jpg"],
-    tileSize: 256,
-    maxzoom: 16,
-  });
   assert.deepEqual(style.sources[SATELLITE_SOURCE_ID], {
     type: "raster",
     tiles: ["https://imagery.example/{z}/{x}/{y}.jpg"],
@@ -214,11 +235,6 @@ test("satellite terrain style orders imagery, terrain, and reference details", (
       id: TERRAIN_BACKGROUND_LAYER_ID,
       type: "background",
       paint: { "background-color": "#dfe3dc" },
-    },
-    {
-      id: SATELLITE_FALLBACK_LAYER_ID,
-      type: "raster",
-      source: SATELLITE_FALLBACK_SOURCE_ID,
     },
     {
       id: SATELLITE_LAYER_ID,
@@ -279,10 +295,6 @@ test("satellite terrain style renders an atmospheric sky above the horizon", () 
 
 test("satellite terrain style uses a dark map treatment in dark mode", () => {
   const style = buildSatelliteTerrainStyle({
-    satelliteFallbackSource: {
-      tiles: ["https://fallback.example/{z}/{x}/{y}.jpg"],
-      tileSize: 256,
-    },
     satelliteSource: {
       tiles: ["https://imagery.example/{z}/{x}/{y}.jpg"],
       tileSize: 256,
@@ -304,11 +316,6 @@ test("satellite terrain style uses a dark map treatment in dark mode", () => {
     style.layers.find((layer) => layer.id === TERRAIN_BACKGROUND_LAYER_ID)
       ?.paint,
     { "background-color": "#07111f" }
-  );
-  assert.deepEqual(
-    style.layers.find((layer) => layer.id === SATELLITE_FALLBACK_LAYER_ID)
-      ?.paint,
-    rasterPaint
   );
   assert.deepEqual(
     style.layers.find((layer) => layer.id === SATELLITE_LAYER_ID)?.paint,
@@ -421,19 +428,10 @@ test("satellite reference categories toggle independently", () => {
   ]);
 });
 
-test("fallback imagery remains beneath the primary while detailed tiles load", () => {
+test("satellite terrain style renders exactly one photographic source and layer", () => {
   const style = buildSatelliteTerrainStyle({
-    satelliteFallbackSource: {
-      tiles: ["https://fallback.example/{z}/{x}/{y}.jpg"],
-      tileSize: 256,
-      minzoom: 0,
-      maxzoom: 16,
-    },
     satelliteSource: {
-      tiles: ["https://imagery.example/{z}/{x}/{y}.jpg"],
-      tileSize: 256,
-      minzoom: 8,
-      maxzoom: 18,
+      url: "https://imagery.example/tiles.json",
     },
     terrainSource: {
       tiles: ["https://terrain.example/{z}/{x}/{y}.png"],
@@ -442,21 +440,36 @@ test("fallback imagery remains beneath the primary while detailed tiles load", (
   });
 
   assert.deepEqual(
+    Object.values(style.sources).filter((source) => source.type === "raster"),
+    [{ type: "raster", url: "https://imagery.example/tiles.json" }]
+  );
+  assert.deepEqual(
     style.layers.filter((layer) => layer.type === "raster"),
     [
-      {
-        id: SATELLITE_FALLBACK_LAYER_ID,
-        type: "raster",
-        source: SATELLITE_FALLBACK_SOURCE_ID,
-      },
       {
         id: SATELLITE_LAYER_ID,
         type: "raster",
         source: SATELLITE_SOURCE_ID,
-        minzoom: 8,
       },
     ]
   );
+});
+
+test("Digital Twin uses Mapbox Satellite without USGS or DRAPP imagery", () => {
+  assert.match(
+    satelliteTerrainConfigSource,
+    /createDigitalTwinSatelliteTerrainConfig/
+  );
+  assert.doesNotMatch(satelliteTerrainConfigSource, /USGSImageryOnly/);
+  assert.doesNotMatch(satelliteTerrainConfigSource, /DRCOG_Mosaics/);
+  assert.doesNotMatch(satelliteTerrainMapSource, /satelliteFallbackSource/);
+});
+
+test("satellite terrain map shows Mapbox attribution and logo", () => {
+  assert.match(satelliteTerrainMapSource, /attributionControl:\s*\{/);
+  assert.match(satelliteTerrainMapSource, /<MapboxAttributionLogo \/>/);
+  assert.match(mapboxAttributionLogoSource, /data-mapbox-logo/);
+  assert.match(mapboxAttributionLogoSource, /https:\/\/www\.mapbox\.com\//);
 });
 
 test("satellite imagery toggles independently from elevation", () => {
@@ -465,7 +478,6 @@ test("satellite imagery toggles independently from elevation", () => {
   const map = {
     getLayer: (id: string) =>
       id === SATELLITE_LAYER_ID ||
-      id === SATELLITE_FALLBACK_LAYER_ID ||
       id === TERRAIN_GROUND_LAYER_ID
         ? { id }
         : undefined,
@@ -503,7 +515,6 @@ test("satellite imagery toggles independently from elevation", () => {
   );
 
   assert.deepEqual(layoutCalls, [
-    [SATELLITE_FALLBACK_LAYER_ID, "visibility", "none"],
     [SATELLITE_LAYER_ID, "visibility", "none"],
     [TERRAIN_GROUND_LAYER_ID, "visibility", "visible"],
     [TERRAIN_GROUND_LAYER_ID, "visibility", "none"],

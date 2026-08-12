@@ -1,5 +1,4 @@
 import {
-  SATELLITE_FALLBACK_LAYER_ID,
   SATELLITE_LAYER_ID,
   TERRAIN_GROUND_LAYER_ID,
 } from "@geolibre/map/satellite-terrain-style";
@@ -31,10 +30,7 @@ interface RasterPresentation {
   saturation: number;
 }
 
-const SATELLITE_LAYER_IDS = [
-  SATELLITE_FALLBACK_LAYER_ID,
-  SATELLITE_LAYER_ID,
-] as const;
+const SATELLITE_LAYER_IDS = [SATELLITE_LAYER_ID] as const;
 
 function numericPaintValue(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;

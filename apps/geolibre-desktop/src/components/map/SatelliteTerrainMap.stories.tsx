@@ -1,11 +1,23 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { getMapboxSatelliteTileJsonUrl } from "@geolibre/core";
 import { SatelliteTerrainMap } from "@geolibre/map";
-import { DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG } from "../../product-modes/digital-twin/satellite-terrain-config";
+import { createDigitalTwinSatelliteTerrainConfig } from "../../product-modes/digital-twin/satellite-terrain-config";
+import { DigitalTwinMapCredentialsNotice } from "../../product-modes/digital-twin/ui/DigitalTwinMapCredentialsNotice";
+
+function DigitalTwinSatelliteTerrainStory() {
+  const satelliteTileJsonUrl = getMapboxSatelliteTileJsonUrl();
+  return satelliteTileJsonUrl ? (
+    <SatelliteTerrainMap
+      {...createDigitalTwinSatelliteTerrainConfig(satelliteTileJsonUrl)}
+    />
+  ) : (
+    <DigitalTwinMapCredentialsNotice />
+  );
+}
 
 const meta = {
   title: "Digital Twin/Main Map",
-  component: SatelliteTerrainMap,
-  args: DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG,
+  component: DigitalTwinSatelliteTerrainStory,
   parameters: {
     layout: "fullscreen",
     controls: { disable: true },
@@ -17,7 +29,7 @@ const meta = {
       </main>
     ),
   ],
-} satisfies Meta<typeof SatelliteTerrainMap>;
+} satisfies Meta<typeof DigitalTwinSatelliteTerrainStory>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

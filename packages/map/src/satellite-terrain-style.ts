@@ -15,8 +15,6 @@ import type { MapThemeMode } from "./theme-basemap";
 
 export const SATELLITE_SOURCE_ID = "digital-twin-satellite";
 export const SATELLITE_LAYER_ID = "digital-twin-satellite";
-export const SATELLITE_FALLBACK_SOURCE_ID = "digital-twin-satellite-fallback";
-export const SATELLITE_FALLBACK_LAYER_ID = "digital-twin-satellite-fallback";
 export const TERRAIN_SOURCE_ID = "digital-twin-terrain";
 export const TERRAIN_BACKGROUND_LAYER_ID = "digital-twin-terrain-background";
 export const TERRAIN_GROUND_LAYER_ID = "digital-twin-terrain-ground";
@@ -26,7 +24,6 @@ export type TerrainRasterSource = Omit<RasterDEMSourceSpecification, "type">;
 
 export interface SatelliteTerrainStyleOptions {
   satelliteSource: SatelliteRasterSource;
-  satelliteFallbackSource?: SatelliteRasterSource;
   referenceOverlay?: SatelliteReferenceOverlay;
   referenceOverlayVisibility?: SatelliteReferenceVisibility;
   terrainSource: TerrainRasterSource;
@@ -53,14 +50,12 @@ export function setSatelliteVisibility(
   map: SatelliteVisibilityMap,
   visible: boolean
 ): void {
-  for (const layerId of [SATELLITE_FALLBACK_LAYER_ID, SATELLITE_LAYER_ID]) {
-    if (map.getLayer(layerId)) {
-      map.setLayoutProperty(
-        layerId,
-        "visibility",
-        visible ? "visible" : "none"
-      );
-    }
+  if (map.getLayer(SATELLITE_LAYER_ID)) {
+    map.setLayoutProperty(
+      SATELLITE_LAYER_ID,
+      "visibility",
+      visible ? "visible" : "none"
+    );
   }
 }
 
@@ -88,12 +83,10 @@ export function setTerrainGroundVisibility(
 
 /**
  * Builds the deliberately small first-party Digital Twin map style: a primary
- * satellite raster, an optional lower-resolution fallback, and one raster DEM
- * terrain source.
+ * satellite raster and one raster DEM terrain source.
  */
 export function buildSatelliteTerrainStyle({
   satelliteSource,
-  satelliteFallbackSource,
   referenceOverlay,
   referenceOverlayVisibility = DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
   terrainSource,
@@ -106,14 +99,6 @@ export function buildSatelliteTerrainStyle({
   return {
     version: 8,
     sources: {
-      ...(satelliteFallbackSource
-        ? {
-            [SATELLITE_FALLBACK_SOURCE_ID]: {
-              ...satelliteFallbackSource,
-              type: "raster" as const,
-            },
-          }
-        : {}),
       [SATELLITE_SOURCE_ID]: {
         ...satelliteSource,
         type: "raster",
@@ -134,19 +119,6 @@ export function buildSatelliteTerrainStyle({
           "background-color": dark ? "#07111f" : "#dfe3dc",
         },
       },
-      ...(satelliteFallbackSource
-        ? [
-            {
-              id: SATELLITE_FALLBACK_LAYER_ID,
-              type: "raster" as const,
-              source: SATELLITE_FALLBACK_SOURCE_ID,
-              ...(dark ? { paint: DARK_RASTER_PAINT } : {}),
-              ...(satelliteVisible
-                ? {}
-                : { layout: { visibility: "none" as const } }),
-            },
-          ]
-        : []),
       {
         id: SATELLITE_LAYER_ID,
         type: "raster",
@@ -155,9 +127,6 @@ export function buildSatelliteTerrainStyle({
         ...(satelliteVisible
           ? {}
           : { layout: { visibility: "none" as const } }),
-        ...(satelliteFallbackSource && satelliteSource.minzoom !== undefined
-          ? { minzoom: satelliteSource.minzoom }
-          : {}),
       },
       {
         id: TERRAIN_GROUND_LAYER_ID,

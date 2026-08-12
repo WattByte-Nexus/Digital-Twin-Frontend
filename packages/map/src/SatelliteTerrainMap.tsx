@@ -20,6 +20,7 @@ import {
 } from "./satellite-reference-overlay";
 import type { MapThemeMode } from "./theme-basemap";
 import { syncTerrainCameraTarget } from "./terrain-camera-target";
+import { MapboxAttributionLogo } from "./MapboxAttributionLogo";
 
 export interface SatelliteTerrainInitialView {
   center: [longitude: number, latitude: number];
@@ -30,7 +31,6 @@ export interface SatelliteTerrainInitialView {
 
 export interface SatelliteTerrainMapProps {
   satelliteSource: SatelliteRasterSource;
-  satelliteFallbackSource?: SatelliteRasterSource;
   referenceOverlay?: SatelliteReferenceOverlay;
   referenceOverlayVisibility?: SatelliteReferenceVisibility;
   terrainSource: TerrainRasterSource;
@@ -57,7 +57,6 @@ export interface SatelliteTerrainMapProps {
  */
 export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   satelliteSource,
-  satelliteFallbackSource,
   referenceOverlay,
   referenceOverlayVisibility = DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
   terrainSource,
@@ -96,7 +95,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   // the component with a new key rather than diffing the foundational style.
   const initialOptionsRef = useRef({
     satelliteSource,
-    satelliteFallbackSource,
     referenceOverlay,
     terrainSource,
     initialView,
@@ -118,7 +116,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       container,
       style: buildSatelliteTerrainStyle({
         satelliteSource: options.satelliteSource,
-        satelliteFallbackSource: options.satelliteFallbackSource,
         referenceOverlay: options.referenceOverlay,
         referenceOverlayVisibility: referenceOverlayVisibilityRef.current,
         terrainSource: options.terrainSource,
@@ -140,11 +137,11 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       // These basemaps are versioned/static. Do not wake the map back up to
       // revalidate expired tiles while the workspace is open.
       refreshExpiredTiles: false,
-      // The coarse fallback remains visible beneath the primary imagery, so
-      // obsolete requests can be canceled without exposing blank terrain.
+      // Cancel obsolete requests during continuous camera movement. Mapbox's
+      // own pyramid supplies every imagery tier, so no second raster is exposed.
       cancelPendingTileRequestsWhileZooming: true,
       maxTileCacheZoomLevels: 5,
-      attributionControl: false,
+      attributionControl: { compact: false },
     });
     mapRef.current = map;
     appliedThemeModeRef.current = initialThemeMode;
@@ -235,7 +232,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     map.setStyle(
       buildSatelliteTerrainStyle({
         satelliteSource: options.satelliteSource,
-        satelliteFallbackSource: options.satelliteFallbackSource,
         referenceOverlay: options.referenceOverlay,
         referenceOverlayVisibility: referenceOverlayVisibilityRef.current,
         terrainSource: options.terrainSource,
@@ -291,14 +287,16 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   }, [cameraTargetElevation]);
 
   return (
-    <div
-      ref={containerRef}
-      className={className}
-      style={{ height: "100%", width: "100%" }}
-      role="region"
-      aria-label={ariaLabel}
-      data-testid="satellite-terrain-map"
-      data-map-theme={themeMode}
-    />
+    <div className={className} style={{ height: "100%", position: "relative", width: "100%" }}>
+      <div
+        ref={containerRef}
+        style={{ height: "100%", width: "100%" }}
+        role="region"
+        aria-label={ariaLabel}
+        data-testid="satellite-terrain-map"
+        data-map-theme={themeMode}
+      />
+      <MapboxAttributionLogo />
+    </div>
   );
 });

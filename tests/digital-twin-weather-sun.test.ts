@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  SATELLITE_FALLBACK_LAYER_ID,
   SATELLITE_LAYER_ID,
   TERRAIN_GROUND_LAYER_ID,
 } from "../packages/map/src/satellite-terrain-style";
@@ -134,7 +133,6 @@ describe("createWeatherSunSimulationController", () => {
     const restoreDocument = installCanvasStub();
     let styleLoaded = false;
     const layers = new Set<string>([
-      SATELLITE_FALLBACK_LAYER_ID,
       SATELLITE_LAYER_ID,
       TERRAIN_GROUND_LAYER_ID,
     ]);
@@ -144,9 +142,6 @@ describe("createWeatherSunSimulationController", () => {
       [`${SATELLITE_LAYER_ID}:raster-brightness-max`, 1],
       [`${SATELLITE_LAYER_ID}:raster-brightness-min`, 0],
       [`${SATELLITE_LAYER_ID}:raster-saturation`, 0],
-      [`${SATELLITE_FALLBACK_LAYER_ID}:raster-brightness-max`, 1],
-      [`${SATELLITE_FALLBACK_LAYER_ID}:raster-brightness-min`, 0],
-      [`${SATELLITE_FALLBACK_LAYER_ID}:raster-saturation`, 0],
       [`${TERRAIN_GROUND_LAYER_ID}:hillshade-illumination-direction`, 335],
       [`${TERRAIN_GROUND_LAYER_ID}:hillshade-illumination-altitude`, 45],
     ]);

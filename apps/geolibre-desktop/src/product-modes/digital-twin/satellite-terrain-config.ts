@@ -2,31 +2,11 @@ import {
   SATELLITE_REFERENCE_LAYER_PREFIX,
   SATELLITE_REFERENCE_SOURCE_ID,
   type SatelliteReferenceOverlay,
+  type SatelliteTerrainInitialView,
   type SatelliteTerrainMapProps,
 } from "@geolibre/map";
 import { DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS } from "@geolibre/ui";
 import type { ExpressionSpecification } from "maplibre-gl";
-
-const USGS_IMAGERY_TILE_URL =
-  "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}";
-const USGS_IMAGERY_ATTRIBUTION =
-  '<a href="https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer" target="_blank" rel="noreferrer">USGS The National Map</a>';
-
-const DRAPP_2022_UPSTREAM_IMAGE_URL =
-  "https://drcog-data.sanborn.com/arcgis/rest/services/DRCOG_2022/DRCOG_Mosaics_2022/ImageServer/exportImage" +
-  "?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=jpgpng&f=image";
-
-// Sanborn currently returns conflicting CORS headers. GeoLibre's existing
-// development raster proxy keeps this demo usable; production should point at
-// our licensed, versioned tile CDN instead.
-const DRAPP_2022_IMAGE_URL = `/__geolibre_raster_proxy?url=${encodeURIComponent(
-  DRAPP_2022_UPSTREAM_IMAGE_URL
-)}`.replaceAll("%7Bbbox-epsg-3857%7D", "{bbox-epsg-3857}");
-const DRAPP_2022_ATTRIBUTION =
-  '<a href="https://drcog-data.sanborn.com/arcgis/rest/services/DRCOG_2022/DRCOG_Mosaics_2022/ImageServer" target="_blank" rel="noreferrer">DRCOG / Sanborn — DRAPP 2022</a>';
-const DRAPP_2022_BOUNDS: [number, number, number, number] = [
-  -105.939624, 39.104426, -103.668018, 40.321386,
-];
 
 export const DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID = `${SATELLITE_REFERENCE_LAYER_PREFIX}road-labels`;
 
@@ -565,36 +545,28 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
   ],
 } satisfies SatelliteReferenceOverlay;
 
-export const DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG = {
-  satelliteFallbackSource: {
-    tiles: [USGS_IMAGERY_TILE_URL],
-    tileSize: 256,
-    minzoom: 0,
-    // Keep a fast standard-tile pyramid visible while the detailed DRAPP
-    // ImageServer export tiles arrive. One zoom of overdraw stays crisp without
-    // competing with the primary source at its maximum detail.
-    maxzoom: 16,
-    attribution: USGS_IMAGERY_ATTRIBUTION,
-  },
-  satelliteSource: {
-    tiles: [DRAPP_2022_IMAGE_URL],
-    tileSize: 256,
-    minzoom: 8,
-    maxzoom: 21,
-    bounds: DRAPP_2022_BOUNDS,
-    attribution: DRAPP_2022_ATTRIBUTION,
-  },
-  referenceOverlay: DIGITAL_TWIN_REFERENCE_OVERLAY,
-  referenceOverlayVisibility: DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS,
-  terrainSource: {
-    url: "https://tiles.mapterhorn.com/tilejson.json",
-  },
-  initialView: {
-    center: [-105.2211, 39.7555],
-    zoom: 17.2,
-    pitch: 60,
-    bearing: -18,
-  },
-  terrainExaggeration: 1,
-  ariaLabel: "Colorado Front Range satellite terrain map",
-} satisfies SatelliteTerrainMapProps;
+export const DIGITAL_TWIN_INITIAL_VIEW = {
+  center: [-105.2211, 39.7555],
+  zoom: 17.2,
+  pitch: 60,
+  bearing: -18,
+} satisfies SatelliteTerrainInitialView;
+
+/** Builds the map foundation around one provider-managed imagery pyramid. */
+export function createDigitalTwinSatelliteTerrainConfig(
+  satelliteTileJsonUrl: string
+): SatelliteTerrainMapProps {
+  return {
+    satelliteSource: {
+      url: satelliteTileJsonUrl,
+    },
+    referenceOverlay: DIGITAL_TWIN_REFERENCE_OVERLAY,
+    referenceOverlayVisibility: DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS,
+    terrainSource: {
+      url: "https://tiles.mapterhorn.com/tilejson.json",
+    },
+    initialView: DIGITAL_TWIN_INITIAL_VIEW,
+    terrainExaggeration: 1,
+    ariaLabel: "Colorado Front Range satellite terrain map",
+  };
+}

@@ -19,7 +19,8 @@ name: Cloudflare preview
 #   CLOUDFLARE_ACCOUNT_ID
 # Optional (baked into the client bundle, same as pages.yml):
 #   VITE_GEE_OAUTH_CLIENT_ID, VITE_PROTOMAPS_API_KEY,
-#   VITE_GOOGLE_MAPS_API_KEY or GOOGLE_MAPS_API_KEY
+#   VITE_GOOGLE_MAPS_API_KEY or GOOGLE_MAPS_API_KEY,
+#   VITE_MAPBOX_ACCESS_TOKEN
 
 on:
   pull_request:
@@ -81,6 +82,7 @@ jobs:
           VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          VITE_MAPBOX_ACCESS_TOKEN: ${{ secrets.VITE_MAPBOX_ACCESS_TOKEN }}
           VITE_MAPILLARY_ACCESS_TOKEN: ${{ secrets.VITE_MAPILLARY_ACCESS_TOKEN || vars.VITE_MAPILLARY_ACCESS_TOKEN }}
           VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
 

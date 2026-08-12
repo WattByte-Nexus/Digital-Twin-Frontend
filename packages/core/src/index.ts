@@ -88,6 +88,8 @@ export {
 export {
   getCesiumIonToken,
   getGoogleMapsApiKey,
+  getMapboxAccessToken,
+  getMapboxSatelliteTileJsonUrl,
   getProtomapsApiKey,
   getProtomapsStyleUrl,
   getRuntimeEnvironment,

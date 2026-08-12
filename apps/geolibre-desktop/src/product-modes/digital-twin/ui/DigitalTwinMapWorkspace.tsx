@@ -1,4 +1,5 @@
 import type { Layer } from "@deck.gl/core";
+import { getMapboxSatelliteTileJsonUrl } from "@geolibre/core";
 import { SatelliteTerrainMap } from "@geolibre/map";
 import {
   Button,
@@ -84,8 +85,9 @@ import {
   resolveDigitalTwinPowerPoleModelUrl,
 } from "../digital-twin-power-line-rendering";
 import {
+  createDigitalTwinSatelliteTerrainConfig,
+  DIGITAL_TWIN_INITIAL_VIEW,
   DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
-  DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG,
 } from "../satellite-terrain-config";
 import {
   createWeatherSunSimulationController,
@@ -97,6 +99,7 @@ import {
 } from "../weather-time-of-day-presentation";
 import { mountainWeatherDateTime } from "../weather-settings-time";
 import { type ScenarioRunRequest } from "./simulation-flow";
+import { DigitalTwinMapCredentialsNotice } from "./DigitalTwinMapCredentialsNotice";
 import { PersistentDigitalTwinMapHost } from "./PersistentDigitalTwinMapHost";
 import { AssetsView } from "./assets/AssetsView";
 import { SectionErrorBoundary } from "../../../components/common/error-boundaries";
@@ -405,6 +408,9 @@ export function DigitalTwinMapWorkspace({
   onSelectRegion,
   onToggleTheme,
 }: DigitalTwinMapWorkspaceProps) {
+  const [mapboxSatelliteTileJsonUrl, setMapboxSatelliteTileJsonUrl] = useState(
+    () => getMapboxSatelliteTileJsonUrl()
+  );
   const mapRef = useRef<MapLibreMap | null>(null);
   const mapParkingHostRef = useRef<HTMLDivElement | null>(null);
   const [mapContentEl] = useState(() => {
@@ -470,6 +476,13 @@ export function DigitalTwinMapWorkspace({
     useState<DigitalTwinDestination>("live");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scenarioBuilderOpen, setScenarioBuilderOpen] = useState(false);
+  const satelliteTerrainConfig = useMemo(
+    () =>
+      mapboxSatelliteTileJsonUrl
+        ? createDigitalTwinSatelliteTerrainConfig(mapboxSatelliteTileJsonUrl)
+        : undefined,
+    [mapboxSatelliteTileJsonUrl]
+  );
   const activeRegionId = controlledRegionId ?? localRegionId;
   const activeDestination = controlledDestination ?? localDestination;
   const activeRegion = regions.find((region) => region.id === activeRegionId);
@@ -489,6 +502,14 @@ export function DigitalTwinMapWorkspace({
   });
   const [lightingOverlay, setLightingOverlay] =
     useState<TimeOfDayLightingOverlay>(() => timeOfDayLightingOverlay(90));
+
+  useEffect(() => {
+    const refresh = () =>
+      setMapboxSatelliteTileJsonUrl(getMapboxSatelliteTileJsonUrl());
+    window.addEventListener("geolibre:runtime-env-change", refresh);
+    return () =>
+      window.removeEventListener("geolibre:runtime-env-change", refresh);
+  }, []);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -959,7 +980,7 @@ export function DigitalTwinMapWorkspace({
     mapRef.current?.easeTo({
       pitch:
         mode === "3d"
-          ? DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG.initialView.pitch
+          ? DIGITAL_TWIN_INITIAL_VIEW.pitch
           : 0,
       duration: 400,
     });
@@ -1041,16 +1062,21 @@ export function DigitalTwinMapWorkspace({
       className="relative h-full min-h-0 w-full overflow-hidden bg-background"
       ref={setMapPanelContainer}
     >
-      <SatelliteTerrainMap
-        {...DIGITAL_TWIN_SATELLITE_TERRAIN_CONFIG}
-        cameraTargetElevation={activePointCloudCameraTargetElevation}
-        deckLayers={deckLayers}
-        satelliteVisible={displaySettings.satellite}
-        elevationEnabled={displaySettings.elevation}
-        themeMode={activeThemeMode}
-        referenceOverlayVisibility={displaySettings}
-        onMapReady={handleMapReady}
-      />
+      {satelliteTerrainConfig ? (
+        <SatelliteTerrainMap
+          key={mapboxSatelliteTileJsonUrl}
+          {...satelliteTerrainConfig}
+          cameraTargetElevation={activePointCloudCameraTargetElevation}
+          deckLayers={deckLayers}
+          satelliteVisible={displaySettings.satellite}
+          elevationEnabled={displaySettings.elevation}
+          themeMode={activeThemeMode}
+          referenceOverlayVisibility={displaySettings}
+          onMapReady={handleMapReady}
+        />
+      ) : (
+        <DigitalTwinMapCredentialsNotice />
+      )}
 
       <div
         aria-hidden="true"
@@ -1062,7 +1088,7 @@ export function DigitalTwinMapWorkspace({
         }}
       />
 
-      {showLiveMapChrome ? (
+      {showLiveMapChrome && satelliteTerrainConfig ? (
         <>
           <div className="absolute left-4 top-4 z-10 flex flex-col gap-2">
             <Button

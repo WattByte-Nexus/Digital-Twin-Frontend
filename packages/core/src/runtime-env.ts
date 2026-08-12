@@ -91,6 +91,47 @@ export function getGoogleMapsApiKey(env?: Record<string, string | undefined>): s
 }
 
 /**
+ * Resolves the public Mapbox access token used by the Digital Twin imagery.
+ *
+ * Browser builds normally expose `VITE_MAPBOX_ACCESS_TOKEN`. A bare
+ * `MAPBOX_ACCESS_TOKEN` is also accepted for desktop build tooling and for the
+ * app's runtime Environment Variables settings, which are not filtered by
+ * Vite's env-prefix rules.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The trimmed public token, or undefined when unset.
+ */
+export function getMapboxAccessToken(
+  env?: Record<string, string | undefined>,
+): string | undefined {
+  const runtimeEnv = env ?? getRuntimeEnvironment();
+  const trimmed =
+    runtimeEnv.VITE_MAPBOX_ACCESS_TOKEN?.trim() ||
+    runtimeEnv.MAPBOX_ACCESS_TOKEN?.trim();
+  return trimmed || undefined;
+}
+
+const MAPBOX_SATELLITE_TILEJSON_URL =
+  "https://api.mapbox.com/v4/mapbox.satellite.json";
+
+/**
+ * Builds the authenticated TileJSON URL for Mapbox's single composite
+ * satellite pyramid.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The TileJSON URL, or undefined when no Mapbox token is configured.
+ */
+export function getMapboxSatelliteTileJsonUrl(
+  env?: Record<string, string | undefined>,
+): string | undefined {
+  const token = getMapboxAccessToken(env);
+  if (!token) return undefined;
+  return `${MAPBOX_SATELLITE_TILEJSON_URL}?access_token=${encodeURIComponent(token)}`;
+}
+
+/**
  * Resolves the Cesium Ion access token from the runtime environment.
  *
  * The 3D-globe view's world imagery and terrain need a Cesium Ion token. It is
