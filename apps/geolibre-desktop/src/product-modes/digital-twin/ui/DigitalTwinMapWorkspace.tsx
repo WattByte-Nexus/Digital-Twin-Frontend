@@ -134,6 +134,8 @@ type LiveWeatherLoadState =
 const POWER_LINE_CASING_LAYER_ID =
   "digital-twin-operational-power-lines-casing";
 const POWER_LINE_LAYER_ID = "digital-twin-operational-power-lines-line";
+const FLOATING_MAP_ACTION_BUTTON_CLASS_NAME =
+  "size-10 border border-border bg-background/95 text-foreground shadow-lg backdrop-blur";
 
 function pointCloudDatasetKey(
   dataset: Extract<DigitalTwinPointCloudResult, { status: "ready" }>["dataset"]
@@ -882,12 +884,12 @@ export function DigitalTwinMapWorkspace({
 
       {showLiveMapChrome ? (
         <>
-          <div className="absolute right-4 top-14 z-10 flex size-10 items-center justify-center">
+          <div className="absolute right-4 top-16 z-10">
             <Button
               type="button"
               variant="secondary"
               size="icon"
-              className="border border-border bg-background/95 text-foreground shadow-lg backdrop-blur"
+              className={FLOATING_MAP_ACTION_BUTTON_CLASS_NAME}
               disabled={!canZoomToSelectedRegion}
               aria-label="Zoom to selected region"
               title="Zoom to selected region"
@@ -927,7 +929,7 @@ export function DigitalTwinMapWorkspace({
                   type="button"
                   variant="secondary"
                   size="icon"
-                  className="border border-border bg-background/95 text-foreground shadow-lg backdrop-blur"
+                  className={FLOATING_MAP_ACTION_BUTTON_CLASS_NAME}
                   aria-label="Open weather settings"
                   title="Weather settings"
                 >

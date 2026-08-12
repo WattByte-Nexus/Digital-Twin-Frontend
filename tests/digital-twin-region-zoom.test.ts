@@ -10,6 +10,14 @@ const workspaceSource = readFileSync(
   "utf8",
 );
 test("the selected region can be fitted from both map and command-palette controls", () => {
+  assert.match(
+    workspaceSource,
+    /const FLOATING_MAP_ACTION_BUTTON_CLASS_NAME =\s*"size-10 border border-border/,
+  );
+  assert.equal(
+    workspaceSource.match(/className=\{FLOATING_MAP_ACTION_BUTTON_CLASS_NAME\}/g)?.length,
+    2,
+  );
   assert.match(workspaceSource, /const zoomToSelectedRegion = \(\) => \{/);
   assert.match(
     workspaceSource,
