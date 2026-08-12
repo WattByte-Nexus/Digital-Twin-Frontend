@@ -24,6 +24,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
 
   return (
     <Sonner
+      richColors
       theme={theme}
       className="toaster group"
       icons={{
