@@ -86,20 +86,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function coordinate(value: unknown, label: string): [number, number] {
+function coordinate(value: unknown, label: string): [number, number, number] {
   if (
     !Array.isArray(value) ||
-    value.length !== 2 ||
+    value.length !== 3 ||
     typeof value[0] !== "number" ||
     !Number.isFinite(value[0]) ||
     Math.abs(value[0]) > 180 ||
     typeof value[1] !== "number" ||
     !Number.isFinite(value[1]) ||
-    Math.abs(value[1]) > 90
+    Math.abs(value[1]) > 90 ||
+    typeof value[2] !== "number" ||
+    !Number.isFinite(value[2])
   ) {
-    throw new Error(`${label} must be a WGS84 coordinate.`);
+    throw new Error(`${label} must be a 3D WGS84 conductor coordinate.`);
   }
-  return [value[0], value[1]];
+  return [value[0], value[1], value[2]];
 }
 
 function requiredString(value: unknown, label: string): string {

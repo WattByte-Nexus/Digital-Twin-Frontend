@@ -21,8 +21,8 @@ describe("Digital Twin operational power lines", () => {
               geometry: {
                 type: "LineString",
                 coordinates: [
-                  [-105.22, 39.75],
-                  [-105.21, 39.76],
+                  [-105.22, 39.75, 1821.4],
+                  [-105.21, 39.76, 1798.2],
                 ],
                 bounds: { west: -105.22, south: 39.75, east: -105.21, north: 39.76 },
               },
@@ -46,8 +46,8 @@ describe("Digital Twin operational power lines", () => {
           geometry: {
             type: "LineString",
             coordinates: [
-              [-105.22, 39.75],
-              [-105.21, 39.76],
+              [-105.22, 39.75, 1821.4],
+              [-105.21, 39.76, 1798.2],
             ],
           },
         },
@@ -64,13 +64,34 @@ describe("Digital Twin operational power lines", () => {
               power_line_id: "bad-line",
               geometry: {
                 type: "LineString",
-                coordinates: [[-105.22, 39.75]],
+                coordinates: [[-105.22, 39.75, 1821.4]],
                 bounds: { west: -105.22, south: 39.75, east: -105.21, north: 39.76 },
               },
             },
           ])) as typeof fetch,
       }),
       /exactly two coordinates/i,
+    );
+  });
+
+  it("rejects legacy 2D coordinates without conductor elevation", async () => {
+    await assert.rejects(
+      fetchDigitalTwinPowerLines("http://127.0.0.1:8000", "golden-co", {
+        fetchImpl: (async () =>
+          Response.json([
+            {
+              power_line_id: "legacy-line",
+              geometry: {
+                type: "LineString",
+                coordinates: [
+                  [-105.22, 39.75],
+                  [-105.21, 39.76],
+                ],
+              },
+            },
+          ])) as typeof fetch,
+      }),
+      /3D WGS84 conductor coordinate/i,
     );
   });
 
@@ -88,7 +109,7 @@ describe("Digital Twin operational power lines", () => {
             region_id: "region/1",
             geometry: {
               type: "LineString",
-              coordinates: [[-105.1, 40], [-105, 40.1]],
+              coordinates: [[-105.1, 40, 1821.4], [-105, 40.1, 1798.2]],
               bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
             },
             conductor: {
@@ -147,7 +168,7 @@ describe("Digital Twin operational power lines", () => {
       region_id: "region-1",
       geometry: {
         type: "LineString",
-        coordinates: [[-105.1, 40], [-105, 40.1]],
+        coordinates: [[-105.1, 40, 1821.4], [-105, 40.1, 1798.2]],
         bounds: { west: -105.1, south: 40, east: -105, north: 40.1 },
       },
       conductor: {
