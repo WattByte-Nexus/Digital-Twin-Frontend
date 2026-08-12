@@ -895,7 +895,11 @@ export function DigitalTwinMapWorkspace({
               title="Zoom to selected region"
               onClick={zoomToSelectedRegion}
             >
-              <Maximize aria-hidden="true" className="size-4 text-foreground" />
+              <Maximize
+                aria-hidden="true"
+                className="size-4 text-foreground"
+                strokeWidth={2.5}
+              />
             </Button>
           </div>
           <div className="absolute bottom-6 right-4 z-10">

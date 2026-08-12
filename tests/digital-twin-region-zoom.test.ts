@@ -29,7 +29,7 @@ test("the selected region can be fitted from both map and command-palette contro
   );
   assert.match(
     workspaceSource,
-    /<Maximize aria-hidden="true" className="size-4 text-foreground"/,
+    /<Maximize[\s\S]*?className="size-4 text-foreground"[\s\S]*?strokeWidth=\{2\.5\}/,
   );
   assert.match(
     workspaceSource,
