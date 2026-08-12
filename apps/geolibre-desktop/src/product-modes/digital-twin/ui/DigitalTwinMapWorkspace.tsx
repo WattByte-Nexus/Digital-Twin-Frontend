@@ -870,18 +870,18 @@ export function DigitalTwinMapWorkspace({
 
       {showLiveMapChrome ? (
         <>
-          <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2">
+          <div className="absolute right-4 top-[4.5rem] z-10">
             <Button
               type="button"
               variant="secondary"
-              size="sm"
-              className="gap-2 border bg-background/95 px-3 shadow-lg backdrop-blur"
+              size="icon"
+              className="border bg-background/95 text-foreground shadow-lg backdrop-blur"
               disabled={!canZoomToSelectedRegion}
+              aria-label="Zoom to selected region"
               title="Zoom to selected region"
               onClick={zoomToSelectedRegion}
             >
               <Maximize aria-hidden="true" className="size-4" />
-              Zoom to region
             </Button>
           </div>
           <div className="absolute bottom-6 right-4 z-10">

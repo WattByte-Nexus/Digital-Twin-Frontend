@@ -13,7 +13,7 @@ test("the selected region can be fitted from both map and command-palette contro
   assert.match(workspaceSource, /const zoomToSelectedRegion = \(\) => \{/);
   assert.match(
     workspaceSource,
-    /<Button[\s\S]*?onClick=\{zoomToSelectedRegion\}[\s\S]*?Zoom to region/,
+    /<Button[\s\S]*?size="icon"[\s\S]*?aria-label="Zoom to selected region"[\s\S]*?onClick=\{zoomToSelectedRegion\}/,
   );
   assert.match(
     workspaceSource,
