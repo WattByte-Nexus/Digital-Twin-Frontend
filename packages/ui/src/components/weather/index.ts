@@ -21,6 +21,7 @@ export {
   DEFAULT_WEATHER_SETTINGS,
   type TimeFormat,
   type WeatherEventKey,
+  type WeatherLiveReading,
   type WeatherMode,
   type WeatherSettingsInitialValue,
   type WeatherSettingsPanelProps,

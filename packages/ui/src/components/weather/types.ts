@@ -24,11 +24,20 @@ export interface WeatherSettingsValue {
   events: Record<WeatherEventKey, number>;
 }
 
+export interface WeatherLiveReading {
+  id: string;
+  label: string;
+  unit?: string;
+  value: number;
+}
+
 export type WeatherSettingsInitialValue = Omit<Partial<WeatherSettingsValue>, "events"> & {
   events?: Partial<WeatherSettingsValue["events"]>;
 };
 
 export interface WeatherSettingsPanelProps {
+  autoWeatherReadings?: readonly WeatherLiveReading[];
+  autoWeatherStatus?: string;
   className?: string;
   initialValue?: WeatherSettingsInitialValue;
   location?: string;

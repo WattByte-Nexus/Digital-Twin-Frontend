@@ -22,6 +22,7 @@ export class VisibleRgbPointCloudLayer extends PointCloudLayer {
       },
     };
   }
+
 }
 
 export const GAUSSIAN_SURFEL_VERTEX_INJECTION = `
@@ -108,6 +109,7 @@ interface PointCloudTilesetDiagnosticsSource {
 interface DigitalTwinPointCloudLayerCallbacks {
   onError: (error: Error) => void;
   onReady?: () => void;
+  onCameraTargetElevation?: (elevationMeters: number) => void;
   onDiagnostics?: (snapshot: DigitalTwinPointCloudDiagnostics) => void;
   renderMode?: DigitalTwinPointCloudRenderMode;
   beforeId?: string;
@@ -129,12 +131,14 @@ export function createDigitalTwinPointCloudLayer(
   {
     onError,
     onReady,
+    onCameraTargetElevation,
     onDiagnostics,
     renderMode = "opaque",
     beforeId,
   }: DigitalTwinPointCloudLayerCallbacks
 ): Tile3DLayer {
   let firstTileLoaded = false;
+  let cameraTargetElevationReported = false;
   let tileset: PointCloudTilesetDiagnosticsSource | null = null;
 
   const reportError = (error: Error) => {
@@ -176,7 +180,17 @@ export function createDigitalTwinPointCloudLayer(
       tileset = loadedTileset;
       reportDiagnostics();
     },
-    onTileLoad: () => {
+    onTileLoad: (tile) => {
+      const cameraTargetElevation = tile.parent
+        ? undefined
+        : tile.content?.cartographicOrigin?.[2];
+      if (
+        !cameraTargetElevationReported &&
+        Number.isFinite(cameraTargetElevation)
+      ) {
+        cameraTargetElevationReported = true;
+        onCameraTargetElevation?.(cameraTargetElevation);
+      }
       if (!firstTileLoaded) {
         firstTileLoaded = true;
         onReady?.();

@@ -19,6 +19,7 @@ import {
   type SatelliteReferenceVisibility,
 } from "./satellite-reference-overlay";
 import type { MapThemeMode } from "./theme-basemap";
+import { syncTerrainCameraTarget } from "./terrain-camera-target";
 
 export interface SatelliteTerrainInitialView {
   center: [longitude: number, latitude: number];
@@ -37,6 +38,8 @@ export interface SatelliteTerrainMapProps {
   terrainExaggeration?: number;
   satelliteVisible?: boolean;
   elevationEnabled?: boolean;
+  /** Elevation of the active 3D dataset's camera target, in meters. */
+  cameraTargetElevation?: number;
   /** App theme used for imagery treatment and the reference overlay style. */
   themeMode?: MapThemeMode;
   className?: string;
@@ -62,6 +65,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   terrainExaggeration = 1,
   satelliteVisible = true,
   elevationEnabled = true,
+  cameraTargetElevation,
   themeMode = "light",
   className,
   ariaLabel = "Satellite terrain map",
@@ -76,12 +80,14 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   const referenceOverlayVisibilityRef = useRef(referenceOverlayVisibility);
   const satelliteVisibleRef = useRef(satelliteVisible);
   const elevationEnabledRef = useRef(elevationEnabled);
+  const cameraTargetElevationRef = useRef(cameraTargetElevation);
   const themeModeRef = useRef(themeMode);
   const appliedThemeModeRef = useRef<MapThemeMode | null>(null);
   const onMapReadyRef = useRef(onMapReady);
   referenceOverlayVisibilityRef.current = referenceOverlayVisibility;
   satelliteVisibleRef.current = satelliteVisible;
   elevationEnabledRef.current = elevationEnabled;
+  cameraTargetElevationRef.current = cameraTargetElevation;
   themeModeRef.current = themeMode;
   onMapReadyRef.current = onMapReady;
   deckLayersRef.current = deckLayers;
@@ -171,6 +177,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
         satelliteVisibleRef.current,
         elevationEnabledRef.current
       );
+      syncTerrainCameraTarget(map, cameraTargetElevationRef.current);
     };
     map.once("load", handleLoad);
 
@@ -222,6 +229,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
         satelliteVisibleRef.current,
         elevationEnabledRef.current
       );
+      syncTerrainCameraTarget(map, cameraTargetElevationRef.current);
     };
     map.once("style.load", handleStyleLoad);
     map.setStyle(
@@ -275,6 +283,12 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       elevationEnabled
     );
   }, [elevationEnabled, terrainExaggeration]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    syncTerrainCameraTarget(map, cameraTargetElevation);
+  }, [cameraTargetElevation]);
 
   return (
     <div

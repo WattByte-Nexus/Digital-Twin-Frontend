@@ -1,12 +1,12 @@
 # Weather-to-Asset Impact Implementation Plan
 
-| Field | Value |
-| --- | --- |
-| Status | Proposed execution plan |
-| Implements | [Weather-to-Asset Impact Product Requirements](weather-asset-impact-prd.md) |
-| UI contract | [Digital Twin Pilot UI Specification](digital-twin-ui-spec.md) |
-| Initial slice | Boulder high-wind forecast to overhead-line alert investigation |
-| Last reviewed | 2026-08-11 |
+| Field         | Value                                                                       |
+| ------------- | --------------------------------------------------------------------------- |
+| Status        | Proposed execution plan                                                     |
+| Implements    | [Weather-to-Asset Impact Product Requirements](weather-asset-impact-prd.md) |
+| UI contract   | [Digital Twin Pilot UI Specification](digital-twin-ui-spec.md)              |
+| Initial slice | Boulder high-wind forecast to overhead-line alert investigation             |
+| Last reviewed | 2026-08-11                                                                  |
 
 ## 1. Outcome
 
@@ -27,27 +27,27 @@ their replacements become authoritative.
 
 ### 2.1 Foundations to keep
 
-| Existing capability | Current role | Direction |
-| --- | --- | --- |
-| `DigitalTwinMapWorkspace` | Routed shell from `App.tsx`; owns top-level destinations and the map-first experience | Make canonical and compose Operations/Evidence into it. |
-| `PersistentDigitalTwinMapHost` | Preserves the map across product destinations | Keep as the single world host. |
-| `DigitalTwinHeader` and access boundary | Focused product navigation, region and role context | Connect to real monitoring and workflow state. |
-| Power-line inventory client | Loads `/api/v1/regions/:regionId/power-lines` | Replace or subsume with the asset-catalog client. |
-| Runs catalog and run detail | API-backed run list, artifacts, exposure, playback, and lineage foundations | Link to alerts/assets and use shared investigation state. |
-| Scenario builder | Map-driven ignition selection and bounded inputs | Route and persist it; carry alert context; remove static scenario data. |
-| Plan/3D map, overlays, and selection | Strong spatial foundation | Make asset identity and forecast time authoritative and shared. |
+| Existing capability                     | Current role                                                                          | Direction                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `DigitalTwinMapWorkspace`               | Routed shell from `App.tsx`; owns top-level destinations and the map-first experience | Make canonical and compose Operations/Evidence into it.                 |
+| `PersistentDigitalTwinMapHost`          | Preserves the map across product destinations                                         | Keep as the single world host.                                          |
+| `DigitalTwinHeader` and access boundary | Focused product navigation, region and role context                                   | Connect to real monitoring and workflow state.                          |
+| Power-line inventory client             | Loads `/api/v1/regions/:regionId/power-lines`                                         | Replace or subsume with the asset-catalog client.                       |
+| Runs catalog and run detail             | API-backed run list, artifacts, exposure, playback, and lineage foundations           | Link to alerts/assets and use shared investigation state.               |
+| Scenario builder                        | Map-driven ignition selection and bounded inputs                                      | Route and persist it; carry alert context; remove static scenario data. |
+| Plan/3D map, overlays, and selection    | Strong spatial foundation                                                             | Make asset identity and forecast time authoritative and shared.         |
 
 ### 2.2 Gaps to close
 
-| Gap | Current evidence | Required change |
-| --- | --- | --- |
-| Parallel workspace implementations | The routed `DigitalTwinMapWorkspace` and separate `DigitalTwinWorkspace`/`LiveView` both model the product | Extract useful Operations/Evidence components into the routed shell, then delete the duplicate path. |
-| Mock operations truth | Routed shell includes static workspace assets, alerts, runs, alert count, and status copy; `LiveView` owns local alert state | Replace with explicit loading, empty, current, stale, partial, failed, and unauthorized states backed by APIs. |
-| No operational asset catalog | Existing power-line response carries ID and two-point geometry; run exposure separately loads region GeoJSON | Add stable searchable assets, hierarchy, relationships, provenance, revisions, quality, and model-relevant attributes. |
-| No alert/evidence API | The frontend has run APIs but no durable impact alert contract | Add Engine endpoints and typed clients for alerts, evidence, workflow, and forecast timeline. |
-| Fragmented selection and routing | Map, runs, scenarios, and prototypes own local state; run URLs do not restore all time/view/selection state | Introduce one investigation state and a route codec. |
-| Static scenarios | `ScenariosView` uses an in-file scenario collection | Add scenario persistence and remove the constant when the API path lands. |
-| Client-side exposure inference in run detail | Run detail spatially intersects result and asset GeoJSON | Use Engine-owned affected-asset/evidence results for operational claims; retain client intersection only as a clearly labeled visual aid if still useful. |
+| Gap                                          | Current evidence                                                                                                             | Required change                                                                                                                                           |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parallel workspace implementations           | The routed `DigitalTwinMapWorkspace` and separate `DigitalTwinWorkspace`/`LiveView` both model the product                   | Extract useful Operations/Evidence components into the routed shell, then delete the duplicate path.                                                      |
+| Mock operations truth                        | Routed shell includes static workspace assets, alerts, runs, alert count, and status copy; `LiveView` owns local alert state | Replace with explicit loading, empty, current, stale, partial, failed, and unauthorized states backed by APIs.                                            |
+| No operational asset catalog                 | Existing power-line response carries ID and two-point geometry; run exposure separately loads region GeoJSON                 | Add stable searchable assets, hierarchy, relationships, provenance, revisions, quality, and model-relevant attributes.                                    |
+| No alert/evidence API                        | The frontend has run APIs but no durable impact alert contract                                                               | Add Engine endpoints and typed clients for alerts, evidence, workflow, and forecast timeline.                                                             |
+| Fragmented selection and routing             | Map, runs, scenarios, and prototypes own local state; run URLs do not restore all time/view/selection state                  | Introduce one investigation state and a route codec.                                                                                                      |
+| Static scenarios                             | `ScenariosView` uses an in-file scenario collection                                                                          | Add scenario persistence and remove the constant when the API path lands.                                                                                 |
+| Client-side exposure inference in run detail | Run detail spatially intersects result and asset GeoJSON                                                                     | Use Engine-owned affected-asset/evidence results for operational claims; retain client intersection only as a clearly labeled visual aid if still useful. |
 
 The assessment is based on the current frontend files and tests. The codebase
 graph excludes documentation and most tests by design, so those areas must
@@ -182,52 +182,56 @@ and stable ordering. All timestamps are ISO 8601 with explicit zones.
 
 ### 5.1 Monitoring and forecast
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/api/v1/regions/:regionId/monitoring-status` | Required source health, last success, freshness policy, active revision, and degraded reasons. |
-| GET | `/api/v1/regions/:regionId/forecast-timeline` | Forecast issue, valid steps or intervals, horizon, gaps, provider and dataset revision. |
-| GET | `/api/v1/regions/:regionId/hazards?validAt=...` | Hazard footprints and normalized values for the selected forecast time. |
+| Method | Endpoint                                        | Purpose                                                                                        |
+| ------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/regions/:regionId/monitoring-status`   | Required source health, last success, freshness policy, active revision, and degraded reasons. |
+| GET    | `/api/v1/regions/:regionId/forecast-timeline`   | Forecast issue, valid steps or intervals, horizon, gaps, provider and dataset revision.        |
+| GET    | `/api/v1/regions/:regionId/hazards?validAt=...` | Hazard footprints and normalized values for the selected forecast time.                        |
 
 ### 5.2 Asset catalog
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/api/v1/regions/:regionId/assets` | Paginated metadata; filters for query, type, status, bounding box, revision, and updated-since. |
-| GET | `/api/v1/assets/:assetId` | Identity, hierarchy summary, provenance, quality, and impact attributes. |
-| POST | `/api/v1/assets:batchGet` | Resolve alert and run asset IDs without N+1 requests. |
-| GET | `/api/v1/assets/:assetId/relationships` | Parent, children, network neighbors, and related objects. |
-| GET | `/api/v1/regions/:regionId/assets.geojson` or tiles | Viewport geometry for map presentation. |
-| GET | `/api/v1/regions/:regionId/catalog-status` | Published revision, source revision, sync time, rejects, warnings, and completeness. |
+| Method | Endpoint                                            | Purpose                                                                                         |
+| ------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/regions/:regionId/assets`                  | Paginated metadata; filters for query, type, status, bounding box, revision, and updated-since. |
+| POST   | `/api/v1/regions/:regionId/assets`                  | Create a server-identified tree or power-line asset in a draft region.                          |
+| POST   | `/api/v1/regions/:regionId/assets:csv`              | Atomically import up to 1,000 tree or power-line rows from an 8 MiB CSV upload.                 |
+| GET    | `/api/v1/assets/:assetId`                           | Identity, hierarchy summary, provenance, quality, and impact attributes.                        |
+| PATCH  | `/api/v1/assets/:assetId`                           | Update validated editable fields while the owning region remains a draft.                       |
+| DELETE | `/api/v1/assets/:assetId`                           | Delete an asset while the owning region remains a draft.                                        |
+| POST   | `/api/v1/assets:batchGet`                           | Resolve alert and run asset IDs without N+1 requests.                                           |
+| GET    | `/api/v1/assets/:assetId/relationships`             | Parent, children, network neighbors, and related objects.                                       |
+| GET    | `/api/v1/regions/:regionId/assets.geojson` or tiles | Viewport geometry for map presentation.                                                         |
+| GET    | `/api/v1/regions/:regionId/catalog-status`          | Published revision, source revision, sync time, rejects, warnings, and completeness.            |
 
 The existing `/power-lines` endpoint is removed once catalog geometry and
 metadata cover its consumers.
 
 ### 5.3 Alerts, evidence, and workflow
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/api/v1/regions/:regionId/alerts` | Durable alert inbox with cursor, filters, counts, and stable order. |
-| GET | `/api/v1/alerts/:alertId` | Alert detail, revision, affected asset IDs, geometry reference, and workflow state. |
-| GET | `/api/v1/alerts/:alertId/evidence` | Versioned trigger, sources, evaluation, quality, caveats, and affected-asset evidence. |
-| GET | `/api/v1/alerts/:alertId/activity` | Audit history and workflow events. |
-| POST | `/api/v1/alerts/:alertId/acknowledgements` | Idempotent acknowledgement with actor and expected alert revision. |
-| PATCH | `/api/v1/alerts/:alertId/assignment` | Assign or unassign with revision precondition. |
-| POST | `/api/v1/alerts/:alertId/notes` | Add an immutable authored investigation note. |
-| POST | `/api/v1/alerts/:alertId/handoffs` | Create a versioned handoff from selected evidence. |
-| POST | `/api/v1/alerts/:alertId/resolution` | Record a disposition and resolve, subject to role and revision. |
+| Method | Endpoint                                   | Purpose                                                                                |
+| ------ | ------------------------------------------ | -------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/regions/:regionId/alerts`         | Durable alert inbox with cursor, filters, counts, and stable order.                    |
+| GET    | `/api/v1/alerts/:alertId`                  | Alert detail, revision, affected asset IDs, geometry reference, and workflow state.    |
+| GET    | `/api/v1/alerts/:alertId/evidence`         | Versioned trigger, sources, evaluation, quality, caveats, and affected-asset evidence. |
+| GET    | `/api/v1/alerts/:alertId/activity`         | Audit history and workflow events.                                                     |
+| POST   | `/api/v1/alerts/:alertId/acknowledgements` | Idempotent acknowledgement with actor and expected alert revision.                     |
+| PATCH  | `/api/v1/alerts/:alertId/assignment`       | Assign or unassign with revision precondition.                                         |
+| POST   | `/api/v1/alerts/:alertId/notes`            | Add an immutable authored investigation note.                                          |
+| POST   | `/api/v1/alerts/:alertId/handoffs`         | Create a versioned handoff from selected evidence.                                     |
+| POST   | `/api/v1/alerts/:alertId/resolution`       | Record a disposition and resolve, subject to role and revision.                        |
 
 ### 5.4 Scenarios and runs
 
 Keep the existing region, simulation-run, tick, result, and asset artifact
 endpoints where they satisfy the contract. Add or refine:
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET/POST | `/api/v1/regions/:regionId/scenarios` | Persist and list bounded scenario definitions. |
-| GET/PATCH | `/api/v1/scenarios/:scenarioId` | Load and update a draft subject to state and revision. |
-| POST | `/api/v1/scenarios/:scenarioId/runs` | Submit a run with source alert/evidence references. |
-| GET | `/api/v1/simulation-runs/:runId` | Include source alert, evidence, scenario, model, weather, asset revision, and progress lineage. |
-| GET | `/api/v1/simulation-runs/:runId/exposure` | Engine-owned affected assets and contribution evidence. |
+| Method    | Endpoint                                  | Purpose                                                                                         |
+| --------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| GET/POST  | `/api/v1/regions/:regionId/scenarios`     | Persist and list bounded scenario definitions.                                                  |
+| GET/PATCH | `/api/v1/scenarios/:scenarioId`           | Load and update a draft subject to state and revision.                                          |
+| POST      | `/api/v1/scenarios/:scenarioId/runs`      | Submit a run with source alert/evidence references.                                             |
+| GET       | `/api/v1/simulation-runs/:runId`          | Include source alert, evidence, scenario, model, weather, asset revision, and progress lineage. |
+| GET       | `/api/v1/simulation-runs/:runId/exposure` | Engine-owned affected assets and contribution evidence.                                         |
 
 ### 5.5 Error and revision conventions
 
@@ -512,17 +516,17 @@ Exit criteria:
 
 ## 8. Workstreams and ownership boundaries
 
-| Workstream | Primary responsibility | Critical deliverables |
-| --- | --- | --- |
-| Product/domain | Product owner with operations and engineering SMEs | Pilot policy decisions, terminology, priority semantics, caveat copy, acceptance. |
-| Weather/data | Data engineering | Provider adapter, revision and time semantics, quality and freshness status. |
-| Asset catalog | Data/platform engineering | Source mapping, stable IDs, hierarchy, published revisions, geometry and quality diagnostics. |
-| Impact/alerts | Digital Twin Engine | Exposure/vulnerability evaluation, alert and evidence creation, lifecycle and audit APIs. |
-| Frontend shell | Frontend | Canonical shell, investigation state, routes, panel composition, honest states. |
-| Frontend world | Map/3D | Catalog geometry, selection, overlays, forecast timeline, persistent context. |
-| Workflow | Engine and frontend | Acknowledge, assign, notes, disposition, handoff, conflicts and audit. |
-| Scenario/run | Simulation and frontend | Source linkage, persisted scenarios, progress, replay, Engine-owned exposure. |
-| Platform/security | Identity/platform | Organization and region enforcement, observability, performance, deployment readiness. |
+| Workstream        | Primary responsibility                             | Critical deliverables                                                                         |
+| ----------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Product/domain    | Product owner with operations and engineering SMEs | Pilot policy decisions, terminology, priority semantics, caveat copy, acceptance.             |
+| Weather/data      | Data engineering                                   | Provider adapter, revision and time semantics, quality and freshness status.                  |
+| Asset catalog     | Data/platform engineering                          | Source mapping, stable IDs, hierarchy, published revisions, geometry and quality diagnostics. |
+| Impact/alerts     | Digital Twin Engine                                | Exposure/vulnerability evaluation, alert and evidence creation, lifecycle and audit APIs.     |
+| Frontend shell    | Frontend                                           | Canonical shell, investigation state, routes, panel composition, honest states.               |
+| Frontend world    | Map/3D                                             | Catalog geometry, selection, overlays, forecast timeline, persistent context.                 |
+| Workflow          | Engine and frontend                                | Acknowledge, assign, notes, disposition, handoff, conflicts and audit.                        |
+| Scenario/run      | Simulation and frontend                            | Source linkage, persisted scenarios, progress, replay, Engine-owned exposure.                 |
+| Platform/security | Identity/platform                                  | Organization and region enforcement, observability, performance, deployment readiness.        |
 
 ## 9. Test strategy
 
@@ -644,4 +648,3 @@ The implementation is complete for the pilot only when:
 - monitored and synthetic truth are persistently distinguishable;
 - access, accessibility, resilience, performance, and security gates pass; and
 - the documentation and API fixtures match the released behavior.
-

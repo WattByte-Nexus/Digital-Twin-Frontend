@@ -19,6 +19,7 @@ import {
   SATELLITE_REFERENCE_SOURCE_ID,
   setSatelliteReferenceVisibility,
 } from "../packages/map/src/satellite-reference-overlay";
+import { syncTerrainCameraTarget } from "../packages/map/src/terrain-camera-target";
 
 const satelliteTerrainMapSource = readFileSync(
   new URL("../packages/map/src/SatelliteTerrainMap.tsx", import.meta.url),
@@ -52,6 +53,29 @@ test("satellite terrain map owns one portable interleaved deck surface", () => {
     satelliteTerrainMapSource,
     /powerPreference:\s*"high-performance"/
   );
+});
+
+test("terrain camera follows a loaded 3D dataset elevation", () => {
+  let centerElevation = 0;
+  let centerClampedToGround = true;
+  const map = {
+    getCenterElevation: () => centerElevation,
+    getCenterClampedToGround: () => centerClampedToGround,
+    setCenterElevation: (value: number) => {
+      centerElevation = value;
+    },
+    setCenterClampedToGround: (value: boolean) => {
+      centerClampedToGround = value;
+    },
+  };
+
+  syncTerrainCameraTarget(map, 1_925.696);
+  assert.equal(centerClampedToGround, false);
+  assert.equal(centerElevation, 1_925.696);
+
+  syncTerrainCameraTarget(map);
+  assert.equal(centerClampedToGround, true);
+  assert.equal(centerElevation, 0);
 });
 
 test("Digital Twin ships a sprite-free operational reference stack in the initial style", () => {

@@ -78,6 +78,20 @@ export const DIGITAL_TWIN_SUBHEADER_OPTIONS: Record<
       ],
     },
   ],
+  assets: [
+    {
+      id: "assets",
+      labelKey: "digitalTwin.subheader.live.assets",
+      items: [
+        { id: "all", labelKey: "digitalTwin.subheader.live.assetsItems.all" },
+        { id: "lines", labelKey: "digitalTwin.subheader.live.assetsItems.lines" },
+        {
+          id: "vegetation",
+          labelKey: "digitalTwin.subheader.live.assetsItems.vegetation",
+        },
+      ],
+    },
+  ],
   scenarios: [
     {
       id: "library",

@@ -59,6 +59,7 @@ export interface RunFilters {
 
 export interface ScenarioRunRequest {
   scenario: string;
+  regionId: string;
   location: string;
   durationHours: number;
   ignitionPoints: IgnitionPoint[];

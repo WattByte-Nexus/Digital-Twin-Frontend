@@ -1,6 +1,7 @@
 import {
   Activity,
   ChevronDown,
+  ChevronUp,
   CircleHelp,
   ExternalLink,
   LogOut,
@@ -11,7 +12,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { cn } from "../lib/utils";
 import { Avatar, AvatarFallback } from "./avatar";
 import { Button } from "./button";
@@ -124,6 +125,7 @@ export function DigitalTwinTopbar({
   onSignOut,
   onToggleTheme,
 }: DigitalTwinTopbarProps) {
+  const [isMapToolbarCollapsed, setIsMapToolbarCollapsed] = useState(false);
   const themeLabel =
     themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode";
   const ThemeIcon = themeMode === "dark" ? Sun : Moon;
@@ -271,10 +273,46 @@ export function DigitalTwinTopbar({
           aria-label="Map controls"
           className={cn(
             themeClassName,
-            "flex h-12 w-full min-w-0 shrink-0 items-center overflow-x-auto border-b border-separator bg-card px-4 text-card-foreground shadow-none"
+            "flex w-full min-w-0 shrink-0 items-center border-b border-separator bg-card text-card-foreground shadow-none",
+            isMapToolbarCollapsed
+              ? "h-8 justify-end px-3"
+              : "h-12 overflow-x-auto px-4"
           )}
         >
-          {mapToolbar}
+          {isMapToolbarCollapsed ? (
+            <Button
+              aria-label="Show map controls"
+              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setIsMapToolbarCollapsed(false)}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
+              Show map controls
+            </Button>
+          ) : (
+            <>
+              {mapToolbar}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label="Collapse map controls"
+                    className="ms-auto h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => setIsMapToolbarCollapsed(true)}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <ChevronUp aria-hidden="true" className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className={overlayClassName}>
+                  Collapse map controls
+                </TooltipContent>
+              </Tooltip>
+            </>
+          )}
         </nav>
       ) : null}
     </TooltipProvider>

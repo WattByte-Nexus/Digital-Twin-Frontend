@@ -19,6 +19,7 @@ test("Digital Twin destinations expose distinct contextual subheader options", (
       live: ["overview", "assets"],
       scenarios: ["library", "drafts", "templates"],
       runs: ["active", "history", "replay"],
+      assets: ["assets"],
     }
   );
 });

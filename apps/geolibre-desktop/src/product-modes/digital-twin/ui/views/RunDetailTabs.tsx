@@ -188,14 +188,22 @@ function InputsPanel({ data }: { data: Extract<RunTabData, { kind: "inputs" }> }
 
 function ActivityPanel({ data }: { data: Extract<RunTabData, { kind: "activity" }> }) {
   const ticks = data.run.tick_refs.filter(({ tick }) => tick > 0);
+  const hasFailed = data.run.status === "FAILED" || Boolean(data.run.failure);
+  const hasCompleted = data.run.status === "COMPLETED" && !hasFailed;
+  const StatusIcon = hasFailed ? AlertCircle : hasCompleted ? CheckCircle2 : CircleDot;
+  const statusColor = hasFailed
+    ? "text-[hsl(var(--dt-status-failed-text))]"
+    : hasCompleted
+      ? "text-[hsl(var(--dt-status-ok-text))]"
+      : "text-muted-foreground";
   return (
     <Card className="gap-4 py-5">
       <CardHeader className="px-5"><CardTitle className="text-base">Activity and logs</CardTitle><CardDescription>Durable lifecycle and tick lineage from the run API</CardDescription></CardHeader>
       <CardContent className="px-5">
         <div className="space-y-3">
           <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><CircleDot aria-hidden="true" className="mt-0.5 size-4 text-muted-foreground" /><div><p className="text-sm font-medium">Run accepted</p><p className="font-mono text-xs text-muted-foreground">{displayValue(data.run.trigger.correlation_id)}</p></div></div>
-          {ticks.map(({ tick, world_state_ref: reference }) => <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3" key={tick}><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 text-primary" /><div><p className="text-sm font-medium">Tick {tick} completed</p><p className="font-mono text-xs text-muted-foreground break-all">{reference}</p></div></div>)}
-          <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><CircleDot aria-hidden="true" className="mt-0.5 size-4 text-muted-foreground" /><div><p className="text-sm font-medium">Current status: {titleCase(data.run.status)}</p>{data.run.failure ? <p className="mt-1 text-xs text-destructive">{displayValue(data.run.failure.message ?? data.run.failure.detail ?? data.run.failure.error_type)}</p> : null}</div></div>
+          {ticks.map(({ tick, world_state_ref: reference }) => <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3" key={tick}><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 text-primary" /><div><p className="text-sm font-medium text-primary">Tick {tick} completed</p><p className="font-mono text-xs text-muted-foreground break-all">{reference}</p></div></div>)}
+          <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><StatusIcon aria-hidden="true" className={`mt-0.5 size-4 ${statusColor}`} /><div><p className={`text-sm font-medium ${statusColor}`}>Current status: {titleCase(data.run.status)}</p>{data.run.failure ? <p className="mt-1 text-xs text-destructive">{displayValue(data.run.failure.message ?? data.run.failure.detail ?? data.run.failure.error_type)}</p> : null}</div></div>
         </div>
       </CardContent>
     </Card>

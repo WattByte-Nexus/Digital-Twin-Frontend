@@ -36,6 +36,12 @@ body,
   direction: ltr;
 }
 
+/* MapLibre resets its canvas cursor to `grab` during map interactions. Keep
+   ignition placement visibly in point-selection mode until it is turned off. */
+.digital-twin-ignition-placement-cursor {
+  cursor: crosshair !important;
+}
+
 .geoagent-control .geoagent-control-toggle {
   align-items: center;
   display: flex;

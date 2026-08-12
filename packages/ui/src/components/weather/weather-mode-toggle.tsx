@@ -23,7 +23,7 @@ export function WeatherModeToggle({ value, onChange }: WeatherModeToggleProps) {
         className="h-9 w-full rounded-md text-[12px] font-semibold text-muted-foreground data-[state=on]:bg-accent data-[state=on]:text-accent-foreground"
       >
         <CloudSun className="text-amber-500" aria-hidden="true" />
-        Set auto
+        Set live
       </ToggleGroupItem>
       <ToggleGroupItem
         value="manual"

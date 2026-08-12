@@ -52,6 +52,15 @@ it("uses white structural surfaces with deliberate separators", () => {
   );
 });
 
+it("provides a recoverable collapse control for the map toolbar", () => {
+  assert.match(
+    topbarSource,
+    /const \[isMapToolbarCollapsed, setIsMapToolbarCollapsed\] = useState\(false\)/,
+  );
+  assert.match(topbarSource, /aria-label="Collapse map controls"/);
+  assert.match(topbarSource, /aria-label="Show map controls"/);
+});
+
 it("keeps the sidebar header height stable when the sidebar collapses", () => {
   assert.match(
     sidebarSource,

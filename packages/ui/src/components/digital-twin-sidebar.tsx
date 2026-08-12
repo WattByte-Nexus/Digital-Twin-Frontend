@@ -1,5 +1,6 @@
 import {
   Bell,
+  Boxes,
   ChevronDown,
   CirclePlay,
   FolderClosed,
@@ -41,7 +42,7 @@ interface DestinationDefinition {
   icon: LucideIcon;
 }
 
-export type DigitalTwinDestination = "live" | "scenarios" | "runs";
+export type DigitalTwinDestination = "live" | "assets" | "scenarios" | "runs";
 
 export interface DigitalTwinRegion {
   id: string;
@@ -69,6 +70,13 @@ const destinations: DestinationDefinition[] = [
     icon: CirclePlay,
   },
 ];
+
+const assetDestination: DestinationDefinition = {
+  id: "assets",
+  label: "Assets",
+  description: "Network catalog and properties",
+  icon: Boxes,
+};
 
 interface UtilityDefinition {
   id: "alerts" | "data" | "settings";
@@ -233,6 +241,25 @@ export function DigitalTwinSidebar({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+            </SidebarMenu>
+            <SidebarSeparator className="my-2" />
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  aria-label={`${assetDestination.label}: ${assetDestination.description}`}
+                  aria-current={activeDestination === assetDestination.id ? "page" : undefined}
+                  className="h-11 gap-3 px-3 text-sm group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-2"
+                  isActive={activeDestination === assetDestination.id}
+                  onClick={() => onNavigate?.(assetDestination.id)}
+                  tooltip={`${assetDestination.label} — ${assetDestination.description}`}
+                  type="button"
+                >
+                  <Boxes aria-hidden="true" className="h-5 w-5" />
+                  <span className="font-medium group-data-[collapsible=icon]:hidden">
+                    {assetDestination.label}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

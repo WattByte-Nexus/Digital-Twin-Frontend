@@ -113,6 +113,29 @@ describe("Digital Twin LiDAR fusion layer", () => {
     assert.equal(readyCount, 1);
   });
 
+  it("reports the root tileset elevation for the shared terrain camera", () => {
+    const elevations: number[] = [];
+    const layer = createDigitalTwinPointCloudLayer(DATASET, {
+      onError: () => {},
+      onCameraTargetElevation: (elevationMeters) => {
+        elevations.push(elevationMeters);
+      },
+    });
+
+    layer.props.onTileLoad({
+      content: { cartographicOrigin: [-105.201, 39.744, 1_925.696] },
+    } as never);
+    layer.props.onTileLoad({
+      parent: {},
+      content: { cartographicOrigin: [-105.2, 39.745, 2_100] },
+    } as never);
+    layer.props.onTileLoad({
+      content: { cartographicOrigin: [-105.201, 39.744, 1_925.696] },
+    } as never);
+
+    assert.deepEqual(elevations, [1_925.696]);
+  });
+
   it("exposes loaders.gl scene diagnostics at tile lifecycle boundaries", () => {
     const diagnostics: unknown[] = [];
     const counters = new Map([

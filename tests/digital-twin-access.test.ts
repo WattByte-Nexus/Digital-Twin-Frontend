@@ -112,6 +112,17 @@ describe("Digital Twin access resolution", () => {
     });
   });
 
+  it("preserves an authorized asset catalog deep link", () => {
+    const requested = "/regions/north-grid/assets/line-14";
+    assert.deepEqual(resolveAuthorizedLocation(access(), requested), {
+      kind: "allowed",
+      location: requested,
+      mode: "digital-twin",
+      view: "assets",
+      regionId: "north-grid",
+    });
+  });
+
   it("allows the Scenarios and Runs destination routes in an authorized region", () => {
     assert.equal(
       resolveAuthorizedLocation(access(), "/regions/north-grid/scenarios").kind,

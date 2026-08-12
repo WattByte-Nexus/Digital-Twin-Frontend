@@ -29,6 +29,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export function WeatherSettingsPanel({
+  autoWeatherReadings,
+  autoWeatherStatus,
   className,
   initialValue,
   location = "United Arab Emirates, Sharjah Emirate",
@@ -89,6 +91,29 @@ export function WeatherSettingsPanel({
             value={value.mode}
             onChange={(mode) => setValue((current) => ({ ...current, mode }))}
           />
+
+          {value.mode === "auto" && autoWeatherStatus ? (
+            <p className="text-xs text-muted-foreground" role="status">
+              {autoWeatherStatus}
+            </p>
+          ) : null}
+
+          {value.mode === "auto" && autoWeatherReadings?.length ? (
+            <section aria-label="Live weather readings" className="rounded-md border bg-muted/30 p-3">
+              <h3 className="text-xs font-semibold text-foreground">Live Engine readings</h3>
+              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
+                {autoWeatherReadings.map((reading) => (
+                  <div key={reading.id} className="min-w-0">
+                    <dt className="truncate text-[11px] text-muted-foreground">{reading.label}</dt>
+                    <dd className="text-sm font-medium tabular-nums text-foreground">
+                      {reading.value.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                      {reading.unit ? ` ${reading.unit}` : ""}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ) : null}
 
           <fieldset
             className="space-y-4 disabled:opacity-55 [@media(max-height:900px)]:space-y-2"
@@ -168,7 +193,7 @@ export function WeatherSettingsPanel({
                 <WeatherEventRow label="Thunder" value={value.events.thunder} unit="%" onChange={(next) => updateEvent("thunder", next)} />
                 <WeatherEventRow label="Dust" value={value.events.dust} unit="%" onChange={(next) => updateEvent("dust", next)} />
                 <WeatherEventRow label="Cloud Coverage" value={value.events.cloudCoverage} unit="%" onChange={(next) => updateEvent("cloudCoverage", next)} />
-                <WeatherEventRow label="Wind" value={value.events.wind} unit="%" step={0.1} onChange={(next) => updateEvent("wind", next)} />
+                <WeatherEventRow label="Wind" value={value.events.wind} unit="mph" step={0.1} onChange={(next) => updateEvent("wind", next)} />
                 <WeatherEventRow label="Wind Direction" value={value.events.windDirection} unit="°" maximum={360} onChange={(next) => updateEvent("windDirection", next)} />
                 <WeatherEventRow label="Snow" value={value.events.snow} unit="%" onChange={(next) => updateEvent("snow", next)} />
               </div>

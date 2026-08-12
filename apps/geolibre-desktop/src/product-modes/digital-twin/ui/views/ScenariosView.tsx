@@ -153,13 +153,17 @@ const WIND_DIRECTIONS: Record<string, number> = {
   NW: 315,
 };
 
-function requestForScenario(scenario: Scenario): ScenarioRunRequest {
+function requestForScenario(
+  scenario: Scenario,
+  regionId: string,
+): ScenarioRunRequest {
   const center = SCENARIO_CENTERS[scenario.location] ?? [-105.24, 40.01];
   const windSpeed = Number(scenario.conditions.match(/^(\d+)/)?.[1] ?? 0);
   const windDirectionLabel = scenario.conditions.match(/mph ([A-Z]+)/)?.[1] ?? "N";
   const durationHours = Number(scenario.conditions.match(/(\d+) hours?/)?.[1] ?? 4);
   return {
     scenario: scenario.name,
+    regionId,
     location: scenario.location,
     durationHours,
     ignitionPoints: Array.from({ length: scenario.ignitionSources }, (_, index) => ({
@@ -185,7 +189,7 @@ interface ScenariosViewProps {
   mapControllerRef: RefObject<ScenarioMapController | null>;
   mapSlot: ReactNode;
   onBuilderOpenChange: (open: boolean) => void;
-  onRun: (request: ScenarioRunRequest) => void;
+  onRun: (request: ScenarioRunRequest, idempotencyKey: string) => Promise<void>;
   regions: readonly DigitalTwinRegion[];
   theme: SurfaceTheme;
 }
@@ -235,7 +239,7 @@ export function ScenariosView({
     return (
       <ScenarioBuilder
         activeRegionId={activeRegionId}
-        initialRequest={selectedScenario ? requestForScenario(selectedScenario) : undefined}
+        initialRequest={selectedScenario ? requestForScenario(selectedScenario, activeRegionId) : undefined}
         mapControllerRef={mapControllerRef}
         mapSlot={mapSlot}
         onClose={() => setBuilderOpen(false)}

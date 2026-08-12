@@ -13,6 +13,13 @@ const workspaceSource = readFileSync(
   ),
   "utf8"
 );
+const assetsViewSource = readFileSync(
+  new URL(
+    "../apps/geolibre-desktop/src/product-modes/digital-twin/ui/assets/AssetsView.tsx",
+    import.meta.url
+  ),
+  "utf8"
+);
 const lidarSource = readFileSync(
   new URL(
     "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-lidar.ts",
@@ -108,7 +115,7 @@ describe("Digital Twin frontend composition", () => {
   it("keeps operational asset auto-fit from overriding the run camera", () => {
     assert.match(
       workspaceSource,
-      /if \(\s*!showLiveMapChrome \|\|\s*!mapInstance \|\|[\s\S]*?mapInstance\.fitBounds\([\s\S]*?\}, \[activeRegionId, mapInstance, powerLines, showLiveMapChrome\]\);/,
+      /if \(\s*!showLiveMapChrome \|\|\s*!mapInstance \|\|[\s\S]*?mapInstance\.fitBounds\([\s\S]*?\}, \[activeRegionId, mapInstance, powerLines, showLiveMapChrome\]\);/
     );
   });
 
@@ -194,6 +201,41 @@ describe("Digital Twin frontend composition", () => {
     );
     assert.doesNotMatch(workspaceSource, /new MapboxOverlay/);
     assert.doesNotMatch(workspaceSource, /addSource\(POWER_LINE_SOURCE_ID/);
+  });
+
+  it("opens an API-backed asset catalog from its own workspace destination", () => {
+    assert.match(workspaceSource, /activeDestination === "assets"/);
+    assert.match(workspaceSource, /<AssetsView/);
+    assert.match(workspaceSource, /powerLines\.lines\.map\(\(asset\) =>/);
+    assert.doesNotMatch(workspaceSource, /const WORKSPACE_ASSETS/);
+    assert.match(assetsViewSource, /fetchDigitalTwinAssets/);
+    assert.match(assetsViewSource, /importDigitalTwinAssetCsv/);
+    assert.match(assetsViewSource, /type,properties,coords/);
+    assert.match(assetsViewSource, /updateDigitalTwinAsset/);
+    assert.match(assetsViewSource, /deleteDigitalTwinAsset/);
+    assert.match(assetsViewSource, /Add assets/);
+    assert.match(assetsViewSource, /Edit properties/);
+    assert.match(assetsViewSource, /<FilterSearch/);
+    assert.match(assetsViewSource, /<Table>/);
+    assert.match(assetsViewSource, /sort\("region"\)/);
+    assert.match(assetsViewSource, /setRegionFilter/);
+    assert.match(
+      assetsViewSource,
+      /aria-label=\{mode === "add" \? "Add assets"/
+    );
+    assert.doesNotMatch(assetsViewSource, /<Dialog/);
+    assert.doesNotMatch(assetsViewSource, /Total assets/);
+  });
+
+  it("contains an asset-catalog render failure without replacing the workspace", () => {
+    assert.match(
+      workspaceSource,
+      /import \{ SectionErrorBoundary \} from "\.\.\/\.\.\/\.\.\/components\/common\/error-boundaries"/
+    );
+    assert.match(
+      workspaceSource,
+      /activeDestination === "assets" \? \(\s*<SectionErrorBoundary[\s\S]*?label="Asset catalog"[\s\S]*?resetKeys=\{\[activeRegionId, location\]\}[\s\S]*?<AssetsView/
+    );
   });
 
   it("wires every view toolbar action to the persistent map instance", () => {

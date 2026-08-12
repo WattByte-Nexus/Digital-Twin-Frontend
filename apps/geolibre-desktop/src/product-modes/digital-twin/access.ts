@@ -15,7 +15,7 @@ export const DIGITAL_TWIN_CAPABILITIES = [
 export type DigitalTwinRole = (typeof DIGITAL_TWIN_ROLES)[number];
 export type DigitalTwinCapability = (typeof DIGITAL_TWIN_CAPABILITIES)[number];
 export type DigitalTwinProductMode = "digital-twin" | "expert-gis" | "administration";
-export type DigitalTwinView = "live" | "scenarios" | "runs";
+export type DigitalTwinView = "live" | "assets" | "scenarios" | "runs";
 
 export interface AuthorizedRegion {
   id: string;
@@ -220,6 +220,9 @@ function parseRegionRoute(
   if (section === "live" && parts.length === 3) return { regionId, view: "live" };
   if (section === "alerts" && parts.length === 4 && parts[3]) {
     return { regionId, view: "live" };
+  }
+  if (section === "assets" && (parts.length === 3 || (parts.length === 4 && parts[3]))) {
+    return { regionId, view: "assets" };
   }
   if (section === "scenarios" && (parts.length === 3 || (parts.length === 4 && parts[3]))) {
     return { regionId, view: "scenarios" };

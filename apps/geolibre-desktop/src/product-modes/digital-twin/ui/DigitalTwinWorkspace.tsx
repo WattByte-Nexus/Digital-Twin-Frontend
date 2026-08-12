@@ -12,6 +12,7 @@ import type { DigitalTwinView } from "../access";
 import { defaultDigitalTwinApiUrl } from "../../../lib/digital-twin-earth-engine";
 import {
   fetchDigitalTwinRunCatalog,
+  submitDigitalTwinScenarioRun,
   type DigitalTwinRunCatalog,
 } from "../../../lib/digital-twin-runs";
 import { LiveView } from "./LiveView";
@@ -20,11 +21,7 @@ import { ScenariosView } from "./views/ScenariosView";
 import { SettingsView } from "./views/SettingsView";
 import { SimulationAreaChart, type SimulationAreaSample } from "./SimulationAreaChart";
 import {
-  createSimulationRun,
-  loadLaunchedSimulationRuns,
-  persistLaunchedSimulationRuns,
   type ScenarioRunRequest,
-  type SimulationRun,
 } from "./simulation-flow";
 import "./digital-twin-workspace.css";
 
@@ -76,9 +73,7 @@ export function DigitalTwinWorkspace({
   const restoreFocusFrameRef = useRef<number | null>(null);
   const [simulationOpen, setSimulationOpen] = useState(false);
   const [areaSamples, setAreaSamples] = useState<SimulationAreaSample[]>([]);
-  const [launchedRuns, setLaunchedRuns] = useState<SimulationRun[]>(loadLaunchedSimulationRuns);
   const [scenarioCreationRequest, setScenarioCreationRequest] = useState(0);
-  const runSequenceRef = useRef(1);
   const [runCatalog, setRunCatalog] = useState<DigitalTwinRunCatalog>({
     regions: [],
     runs: [],
@@ -86,10 +81,6 @@ export function DigitalTwinWorkspace({
   const [runCatalogError, setRunCatalogError] = useState<Error | null>(null);
   const [runCatalogLoading, setRunCatalogLoading] = useState(true);
   const [runCatalogRequest, setRunCatalogRequest] = useState(0);
-
-  useEffect(() => {
-    persistLaunchedSimulationRuns(launchedRuns);
-  }, [launchedRuns]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -155,11 +146,16 @@ export function DigitalTwinWorkspace({
   }, []);
 
   const launchSimulation = useCallback(
-    (request: ScenarioRunRequest) => {
-      const run = createSimulationRun(request, runSequenceRef.current);
-      runSequenceRef.current += 1;
-      setLaunchedRuns((current) => [run, ...current]);
-      onNavigate("runs", run.id);
+    async (request: ScenarioRunRequest, idempotencyKey: string) => {
+      const submission = await submitDigitalTwinScenarioRun(defaultDigitalTwinApiUrl(), {
+        regionId: request.regionId,
+        durationHours: request.durationHours,
+        ignitionPoints: request.ignitionPoints,
+        windSpeedMph: request.weather.events.wind,
+        windDirectionDegrees: request.weather.events.windDirection,
+      }, { idempotencyKey });
+      setRunCatalogRequest((current) => current + 1);
+      onNavigate("runs", submission.runId);
     },
     [onNavigate],
   );

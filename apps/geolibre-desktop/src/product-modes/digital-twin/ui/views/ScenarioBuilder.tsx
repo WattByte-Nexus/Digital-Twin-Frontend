@@ -53,6 +53,7 @@ import {
   type SetStateAction,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -69,7 +70,7 @@ interface ScenarioBuilderProps {
   mapControllerRef: RefObject<ScenarioMapController | null>;
   mapSlot: ReactNode;
   onClose: () => void;
-  onRun: (request: ScenarioRunRequest) => void;
+  onRun: (request: ScenarioRunRequest, idempotencyKey: string) => Promise<void>;
   regions: readonly DigitalTwinRegion[];
   theme: SurfaceTheme;
 }
@@ -123,6 +124,8 @@ function useIgnitionMap({
 
       const canvas = map.getCanvas();
       const previousCursor = canvas.style.cursor;
+      const ignitionCursorClass = "digital-twin-ignition-placement-cursor";
+      canvas.classList.toggle(ignitionCursorClass, enabled);
       canvas.style.cursor = enabled ? "crosshair" : "";
       const markerRoots: Root[] = [];
       const markers = points.map((point, index) => {
@@ -185,6 +188,7 @@ function useIgnitionMap({
         map.off("click", handleMapClick);
         markers.forEach((marker) => marker.remove());
         queueMicrotask(() => markerRoots.forEach((root) => root.unmount()));
+        canvas.classList.remove(ignitionCursorClass);
         canvas.style.cursor = previousCursor;
       };
     };
@@ -223,7 +227,9 @@ export function ScenarioBuilder({
   );
   const [regionId, setRegionId] = useState(
     () =>
-      regions.find((region) => region.name === initialRequest?.location)?.id ??
+      (regions.some((region) => region.id === initialRequest?.regionId)
+        ? initialRequest?.regionId
+        : regions.find((region) => region.name === initialRequest?.location)?.id) ??
       (regions.some((region) => region.id === activeRegionId)
         ? activeRegionId
         : regions[0]?.id ?? "")
@@ -243,6 +249,9 @@ export function ScenarioBuilder({
   );
   const [redoPoints, setRedoPoints] = useState<IgnitionPoint[]>([]);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const submissionIdRef = useRef<string | null>(null);
   const [runSetupAnchor, setRunSetupAnchor] = useState<FloatingPanelAnchor>({
     edge: "right",
     offset: 0,
@@ -307,19 +316,32 @@ export function ScenarioBuilder({
     if (selectedPointId === pointId) setSelectedPointId(null);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (nextStep) {
       setActiveStep(nextStep.id);
       return;
     }
-    onRun({
-      scenario: scenarioName,
-      location,
-      durationHours,
-      ignitionPoints: points,
-      weather,
-      modelSettings,
-    });
+    setIsSubmitting(true);
+    setSubmissionError(null);
+    try {
+      const submissionId = submissionIdRef.current ?? crypto.randomUUID();
+      submissionIdRef.current = submissionId;
+      await onRun({
+        scenario: scenarioName,
+        regionId,
+        location,
+        durationHours,
+        ignitionPoints: points,
+        weather,
+        modelSettings,
+      }, submissionId);
+    } catch (cause) {
+      setSubmissionError(
+        cause instanceof Error ? cause.message : "Simulation submission failed.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -497,9 +519,13 @@ export function ScenarioBuilder({
                     </div>
                     <Button
                       aria-pressed={placementActive}
-                      className="w-full"
+                      className={
+                        placementActive
+                          ? "w-full shadow-sm"
+                          : "w-full bg-muted/40 hover:bg-muted"
+                      }
                       onClick={() => setPlacementActive((active) => !active)}
-                      variant={placementActive ? "secondary" : "outline"}
+                      variant={placementActive ? "default" : "outline"}
                     >
                       <Crosshair aria-hidden="true" />
                       {placementActive
@@ -979,13 +1005,19 @@ export function ScenarioBuilder({
                 >
                   <ArrowLeft aria-hidden="true" />
                 </Button>
-                <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">{SETUP_STEPS[activeStepIndex].label}</span>
-                  {" · "}{activeStepIndex + 1} of {SETUP_STEPS.length}
-                </p>
+                {submissionError ? (
+                  <p className="max-w-52 truncate text-xs text-destructive" role="alert" title={submissionError}>
+                    {submissionError}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{SETUP_STEPS[activeStepIndex].label}</span>
+                    {" · "}{activeStepIndex + 1} of {SETUP_STEPS.length}
+                  </p>
+                )}
                 <Button
                   aria-label={nextStep ? `Continue to ${nextStep.label}` : `Run ${durationHours}-hour simulation`}
-                  disabled={nextDisabled}
+                  disabled={nextDisabled || isSubmitting}
                   onClick={handleNext}
                   size="icon"
                 >
