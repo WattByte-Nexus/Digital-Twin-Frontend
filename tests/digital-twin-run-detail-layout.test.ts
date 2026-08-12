@@ -44,6 +44,9 @@ test("simulation history opens a run from its scenario cell", () => {
 test("run detail positions graphs beside or below the expandable map and provides playback", () => {
   assert.match(playbackWorkspaceSource, /aria-label=\{mapExpanded \? "Restore map size" : "Expand map"\}/);
   assert.match(playbackWorkspaceSource, /setMapExpanded\(\(expanded\) => !expanded\)/);
+  assert.match(playbackWorkspaceSource, /pendingMapBoundsRef\.current = mapCardRef\.current\?\.getBoundingClientRect\(\) \?\? null/);
+  assert.match(playbackWorkspaceSource, /mapCard\.animate\(/);
+  assert.match(playbackWorkspaceSource, /prefers-reduced-motion/);
   assert.match(playbackWorkspaceSource, /mapExpanded \? "lg:grid-cols-1" : "lg:grid-cols-\[minmax\(0,1\.35fr\)_minmax\(360px,0\.8fr\)\]"/);
   assert.match(playbackWorkspaceSource, /mapExpanded \? "lg:grid-cols-2" : "grid-cols-1"/);
   assert.match(playbackWorkspaceSource, /Affected area over time/);

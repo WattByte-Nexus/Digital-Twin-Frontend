@@ -24,7 +24,15 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Area,
   AreaChart,
@@ -157,7 +165,41 @@ export function RunPlaybackWorkspace({
   const [playing, setPlaying] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [sampleIndex, setSampleIndex] = useState(0);
+  const mapCardRef = useRef<HTMLDivElement | null>(null);
+  const pendingMapBoundsRef = useRef<DOMRect | null>(null);
   const playbackMapRef = useRef<MapLibreMap | null>(null);
+
+  useLayoutEffect(() => {
+    const previousBounds = pendingMapBoundsRef.current;
+    pendingMapBoundsRef.current = null;
+    const mapCard = mapCardRef.current;
+    if (
+      !previousBounds
+      || !mapCard
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
+    const nextBounds = mapCard.getBoundingClientRect();
+    if (nextBounds.width === 0 || nextBounds.height === 0) return;
+
+    const animation = mapCard.animate(
+      [
+        {
+          transform: `translate(${previousBounds.left - nextBounds.left}px, ${previousBounds.top - nextBounds.top}px) scale(${previousBounds.width / nextBounds.width}, ${previousBounds.height / nextBounds.height})`,
+          transformOrigin: "top left",
+        },
+        { transform: "none", transformOrigin: "top left" },
+      ],
+      {
+        duration: mapExpanded ? 260 : 210,
+        easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+      },
+    );
+
+    return () => animation.cancel();
+  }, [mapExpanded]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -272,7 +314,10 @@ export function RunPlaybackWorkspace({
       className={`grid gap-4 ${mapExpanded ? "lg:grid-cols-1" : "lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.8fr)]"}`}
     >
       <div className="grid min-w-0 gap-3">
-        <Card className={`relative gap-0 overflow-hidden bg-background py-0 ${mapExpanded ? "min-h-[70vh]" : "min-h-[500px]"}`}>
+        <Card
+          className={`relative gap-0 overflow-hidden bg-background py-0 ${mapExpanded ? "min-h-[70vh]" : "min-h-[500px]"}`}
+          ref={mapCardRef}
+        >
           <div className="absolute inset-0">{mapSlot}</div>
           <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-2">
             <Badge variant="secondary"><MapPin aria-hidden="true" /> {run.regionName}</Badge>
@@ -281,7 +326,10 @@ export function RunPlaybackWorkspace({
           <Button
             aria-label={mapExpanded ? "Restore map size" : "Expand map"}
             className="absolute right-3 top-3 z-20 shadow-md"
-            onClick={() => setMapExpanded((expanded) => !expanded)}
+            onClick={() => {
+              pendingMapBoundsRef.current = mapCardRef.current?.getBoundingClientRect() ?? null;
+              setMapExpanded((expanded) => !expanded);
+            }}
             size="icon"
             title={mapExpanded ? "Restore map size" : "Expand map"}
             variant="secondary"
