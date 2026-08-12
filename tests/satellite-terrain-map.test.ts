@@ -27,14 +27,9 @@ const satelliteTerrainMapSource = readFileSync(
   "utf8",
 );
 
-test("satellite terrain map mounts before the optional reference overlay loads", () => {
-  const mapConstruction = satelliteTerrainMapSource.indexOf("new maplibregl.Map");
-  const referenceOverlayLoad = satelliteTerrainMapSource.indexOf(
-    "loadSatelliteReferenceOverlay(",
-  );
-
-  assert.ok(mapConstruction >= 0);
-  assert.ok(referenceOverlayLoad > mapConstruction);
+test("satellite terrain map includes its reference overlay in the initial style", () => {
+  assert.match(satelliteTerrainMapSource, /referenceOverlay:\s*options\.referenceOverlay/);
+  assert.doesNotMatch(satelliteTerrainMapSource, /loadSatelliteReferenceOverlay\(/);
 });
 
 test("satellite terrain map owns one portable interleaved deck surface", () => {

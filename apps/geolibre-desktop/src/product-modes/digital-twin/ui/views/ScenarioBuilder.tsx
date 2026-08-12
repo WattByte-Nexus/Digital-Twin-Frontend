@@ -353,7 +353,7 @@ export function ScenarioBuilder({
               surface="panel"
             >
               <FloatingMapPanelDragHandle className="absolute inset-x-0 top-0 z-10 h-[58px] rounded-t-[10px]" />
-              <header className="relative flex min-h-[58px] items-start bg-surface-subtle/60 px-4 py-3">
+              <header className="relative flex min-h-[58px] items-start border-b bg-background px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-card-foreground">
                     Run setup
@@ -473,7 +473,7 @@ export function ScenarioBuilder({
                         </SelectMenuContent>
                       </SelectMenu>
                     </div>
-                    <div className="rounded-md bg-muted/50 px-3 py-3">
+                    <div className="rounded-md border border-input p-3">
                       <div className="flex items-start gap-3">
                         <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                         <div className="min-w-0">
@@ -513,11 +513,11 @@ export function ScenarioBuilder({
                       <Badge variant="outline">Point mode</Badge>
                     </div>
                     {points.length > 0 ? (
-                      <div className="space-y-1 rounded-md bg-surface-subtle p-1">
+                      <div className="divide-y overflow-hidden rounded-md border border-input">
                         {points.map((point, index) => (
                           <div
-                            className={`flex items-start gap-2.5 rounded-sm px-2.5 py-2.5 ${
-                              selectedPointId === point.id ? "bg-surface-hover" : "bg-card"
+                            className={`flex items-start gap-2.5 px-2.5 py-2.5 ${
+                              selectedPointId === point.id ? "border-l-2 border-l-primary" : ""
                             }`}
                             key={point.id}
                           >
@@ -615,7 +615,7 @@ export function ScenarioBuilder({
                           Review the atmospheric inputs used by the model.
                         </p>
                       </div>
-                      <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-3">
+                      <div className="flex items-center gap-3 rounded-md border border-input px-3 py-3">
                         <CloudSun aria-hidden="true" className="size-5 text-muted-foreground" />
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium">
@@ -629,44 +629,44 @@ export function ScenarioBuilder({
                         </Button>
                       </PopoverTrigger>
                       </div>
-                      <div className="grid grid-cols-2 gap-1 rounded-md bg-surface-subtle p-1">
-                        <div className="rounded-sm bg-card px-3 py-2.5">
+                      <div className="grid grid-cols-2 overflow-hidden rounded-md border border-input [&>*:nth-child(odd)]:border-r [&>*:not(:nth-last-child(-n+2))]:border-b">
+                        <div className="px-3 py-2.5">
                           <p className="text-[10px] text-muted-foreground">Valid date</p>
                           <p className="mt-1 text-xs font-medium">{weather.date}</p>
                         </div>
-                        <div className="rounded-sm bg-card px-3 py-2.5">
+                        <div className="px-3 py-2.5">
                           <p className="text-[10px] text-muted-foreground">Local time</p>
                           <p className="mt-1 text-xs font-medium tabular-nums">
                             {String(weather.hour).padStart(2, "0")}:{String(weather.minute).padStart(2, "0")}
                           </p>
                         </div>
-                        <div className="rounded-sm bg-card px-3 py-2.5">
+                        <div className="px-3 py-2.5">
                           <p className="text-[10px] text-muted-foreground">Season</p>
                           <p className="mt-1 text-xs font-medium">{weather.season}</p>
                         </div>
-                        <div className="rounded-sm bg-card px-3 py-2.5">
+                        <div className="px-3 py-2.5">
                           <p className="text-[10px] text-muted-foreground">Temperature</p>
                           <p className="mt-1 text-xs font-medium tabular-nums">{weather.temperature}°C</p>
                         </div>
-                        <div className="rounded-sm bg-card px-3 py-2.5">
+                        <div className="px-3 py-2.5">
                           <p className="text-[10px] text-muted-foreground">Wind</p>
                           <p className="mt-1 text-xs font-medium tabular-nums">{weather.events.wind.toFixed(0)} mph</p>
                         </div>
-                        <div className="rounded-sm bg-card px-3 py-2.5">
+                        <div className="px-3 py-2.5">
                           <p className="text-[10px] text-muted-foreground">Direction</p>
                           <p className="mt-1 text-xs font-medium tabular-nums">{weather.events.windDirection.toFixed(0)}°</p>
                         </div>
                       </div>
                       <div>
                         <h4 className="text-xs font-medium">Weather events</h4>
-                        <div className="mt-2 grid grid-cols-4 gap-2">
+                        <div className="mt-2 grid grid-cols-4 divide-x overflow-hidden rounded-md border border-input">
                           {[
                             ["Rain", weather.events.rain],
                             ["Fog", weather.events.fog],
                             ["Cloud", weather.events.cloudCoverage],
                             ["Snow", weather.events.snow],
                           ].map(([label, value]) => (
-                            <div className="rounded-md bg-muted/50 px-2 py-2 text-center" key={label}>
+                            <div className="px-2 py-2 text-center" key={label}>
                               <p className="text-[10px] text-muted-foreground">{label}</p>
                               <p className="mt-1 text-xs font-medium tabular-nums">{value}%</p>
                             </div>
@@ -715,8 +715,8 @@ export function ScenarioBuilder({
                           Control the assumptions that drive spread and intensity.
                         </p>
                       </div>
-                      <div className="space-y-1 rounded-md bg-surface-subtle p-1">
-                        <div className="flex items-center justify-between gap-3 rounded-sm bg-card px-3 py-2.5">
+                      <div className="divide-y overflow-hidden rounded-md border border-input">
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
                           <div className="min-w-0">
                             <Label className="text-xs" htmlFor="fuel-moisture">Fuel moisture</Label>
                             <p className="mt-0.5 text-[10px] text-muted-foreground">Moisture applied to live and dead fuels</p>
@@ -740,7 +740,7 @@ export function ScenarioBuilder({
                             </SelectMenuContent>
                           </SelectMenu>
                         </div>
-                        <div className="flex items-center justify-between gap-3 rounded-sm bg-card px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
                           <div className="min-w-0">
                             <Label className="text-xs" htmlFor="ember-spotting">Ember spotting</Label>
                             <p className="mt-0.5 text-[10px] text-muted-foreground">Allow new ignitions ahead of the front</p>
@@ -764,7 +764,7 @@ export function ScenarioBuilder({
                             </SelectMenuContent>
                           </SelectMenu>
                         </div>
-                        <div className="flex items-center justify-between gap-3 rounded-sm bg-card px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
                           <div className="min-w-0">
                             <Label className="text-xs" htmlFor="crown-fire">Crown fire</Label>
                             <p className="mt-0.5 text-[10px] text-muted-foreground">Model transition from surface to canopy</p>
@@ -797,7 +797,7 @@ export function ScenarioBuilder({
                         </p>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-md bg-surface-subtle p-2.5">
+                        <div className="rounded-md border border-input p-2.5">
                           <Label className="text-[10px] text-muted-foreground" htmlFor="grid-resolution">Grid resolution</Label>
                           <SelectMenu
                             onValueChange={(value) =>
@@ -818,7 +818,7 @@ export function ScenarioBuilder({
                             </SelectMenuContent>
                           </SelectMenu>
                         </div>
-                        <div className="rounded-md bg-surface-subtle p-2.5">
+                        <div className="rounded-md border border-input p-2.5">
                           <Label className="text-[10px] text-muted-foreground" htmlFor="output-interval">Output interval</Label>
                           <SelectMenu
                             onValueChange={(value) =>
@@ -857,9 +857,9 @@ export function ScenarioBuilder({
                           Add a scenario name, area, and at least one ignition source.
                         </p>
                       ) : null}
-                      <div className="space-y-1 rounded-md bg-surface-subtle p-1">
+                      <div className="divide-y overflow-hidden rounded-md border border-input">
                         <button
-                          className="flex w-full items-center gap-3 rounded-sm bg-card px-3 py-3 text-left hover:bg-surface-hover"
+                          className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-muted/40"
                           onClick={() => setActiveStep("area")}
                           type="button"
                         >
@@ -873,7 +873,7 @@ export function ScenarioBuilder({
                           <span className="text-[10px] text-muted-foreground">Edit</span>
                         </button>
                         <button
-                          className="flex w-full items-center gap-3 rounded-sm bg-card px-3 py-3 text-left hover:bg-surface-hover"
+                          className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-muted/40"
                           onClick={() => setActiveStep("ignitions")}
                           type="button"
                         >
@@ -887,7 +887,7 @@ export function ScenarioBuilder({
                           <span className="text-[10px] text-muted-foreground">Edit</span>
                         </button>
                         <button
-                          className="flex w-full items-center gap-3 rounded-sm bg-card px-3 py-3 text-left hover:bg-surface-hover"
+                          className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-muted/40"
                           onClick={() => setActiveStep("weather")}
                           type="button"
                         >
@@ -899,7 +899,7 @@ export function ScenarioBuilder({
                           <span className="text-[10px] text-muted-foreground">Edit</span>
                         </button>
                         <button
-                          className="flex w-full items-center gap-3 rounded-sm bg-card px-3 py-3 text-left hover:bg-surface-hover"
+                          className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-muted/40"
                           onClick={() => setActiveStep("model")}
                           type="button"
                         >
@@ -921,11 +921,11 @@ export function ScenarioBuilder({
 
               <section
                 aria-label="Configuration summary"
-                className="grid grid-cols-4 bg-surface-subtle"
+                className="grid grid-cols-4 divide-x border-t bg-background"
               >
                 <button
                   aria-label={`Area: ${location || "Not selected"}`}
-                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   onClick={() => setActiveStep("area")}
                   title={location || "Choose an area"}
                   type="button"
@@ -937,7 +937,7 @@ export function ScenarioBuilder({
                 </button>
                 <button
                   aria-label={`Weather: ${weatherSummary}`}
-                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   onClick={() => setActiveStep("weather")}
                   title={weatherSummary}
                   type="button"
@@ -949,7 +949,7 @@ export function ScenarioBuilder({
                 </button>
                 <button
                   aria-label={`Model: ${modelSettings.cellSizeMeters} meter grid`}
-                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   onClick={() => setActiveStep("model")}
                   title={`${modelSettings.cellSizeMeters} meter grid, ${modelSettings.outputIntervalMinutes} minute outputs`}
                   type="button"
@@ -959,7 +959,7 @@ export function ScenarioBuilder({
                 </button>
                 <button
                   aria-label={`Duration: ${durationHours} hours`}
-                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   onClick={() => setActiveStep("review")}
                   title={`${durationHours}-hour duration`}
                   type="button"
@@ -969,7 +969,7 @@ export function ScenarioBuilder({
                 </button>
               </section>
 
-              <CardFooter className="mt-auto flex-row items-center justify-between bg-card px-3 py-3">
+              <CardFooter className="mt-auto flex-row items-center justify-between border-t bg-background px-3 py-3">
                 <Button
                   aria-label={previousStep ? `Back to ${previousStep.label}` : "No previous step"}
                   disabled={!previousStep}

@@ -96,12 +96,22 @@ describe("Run setup theme", () => {
   it("keeps the fixed overview visually separate from step content", () => {
     assert.match(
       scenarioBuilderSource,
-      /aria-label="Configuration summary"\s+className="grid grid-cols-4 bg-surface-subtle"/
-    );
-    assert.doesNotMatch(
-      scenarioBuilderSource,
-      /aria-label="Configuration summary"[\s\S]*?divide-x border-t/,
+      /aria-label="Configuration summary"\s+className="grid grid-cols-4 divide-x border-t bg-background"/
     );
     assert.doesNotMatch(scenarioBuilderSource, /aria-label="Run summary"/);
+  });
+
+  it("uses flat white surfaces throughout every setup step", () => {
+    assert.doesNotMatch(scenarioBuilderSource, /bg-surface-subtle/);
+    assert.doesNotMatch(scenarioBuilderSource, /bg-card/);
+    assert.match(scenarioBuilderSource, /<header className="[^"]*bg-background/);
+    assert.match(
+      scenarioBuilderSource,
+      /divide-y overflow-hidden rounded-md border border-input/,
+    );
+    assert.match(
+      scenarioBuilderSource,
+      /grid grid-cols-2 overflow-hidden rounded-md border border-input/,
+    );
   });
 });

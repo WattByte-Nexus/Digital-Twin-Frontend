@@ -62,6 +62,8 @@ describe("Digital Twin LiDAR fusion layer", () => {
       PointCloudLayer,
     );
     assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "pixels");
+    assert.equal(layer.props.beforeId, "digital-twin-reference-road-labels");
+    assert.deepEqual(layer.props.getPointColor, [56, 189, 248, 230]);
   });
 
   it("enables Gaussian surfels only when the quality mode is requested", () => {

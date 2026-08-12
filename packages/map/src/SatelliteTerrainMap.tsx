@@ -12,9 +12,7 @@ import {
   type TerrainRasterSource,
 } from "./satellite-terrain-style";
 import {
-  addSatelliteReferenceOverlay,
   DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
-  loadSatelliteReferenceOverlay,
   setSatelliteReferenceVisibility,
   type SatelliteReferenceLayer,
   type SatelliteReferenceOverlay,
@@ -32,7 +30,7 @@ export interface SatelliteTerrainInitialView {
 export interface SatelliteTerrainMapProps {
   satelliteSource: SatelliteRasterSource;
   satelliteFallbackSource?: SatelliteRasterSource;
-  referenceOverlayStyleUrl?: string;
+  referenceOverlay?: SatelliteReferenceOverlay;
   referenceOverlayVisibility?: SatelliteReferenceVisibility;
   terrainSource: TerrainRasterSource;
   initialView: SatelliteTerrainInitialView;
@@ -57,7 +55,7 @@ export interface SatelliteTerrainMapProps {
 export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   satelliteSource,
   satelliteFallbackSource,
-  referenceOverlayStyleUrl,
+  referenceOverlay,
   referenceOverlayVisibility = DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
   terrainSource,
   initialView,
@@ -74,8 +72,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const deckOverlayRef = useRef<MapboxOverlay | null>(null);
   const deckLayersRef = useRef(deckLayers);
-  const referenceLayersRef = useRef<SatelliteReferenceLayer[]>([]);
-  const referenceOverlayRef = useRef<SatelliteReferenceOverlay | undefined>(undefined);
+  const referenceLayersRef = useRef<SatelliteReferenceLayer[]>(referenceOverlay?.layers ?? []);
   const referenceOverlayVisibilityRef = useRef(referenceOverlayVisibility);
   const satelliteVisibleRef = useRef(satelliteVisible);
   const elevationEnabledRef = useRef(elevationEnabled);
@@ -94,7 +91,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   const initialOptionsRef = useRef({
     satelliteSource,
     satelliteFallbackSource,
-    referenceOverlayStyleUrl,
+    referenceOverlay,
     terrainSource,
     initialView,
     terrainExaggeration,
@@ -105,8 +102,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     if (!container) return;
 
     const options = initialOptionsRef.current;
-    const abortController = new AbortController();
-    let disposed = false;
     let resizeObserver: ResizeObserver | null = null;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -118,6 +113,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       style: buildSatelliteTerrainStyle({
         satelliteSource: options.satelliteSource,
         satelliteFallbackSource: options.satelliteFallbackSource,
+        referenceOverlay: options.referenceOverlay,
         referenceOverlayVisibility: referenceOverlayVisibilityRef.current,
         terrainSource: options.terrainSource,
         terrainExaggeration: options.terrainExaggeration,
@@ -178,36 +174,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     };
     map.once("load", handleLoad);
 
-    if (options.referenceOverlayStyleUrl) {
-      void loadSatelliteReferenceOverlay(
-        options.referenceOverlayStyleUrl,
-        abortController.signal,
-      )
-        .then((referenceOverlay) => {
-          if (disposed) return;
-          referenceOverlayRef.current = referenceOverlay;
-          referenceLayersRef.current = referenceOverlay.layers;
-          const applyReferenceOverlay = () => {
-            if (disposed) return;
-            try {
-              addSatelliteReferenceOverlay(
-                map,
-                referenceOverlay,
-                referenceOverlayVisibilityRef.current,
-              );
-            } catch (error) {
-              console.warn("Satellite reference overlay could not be applied", error);
-            }
-          };
-          if (map.isStyleLoaded()) applyReferenceOverlay();
-          else map.once("style.load", applyReferenceOverlay);
-        })
-        .catch((error: unknown) => {
-          if (abortController.signal.aborted) return;
-          console.warn("Satellite reference overlay could not be loaded", error);
-        });
-    }
-
     resizeObserver = new ResizeObserver(() => {
       if (resizeTimer !== null) clearTimeout(resizeTimer);
       // Animated panels can report a new width every frame. Resizing the
@@ -221,8 +187,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     resizeObserver.observe(container);
 
     return () => {
-      disposed = true;
-      abortController.abort();
       resizeObserver?.disconnect();
       if (resizeTimer !== null) clearTimeout(resizeTimer);
       onMapReadyRef.current?.(null);
@@ -234,7 +198,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       mapRef.current?.remove();
       mapRef.current = null;
       appliedThemeModeRef.current = null;
-      referenceOverlayRef.current = undefined;
       referenceLayersRef.current = [];
     };
   }, []);
@@ -265,7 +228,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       buildSatelliteTerrainStyle({
         satelliteSource: options.satelliteSource,
         satelliteFallbackSource: options.satelliteFallbackSource,
-        referenceOverlay: referenceOverlayRef.current,
+        referenceOverlay: options.referenceOverlay,
         referenceOverlayVisibility: referenceOverlayVisibilityRef.current,
         terrainSource: options.terrainSource,
         terrainExaggeration: options.terrainExaggeration,
