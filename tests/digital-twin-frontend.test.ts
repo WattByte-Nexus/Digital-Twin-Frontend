@@ -249,8 +249,8 @@ describe("Digital Twin frontend composition", () => {
     );
   });
 
-  it("starts point clouds at an interactive LOD with spacing-sized surfels", () => {
-    assert.match(lidarSource, /maximumScreenSpaceError:\s*4/);
+  it("refines point clouds densely when zoomed in with spacing-sized surfels", () => {
+    assert.match(lidarSource, /maximumScreenSpaceError:\s*2/);
     assert.match(lidarSource, /maximumMemoryUsage:\s*512/);
     assert.match(lidarSource, /sizeUnits:\s*"meters"/);
     assert.match(workspaceSource, /missing RGB is shown in cyan/);

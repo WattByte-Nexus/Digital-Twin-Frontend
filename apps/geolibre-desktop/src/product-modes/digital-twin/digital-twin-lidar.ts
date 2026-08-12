@@ -71,7 +71,7 @@ export const POINT_CLOUD_TILESET_LOAD_OPTIONS = {
   tileset: {
     // Start with the hierarchy's previews and refine only after the camera
     // settles. Native leaves remain available without blocking interaction.
-    maximumScreenSpaceError: 4,
+    maximumScreenSpaceError: 2,
     maximumMemoryUsage: 512,
     memoryAdjustedScreenSpaceError: true,
     throttleRequests: true,
