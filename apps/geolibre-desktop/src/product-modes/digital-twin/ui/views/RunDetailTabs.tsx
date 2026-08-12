@@ -62,26 +62,26 @@ function titleCase(value: string): string {
 
 function RunMetadataTable({ run }: { run: DigitalTwinRunRecord }) {
   return (
-    <Table>
+    <Table className="table-fixed">
       <TableBody>
         <TableRow>
-          <TableCell className="text-muted-foreground">Simulation</TableCell>
-          <TableCell className="text-right font-mono text-xs">{run.simulation_id}</TableCell>
+          <TableCell className="w-2/5 text-muted-foreground">Simulation</TableCell>
+          <TableCell className="min-w-0 text-right font-mono text-xs break-all">{run.simulation_id}</TableCell>
         </TableRow>
         <TableRow>
-          <TableCell className="text-muted-foreground">Region</TableCell>
+          <TableCell className="w-2/5 text-muted-foreground">Region</TableCell>
           <TableCell className="text-right">{run.region_id}</TableCell>
         </TableRow>
         <TableRow>
-          <TableCell className="text-muted-foreground">Status</TableCell>
+          <TableCell className="w-2/5 text-muted-foreground">Status</TableCell>
           <TableCell className="text-right"><Badge variant="outline">{titleCase(run.status)}</Badge></TableCell>
         </TableRow>
         <TableRow>
-          <TableCell className="text-muted-foreground">Completed ticks</TableCell>
+          <TableCell className="w-2/5 text-muted-foreground">Completed ticks</TableCell>
           <TableCell className="text-right tabular-nums">{run.tick_refs.filter(({ tick }) => tick > 0).length}</TableCell>
         </TableRow>
         <TableRow>
-          <TableCell className="text-muted-foreground">Final result</TableCell>
+          <TableCell className="w-2/5 text-muted-foreground">Final result</TableCell>
           <TableCell className="text-right">{run.final_result_ref ? "Available" : "Not available"}</TableCell>
         </TableRow>
       </TableBody>
@@ -106,12 +106,13 @@ function OverviewPanel({ data }: { data: Extract<RunTabData, { kind: "overview" 
           <CardDescription>Identifiers that connect this run to its source request</CardDescription>
         </CardHeader>
         <CardContent className="px-5">
-          <Table>
+          <Table className="table-fixed">
             <TableBody>
-              <TableRow><TableCell className="text-muted-foreground">Trigger</TableCell><TableCell className="text-right">{titleCase(data.run.trigger.kind ?? "automatic")}</TableCell></TableRow>
-              <TableRow><TableCell className="text-muted-foreground">Scenario</TableCell><TableCell className="text-right">{displayValue(data.run.trigger.scenario_id)}</TableCell></TableRow>
-              <TableRow><TableCell className="text-muted-foreground">Request</TableCell><TableCell className="text-right font-mono text-xs">{displayValue(data.run.trigger.correlation_id)}</TableCell></TableRow>
-              <TableRow><TableCell className="text-muted-foreground">Failure</TableCell><TableCell className="text-right">{data.run.failure ? displayValue(data.run.failure.message ?? data.run.failure.detail ?? data.run.failure.error_type) : "None"}</TableCell></TableRow>
+              <TableRow><TableCell className="w-2/5 text-muted-foreground">Trigger</TableCell><TableCell className="min-w-0 text-right">{titleCase(data.run.trigger.kind ?? "automatic")}</TableCell></TableRow>
+              <TableRow><TableCell className="w-2/5 text-muted-foreground">Scenario</TableCell><TableCell className="min-w-0 text-right break-all">{displayValue(data.run.trigger.scenario_id)}</TableCell></TableRow>
+              <TableRow><TableCell className="w-2/5 text-muted-foreground">Request</TableCell><TableCell className="min-w-0 text-right font-mono text-xs break-all">{displayValue(data.run.trigger.correlation_id)}</TableCell></TableRow>
+              <TableRow><TableCell className="w-2/5 text-muted-foreground">Failure</TableCell><TableCell className="min-w-0 text-right break-words">{data.run.failure ? displayValue(data.run.failure.message ?? data.run.failure.detail ?? data.run.failure.error_type) : "None"}</TableCell></TableRow>
+              <TableRow><TableCell className="w-2/5 text-muted-foreground">Result artifact</TableCell><TableCell className="min-w-0 text-right font-mono text-xs break-all">{displayValue(data.run.final_result_ref)}</TableCell></TableRow>
             </TableBody>
           </Table>
         </CardContent>
