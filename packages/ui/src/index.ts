@@ -131,6 +131,8 @@ export {
   SelectValue as SelectMenuValue,
 } from "./components/select-menu";
 export { Label } from "./components/label";
+export { Checkbox } from "./components/checkbox";
+export { Switch } from "./components/switch";
 export { Slider } from "./components/slider";
 export { Separator } from "./components/separator";
 export { Toggle, toggleVariants } from "./components/toggle";

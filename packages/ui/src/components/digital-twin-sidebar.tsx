@@ -112,6 +112,7 @@ export interface DigitalTwinSidebarProps {
   appVersion?: string;
   className?: string;
   regions: DigitalTwinRegion[];
+  settingsActive?: boolean;
   themeMode?: "light" | "dark";
   onNavigate?: (destination: DigitalTwinDestination) => void;
   onOpenAlerts?: () => void;
@@ -126,6 +127,7 @@ export function DigitalTwinSidebar({
   appVersion,
   className,
   regions,
+  settingsActive = false,
   themeMode = "dark",
   onNavigate,
   onOpenAlerts,
@@ -227,9 +229,11 @@ export function DigitalTwinSidebar({
                 <SidebarMenuItem key={id}>
                   <SidebarMenuButton
                     aria-label={`${label}: ${description}`}
-                    aria-current={activeDestination === id ? "page" : undefined}
+                    aria-current={
+                      !settingsActive && activeDestination === id ? "page" : undefined
+                    }
                     className="h-11 gap-3 px-3 text-sm group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-2"
-                    isActive={activeDestination === id}
+                    isActive={!settingsActive && activeDestination === id}
                     onClick={() => onNavigate?.(id)}
                     tooltip={`${label} — ${description}`}
                     type="button"
@@ -247,9 +251,13 @@ export function DigitalTwinSidebar({
               <SidebarMenuItem>
                 <SidebarMenuButton
                   aria-label={`${assetDestination.label}: ${assetDestination.description}`}
-                  aria-current={activeDestination === assetDestination.id ? "page" : undefined}
+                  aria-current={
+                    !settingsActive && activeDestination === assetDestination.id
+                      ? "page"
+                      : undefined
+                  }
                   className="h-11 gap-3 px-3 text-sm group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-2"
-                  isActive={activeDestination === assetDestination.id}
+                  isActive={!settingsActive && activeDestination === assetDestination.id}
                   onClick={() => onNavigate?.(assetDestination.id)}
                   tooltip={`${assetDestination.label} — ${assetDestination.description}`}
                   type="button"
@@ -272,8 +280,10 @@ export function DigitalTwinSidebar({
               <SidebarMenuItem key={id}>
                 <SidebarMenuButton
                   aria-label={label}
+                  aria-current={id === "settings" && settingsActive ? "page" : undefined}
                   className="h-10 gap-3 px-3 text-sm group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-2"
                   disabled={!action}
+                  isActive={id === "settings" && settingsActive}
                   onClick={action}
                   tooltip={`${label} — ${description}`}
                   type="button"

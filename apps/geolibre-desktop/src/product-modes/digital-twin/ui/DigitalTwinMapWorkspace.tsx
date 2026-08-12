@@ -99,6 +99,7 @@ import { SectionErrorBoundary } from "../../../components/common/error-boundarie
 import { RunsView } from "./views/RunsView";
 import { ScenariosView } from "./views/ScenariosView";
 import type { ScenarioMapController } from "./views/ScenarioBuilder";
+import { SettingsView } from "./views/SettingsView";
 
 export type WorkspaceTheme = "light" | "dark";
 
@@ -457,13 +458,15 @@ export function DigitalTwinMapWorkspace({
   );
   const [localDestination, setLocalDestination] =
     useState<DigitalTwinDestination>("live");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [scenarioBuilderOpen, setScenarioBuilderOpen] = useState(false);
   const activeRegionId = controlledRegionId ?? localRegionId;
   const activeDestination = controlledDestination ?? localDestination;
   const activeRegion = regions.find((region) => region.id === activeRegionId);
   const showLiveMapChrome =
-    activeDestination === "live" ||
-    (activeDestination === "scenarios" && scenarioBuilderOpen);
+    !settingsOpen &&
+    (activeDestination === "live" ||
+      (activeDestination === "scenarios" && scenarioBuilderOpen));
   const [weatherSettings, setWeatherSettings] = useState<WeatherSettingsValue>(
     () => ({
       ...DEFAULT_WEATHER_SETTINGS,
@@ -1035,6 +1038,7 @@ export function DigitalTwinMapWorkspace({
     destination: DigitalTwinDestination,
     resourceId?: string
   ) => {
+    setSettingsOpen(false);
     setLocalDestination(destination);
     onNavigate?.(destination, resourceId);
   };
@@ -1229,11 +1233,12 @@ export function DigitalTwinMapWorkspace({
           activeRegionId={activeRegionId}
           appVersion={`v${APP_VERSION}`}
           regions={regions}
+          settingsActive={settingsOpen}
           themeMode={activeThemeMode}
           onNavigate={navigateTo}
           onOpenAlerts={() => navigateTo("live")}
           onOpenData={onOpenExpertWorkspace}
-          onOpenSettings={onOpenAdministration}
+          onOpenSettings={() => setSettingsOpen(true)}
           onSelectRegion={selectRegion}
         />
         <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden">
@@ -1528,7 +1533,19 @@ export function DigitalTwinMapWorkspace({
             </CommandList>
           </CommandDialog>
 
-          {activeDestination === "assets" ? (
+          {settingsOpen ? (
+            <SectionErrorBoundary
+              fallbackClassName="h-full w-full"
+              label="Settings workspace"
+            >
+              <SettingsView
+                accountInitials={operator.initials}
+                accountName={operator.name}
+                accountRole={operator.role}
+                organizationName={organizationName}
+              />
+            </SectionErrorBoundary>
+          ) : activeDestination === "assets" ? (
             <SectionErrorBoundary
               fallbackClassName="h-full w-full"
               label="Asset catalog"
