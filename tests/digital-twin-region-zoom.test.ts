@@ -36,3 +36,20 @@ test("the selected region can be fitted from both map and command-palette contro
     /<CommandItem[\s\S]*?onSelect=\{\(\) => runCommand\(zoomToSelectedRegion\)\}[\s\S]*?Zoom to selected region/,
   );
 });
+
+test("the map exposes matching zoom controls in its top-left corner", () => {
+  assert.match(
+    workspaceSource,
+    /className="absolute left-4 top-16 z-10 flex flex-col gap-2"/,
+  );
+  assert.match(
+    workspaceSource,
+    /className=\{FLOATING_MAP_ACTION_BUTTON_CLASS_NAME\}[\s\S]*?aria-label="Zoom in"[\s\S]*?onClick=\{zoomIn\}/,
+  );
+  assert.match(
+    workspaceSource,
+    /className=\{FLOATING_MAP_ACTION_BUTTON_CLASS_NAME\}[\s\S]*?aria-label="Zoom out"[\s\S]*?onClick=\{zoomOut\}/,
+  );
+  assert.match(workspaceSource, /const zoomIn = \(\) => mapRef\.current\?\.zoomIn\(\);/);
+  assert.match(workspaceSource, /const zoomOut = \(\) => mapRef\.current\?\.zoomOut\(\);/);
+});

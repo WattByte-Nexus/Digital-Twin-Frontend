@@ -36,8 +36,10 @@ import {
   Map as MapIcon,
   MapPinned,
   Maximize,
+  Minus,
   Moon,
   Mountain,
+  Plus,
   Radio,
   Satellite,
   Sun,
@@ -1000,6 +1002,9 @@ export function DigitalTwinMapWorkspace({
     powerLines.regionId === activeRegionId &&
     powerLines.lines.length > 0;
 
+  const zoomIn = () => mapRef.current?.zoomIn();
+  const zoomOut = () => mapRef.current?.zoomOut();
+
   const zoomToSelectedRegion = () => {
     if (!canZoomToSelectedRegion) return;
     const coordinates = powerLines.lines.flatMap(
@@ -1092,6 +1097,30 @@ export function DigitalTwinMapWorkspace({
 
       {showLiveMapChrome ? (
         <>
+          <div className="absolute left-4 top-16 z-10 flex flex-col gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className={FLOATING_MAP_ACTION_BUTTON_CLASS_NAME}
+              aria-label="Zoom in"
+              title="Zoom in"
+              onClick={zoomIn}
+            >
+              <Plus aria-hidden="true" className="size-4" strokeWidth={2.5} />
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className={FLOATING_MAP_ACTION_BUTTON_CLASS_NAME}
+              aria-label="Zoom out"
+              title="Zoom out"
+              onClick={zoomOut}
+            >
+              <Minus aria-hidden="true" className="size-4" strokeWidth={2.5} />
+            </Button>
+          </div>
           <div className="absolute right-4 top-16 z-10">
             <Button
               type="button"
