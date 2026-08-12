@@ -81,7 +81,6 @@ export function AccountPreferencesPage() {
           <SettingRow
             description="Follow your operating system or choose a fixed appearance."
             label="Theme"
-            scope="Personal"
           >
             <SettingsSelect
               ariaLabel="Theme"
@@ -93,7 +92,6 @@ export function AccountPreferencesPage() {
           <SettingRow
             description="Controls navigation labels and application copy."
             label="Language"
-            scope="Personal"
           >
             <SettingsSelect
               ariaLabel="Language"
@@ -107,7 +105,6 @@ export function AccountPreferencesPage() {
           <SettingRow
             description="Used for distance, area, speed, and weather values."
             label="Measurement system"
-            scope="Personal"
           >
             <SettingsSelect
               ariaLabel="Measurement system"
@@ -123,7 +120,6 @@ export function AccountPreferencesPage() {
             description="Minimizes non-essential interface and map animation."
             htmlFor="settings-reduced-motion"
             label="Reduce motion"
-            scope="Personal"
           >
             <SettingsSwitch
               checked={draft.reducedMotion}
@@ -142,7 +138,6 @@ export function AccountPreferencesPage() {
             description="Play a short sound for alerts routed to this device."
             htmlFor="settings-alert-sounds"
             label="Operational alert sounds"
-            scope="Personal"
           >
             <SettingsSwitch
               checked={draft.sounds}
@@ -182,7 +177,7 @@ export function WorkspaceMapPage({
         title="Map defaults"
       >
         <SettingsRows>
-          <SettingRow label="Projection" scope="Workspace">
+          <SettingRow label="Projection">
             <SettingsSelect
               ariaLabel="Map projection"
               onValueChange={(projection) =>
@@ -195,7 +190,7 @@ export function WorkspaceMapPage({
               value={draft.projection}
             />
           </SettingRow>
-          <SettingRow label="Default basemap" scope="Workspace">
+          <SettingRow label="Default basemap">
             <SettingsSelect
               ariaLabel="Default basemap"
               onValueChange={(basemap) => setDraft((current) => ({ ...current, basemap }))}
@@ -208,7 +203,7 @@ export function WorkspaceMapPage({
               value={draft.basemap}
             />
           </SettingRow>
-          <SettingRow label="Coordinate format" scope="Workspace">
+          <SettingRow label="Coordinate format">
             <SettingsSelect
               ariaLabel="Coordinate format"
               onValueChange={(coordinateFormat) =>
@@ -222,7 +217,7 @@ export function WorkspaceMapPage({
               value={draft.coordinateFormat}
             />
           </SettingRow>
-          <SettingRow htmlFor="settings-map-labels" label="Place labels" scope="Workspace">
+          <SettingRow htmlFor="settings-map-labels" label="Place labels">
             <SettingsSwitch
               checked={draft.labels}
               id="settings-map-labels"
@@ -233,7 +228,6 @@ export function WorkspaceMapPage({
             description="Operators can enable terrain for an individual session."
             htmlFor="settings-map-terrain"
             label="3D terrain on startup"
-            scope="Workspace"
           >
             <SettingsSwitch
               checked={draft.terrain}
@@ -292,7 +286,7 @@ export function SimulationPresetsPage() {
       </div>
       <SettingsCard description="Used when an operator starts a simulation without selecting another preset." title="Default preset">
         <SettingsRows>
-          <SettingRow label="Preset name" scope="Workspace">
+          <SettingRow label="Preset name">
             <Input
               aria-label="Preset name"
               className="sm:max-w-72"
@@ -302,7 +296,7 @@ export function SimulationPresetsPage() {
               value={draft.presetName}
             />
           </SettingRow>
-          <SettingRow label="Default region" scope="Workspace">
+          <SettingRow label="Default region">
             <SettingsSelect
               ariaLabel="Default simulation region"
               onValueChange={(region) => setDraft((current) => ({ ...current, region }))}
@@ -313,7 +307,7 @@ export function SimulationPresetsPage() {
               value={draft.region}
             />
           </SettingRow>
-          <SettingRow description="Must be greater than zero." htmlFor="simulation-duration" label="Duration" scope="Workspace">
+          <SettingRow description="Must be greater than zero." htmlFor="simulation-duration" label="Duration">
             <div className="flex w-full items-center gap-2 sm:max-w-64">
               <Input
                 className="input-compact-number"
@@ -329,7 +323,7 @@ export function SimulationPresetsPage() {
               <span className="text-xs text-muted-foreground">hours</span>
             </div>
           </SettingRow>
-          <SettingRow description="The engine validates this against the selected run time." htmlFor="simulation-timestep" label="Timestep" scope="Workspace">
+          <SettingRow description="The engine validates this against the selected run time." htmlFor="simulation-timestep" label="Timestep">
             <div className="flex w-full items-center gap-2 sm:max-w-64">
               <Input
                 className="input-compact-number"
@@ -345,7 +339,7 @@ export function SimulationPresetsPage() {
               <span className="text-xs text-muted-foreground">hours</span>
             </div>
           </SettingRow>
-          <SettingRow label="Ignition input" scope="Workspace">
+          <SettingRow label="Ignition input">
             <SettingsSelect
               ariaLabel="Ignition input"
               onValueChange={(ignitionMode) =>
@@ -409,7 +403,7 @@ export function AlertRoutingPage() {
         title="Operational alerts"
       >
         <SettingsRows>
-          <SettingRow label="Default assignee" scope="Organization">
+          <SettingRow label="Default assignee">
             <SettingsSelect
               ariaLabel="Default alert assignee"
               onValueChange={(defaultAssignee) =>
@@ -423,7 +417,7 @@ export function AlertRoutingPage() {
               value={draft.defaultAssignee}
             />
           </SettingRow>
-          <SettingRow label="Queue order" scope="Organization">
+          <SettingRow label="Queue order">
             <div className="inline-flex rounded-md border border-input bg-background p-1">
               <Button
                 aria-pressed={draft.queueOrder === "severity"}
@@ -517,7 +511,7 @@ export function AlertRoutingPage() {
       <div>
         <SettingsCard title="Escalation policy">
           <SettingsRows>
-            <SettingRow htmlFor="settings-escalate-alerts" label="Escalate unacknowledged alerts" scope="Organization">
+            <SettingRow htmlFor="settings-escalate-alerts" label="Escalate unacknowledged alerts">
               <SettingsSwitch
                 checked={draft.escalateUnacknowledged}
                 id="settings-escalate-alerts"
@@ -526,7 +520,7 @@ export function AlertRoutingPage() {
                 }
               />
             </SettingRow>
-            <SettingRow htmlFor="settings-arrival-sound" label="Play arrival sound" scope="Personal">
+            <SettingRow htmlFor="settings-arrival-sound" label="Play arrival sound">
               <SettingsSwitch
                 checked={draft.playArrivalSound}
                 id="settings-arrival-sound"
@@ -539,7 +533,7 @@ export function AlertRoutingPage() {
         </SettingsCard>
         <SettingsCard title="Queue display">
           <SettingsRows>
-            <SettingRow htmlFor="settings-model-confidence" label="Show model confidence" scope="Personal">
+            <SettingRow htmlFor="settings-model-confidence" label="Show model confidence">
               <SettingsSwitch
                 checked={draft.showModelConfidence}
                 id="settings-model-confidence"
@@ -548,7 +542,7 @@ export function AlertRoutingPage() {
                 }
               />
             </SettingRow>
-            <SettingRow htmlFor="settings-group-alerts" label="Group related alerts" scope="Personal">
+            <SettingRow htmlFor="settings-group-alerts" label="Group related alerts">
               <SettingsSwitch
                 checked={draft.groupRelatedAlerts}
                 id="settings-group-alerts"
@@ -659,15 +653,15 @@ export function EngineStatusPage({
         title="Connection"
       >
         <SettingsRows>
-          <SettingRow label="API endpoint" scope="Personal">
+          <SettingRow label="API endpoint">
             <code className="max-w-full truncate rounded-md bg-muted px-2.5 py-1.5 text-xs">
               http://localhost:8000
             </code>
           </SettingRow>
-          <SettingRow label="Engine version" scope="Engine-managed">
+          <SettingRow label="Engine version">
             <span className="text-sm">Development build</span>
           </SettingRow>
-          <SettingRow label="Active region" scope="Engine-managed">
+          <SettingRow label="Active region">
             <span className="text-sm">Boulder County, CO</span>
           </SettingRow>
         </SettingsRows>
@@ -678,9 +672,9 @@ export function EngineStatusPage({
         title="Runtime configuration"
       >
         <SettingsRows>
-          <SettingRow label="Local Redis" scope="Engine-managed"><span className="text-sm">Disabled</span></SettingRow>
-          <SettingRow label="Wildfire snapshot store" scope="Engine-managed"><span className="text-sm">var/state/wildfire_snapshots.sqlite3</span></SettingRow>
-          <SettingRow label="Weather polling" scope="Engine-managed"><span className="text-sm">Region policy</span></SettingRow>
+          <SettingRow label="Local Redis"><span className="text-sm">Disabled</span></SettingRow>
+          <SettingRow label="Wildfire snapshot store"><span className="text-sm">var/state/wildfire_snapshots.sqlite3</span></SettingRow>
+          <SettingRow label="Weather polling"><span className="text-sm">Region policy</span></SettingRow>
         </SettingsRows>
       </SettingsCard>
       {onOpenRealSettings ? (

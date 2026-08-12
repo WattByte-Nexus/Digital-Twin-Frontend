@@ -1,5 +1,4 @@
 import {
-  Badge,
   Card,
   CardAction,
   CardContent,
@@ -49,24 +48,15 @@ export function SettingRow({
   description,
   htmlFor,
   label,
-  scope,
 }: {
   children: ReactNode;
   description?: string;
   htmlFor?: string;
   label: string;
-  scope?: "Engine-managed" | "Organization" | "Personal" | "Workspace";
 }) {
   const copy = (
     <div className="min-w-0 space-y-1">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        {scope ? (
-          <Badge className="font-normal" variant="outline">
-            {scope}
-          </Badge>
-        ) : null}
-      </div>
+      <span className="text-sm font-medium text-foreground">{label}</span>
       {description ? (
         <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
           {description}

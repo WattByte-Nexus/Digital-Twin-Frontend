@@ -78,7 +78,11 @@ describe("Digital Twin settings", () => {
     assert.match(settingsPagesSource, /Presets are starting values, not hidden engine configuration/);
     assert.match(settingsPagesSource, /Region, ignition, time, and timestep remain visible/);
     assert.match(settingsPagesSource, /Requires restart/);
-    assert.match(settingsPagesSource, /scope="Engine-managed"/);
+  });
+
+  it("does not display scope labels on settings or individual setting rows", () => {
+    assert.doesNotMatch(settingsPagesSource, /\bscope=/);
+    assert.doesNotMatch(settingsComponentsSource, /ScopeLegend|Setting scope|scope\?:/);
   });
 
   it("exports registry-installed form primitives from the shared UI package", () => {
