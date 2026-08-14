@@ -61,9 +61,10 @@
   .dark {
     --background: 222 38% 8%;
     --foreground: 210 40% 98%;
-    --card: 222 34% 11%;
+    /* Keep structural surfaces on one plane, matching the flat light theme. */
+    --card: 222 38% 8%;
     --card-foreground: 210 40% 98%;
-    --popover: 222 34% 11%;
+    --popover: 222 38% 8%;
     --popover-foreground: 210 40% 98%;
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
@@ -78,16 +79,16 @@
     --border: 220 22% 21%;
     --input: 218 20% 30%;
     --ring: 224.3 76.3% 48%;
-    --surface: 222 34% 11%;
+    --surface: 222 38% 8%;
     --surface-subtle: 220 24% 15%;
     --surface-hover: 220 24% 18%;
     --separator: 220 22% 19%;
-    --glass: 222 34% 11%;
+    --glass: 222 38% 8%;
     --glass-foreground: 210 40% 98%;
     --glass-border: 210 40% 98%;
     --glass-muted: 215 20.2% 65.1%;
     --glass-shadow: 222.2 84% 2%;
-    --surface-panel: 222 34% 11%;
+    --surface-panel: 222 38% 8%;
     --surface-panel-muted: 220 24% 16%;
     --surface-panel-foreground: 210 40% 98%;
     --surface-panel-muted-foreground: 215 20.2% 65.1%;
