@@ -492,7 +492,7 @@ export function PolePropertiesPopover({
         sideOffset={10}
       >
         <Card
-          className="max-h-[min(720px,var(--radix-popover-content-available-height))] gap-0 overflow-hidden rounded-xl py-0"
+          className="h-[min(720px,var(--radix-popover-content-available-height))] gap-0 overflow-hidden rounded-xl py-0"
           surface="panel"
         >
           <PopoverHeader className="flex-row items-start gap-3 border-b px-4 py-4">
