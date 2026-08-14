@@ -5,6 +5,7 @@ import {
   selectableMapAssetKind,
 } from "../apps/geolibre-desktop/public/plugins/digital-twin-demo/dist/index.js";
 import {
+  createDigitalTwinMapAssetSelectionDetail,
   DIGITAL_TWIN_MAP_ASSET_SELECTION_EVENT,
   isDigitalTwinMapAssetKind,
 } from "../apps/geolibre-desktop/src/product-modes/digital-twin/ui/map-asset-selection";
@@ -25,5 +26,21 @@ describe("digital twin map asset selection", () => {
     assert.equal(isDigitalTwinMapAssetKind("power_line"), true);
     assert.equal(isDigitalTwinMapAssetKind("pole"), true);
     assert.equal(isDigitalTwinMapAssetKind(null), false);
+  });
+
+  it("carries stable selected IDs and one primary ID for every map consumer", () => {
+    assert.deepEqual(
+      createDigitalTwinMapAssetSelectionDetail("pole", ["pole-a", "pole-b"]),
+      {
+        kind: "pole",
+        assetIds: ["pole-a", "pole-b"],
+        primaryAssetId: "pole-b",
+      }
+    );
+    assert.deepEqual(createDigitalTwinMapAssetSelectionDetail(null, []), {
+      kind: null,
+      assetIds: [],
+      primaryAssetId: null,
+    });
   });
 });

@@ -22,7 +22,6 @@ import {
   type DigitalTwinSurfaceLayerGroup,
 } from "./digital-twin-surface-layers";
 import { applyDigitalTwinSurfaceElevationState } from "./digital-twin-surface-state";
-import { createDigitalTwinSurfaceMapView } from "./digital-twin-surface-view";
 
 const EMPTY_SURFACE_LAYERS: readonly DigitalTwinSurfaceLayerGroup[] = [];
 
@@ -48,8 +47,8 @@ export interface SatelliteTerrainMapProps {
   ariaLabel?: string;
   /** Typed capabilities rendered in this map's one validated world surface. */
   surfaceLayers?: readonly DigitalTwinSurfaceLayerGroup[];
-  /** Absolute dataset height used for 3D LOD until terrain elevation is ready. */
-  surfaceReferenceElevationMeters?: number;
+  /** Called only when the user clicks the shared deck surface, not a handled asset. */
+  onSurfaceClick?: (event: Event) => void;
   onMapReady?: (map: maplibregl.Map | null) => void;
 }
 
@@ -71,7 +70,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   className,
   ariaLabel = "Satellite terrain map",
   surfaceLayers = EMPTY_SURFACE_LAYERS,
-  surfaceReferenceElevationMeters,
+  onSurfaceClick,
   onMapReady,
 }: SatelliteTerrainMapProps) {
   const composedSurface = useMemo(
@@ -92,13 +91,13 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   const themeModeRef = useRef(themeMode);
   const appliedThemeModeRef = useRef<MapThemeMode | null>(null);
   const onMapReadyRef = useRef(onMapReady);
-  const surfaceReferenceElevationRef = useRef(surfaceReferenceElevationMeters);
+  const onSurfaceClickRef = useRef(onSurfaceClick);
   referenceOverlayVisibilityRef.current = referenceOverlayVisibility;
   satelliteVisibleRef.current = satelliteVisible;
   elevationEnabledRef.current = elevationEnabled;
   themeModeRef.current = themeMode;
   onMapReadyRef.current = onMapReady;
-  surfaceReferenceElevationRef.current = surfaceReferenceElevationMeters;
+  onSurfaceClickRef.current = onSurfaceClick;
   deckLayersRef.current = deckLayers;
 
   // Sources and camera are mount-time inputs. Changing datasets should remount
@@ -158,13 +157,10 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       const deckOverlay = new MapboxOverlay({
         interleaved: true,
         layers: deckLayersRef.current,
-        // MapboxOverlay's generic type defaults `views` to null even though
-        // the runtime supports a custom MapView.
-        views: createDigitalTwinSurfaceMapView({
-          getMapCenterElevation: () => map.getCenterElevation(),
-          getSurfaceReferenceElevation: () =>
-            surfaceReferenceElevationRef.current,
-        }) as never,
+        getCursor: ({ isDragging, isHovering }) =>
+          isDragging ? "grabbing" : isHovering ? "grab" : "default",
+        onClick: (_info, event) =>
+          onSurfaceClickRef.current?.(event.srcEvent),
       });
       map.addControl(deckOverlay);
       deckOverlayRef.current = deckOverlay;
@@ -222,12 +218,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   useEffect(() => {
     deckOverlayRef.current?.setProps({ layers: deckLayers });
   }, [deckLayers]);
-
-  useEffect(() => {
-    // The custom map view reads this value lazily; repaint creates the new
-    // viewport and causes Tile3DLayer to traverse with the corrected height.
-    mapRef.current?.triggerRepaint();
-  }, [surfaceReferenceElevationMeters]);
 
   useEffect(() => {
     const map = mapRef.current;

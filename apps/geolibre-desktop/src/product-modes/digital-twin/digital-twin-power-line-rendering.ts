@@ -1,5 +1,8 @@
-import { PathLayer } from "@deck.gl/layers";
-import { ScenegraphLayer } from "@deck.gl/mesh-layers";
+import { PathLayer, ScatterplotLayer } from "@deck.gl/layers";
+import {
+  ScenegraphLayer,
+  type ScenegraphLayerProps,
+} from "@deck.gl/mesh-layers";
 import { digitalTwinSurfaceCoordinateKey } from "@geolibre/map/digital-twin-surface-state";
 import type { DigitalTwinPowerLineAsset } from "../../lib/digital-twin-assets";
 
@@ -11,6 +14,8 @@ const POWER_POLE_MODEL_PATH = "/assets/digital-twin/13.8kv_power_pole.glb";
 
 export interface DigitalTwinConductorPath {
   id: string;
+  startPoleId: string;
+  endPoleId: string;
   path: [[number, number, number], [number, number, number]];
 }
 
@@ -37,6 +42,37 @@ interface PoleRecord {
 
 export interface DigitalTwinPowerLineSurfaceOptions {
   surfaceElevations?: ReadonlyMap<string, number>;
+  polePositionOverrides?: ReadonlyMap<
+    string,
+    DigitalTwinPowerPole["position"]
+  >;
+}
+
+export interface DigitalTwinPoleGesture {
+  additive: boolean;
+  screen: [x: number, y: number];
+}
+
+export interface DigitalTwinPowerPoleInteraction {
+  hoveredPoleId: string | null;
+  selectedPoleIds: ReadonlySet<string>;
+  onHover?: (pole: DigitalTwinPowerPole | null) => void;
+  onSelect?: (
+    pole: DigitalTwinPowerPole,
+    gesture: DigitalTwinPoleGesture
+  ) => void;
+  onDragStart?: (
+    pole: DigitalTwinPowerPole,
+    gesture: DigitalTwinPoleGesture
+  ) => void;
+  onDrag?: (
+    pole: DigitalTwinPowerPole,
+    gesture: DigitalTwinPoleGesture
+  ) => void;
+  onDragEnd?: (
+    pole: DigitalTwinPowerPole,
+    gesture: DigitalTwinPoleGesture
+  ) => void;
 }
 
 function conductorElevation(
@@ -84,7 +120,10 @@ function sharedPoleBearing(bearings: number[]): number {
 /** Build visible conductor and support geometry from canonical line assets. */
 export function buildDigitalTwinPowerLineNetwork(
   lines: readonly DigitalTwinPowerLineAsset[],
-  { surfaceElevations }: DigitalTwinPowerLineSurfaceOptions = {}
+  {
+    surfaceElevations,
+    polePositionOverrides,
+  }: DigitalTwinPowerLineSurfaceOptions = {}
 ): DigitalTwinPowerLineNetwork {
   const poleRecords = new Map<string, PoleRecord>();
   const recordFor = (
@@ -114,10 +153,16 @@ export function buildDigitalTwinPowerLineNetwork(
     const bearing = bearingBetween(start, end);
     const startElevation = conductorElevation(start, surfaceElevations);
     const endElevation = conductorElevation(end, surfaceElevations);
+    const startKey = digitalTwinSurfaceCoordinateKey(start.lon, start.lat);
+    const endKey = digitalTwinSurfaceCoordinateKey(end.lon, end.lat);
     recordFor(start, startElevation, line.assetId).bearings.push(bearing);
     recordFor(end, endElevation, line.assetId).bearings.push(bearing);
+    const startPoleId = `pole-${startKey}`;
+    const endPoleId = `pole-${endKey}`;
     return {
       id: line.assetId,
+      startPoleId,
+      endPoleId,
       path: [
         [start.lon, start.lat, startElevation],
         [end.lon, end.lat, endElevation],
@@ -147,6 +192,42 @@ export function buildDigitalTwinPowerLineNetwork(
     } satisfies DigitalTwinPowerPole;
   });
 
+  return applyDigitalTwinPolePositionOverrides(
+    { conductors, poles },
+    polePositionOverrides
+  );
+}
+
+/** Apply a scenario overlay without mutating canonical line or pole geometry. */
+export function applyDigitalTwinPolePositionOverrides(
+  network: DigitalTwinPowerLineNetwork,
+  polePositionOverrides?: ReadonlyMap<
+    string,
+    DigitalTwinPowerPole["position"]
+  >
+): DigitalTwinPowerLineNetwork {
+  if (!polePositionOverrides || polePositionOverrides.size === 0) return network;
+
+  const poles = network.poles.map((pole) => ({
+    ...pole,
+    position: polePositionOverrides.get(pole.id) ?? pole.position,
+  }));
+  const conductors = network.conductors.map((conductor) => {
+    const start = polePositionOverrides.get(conductor.startPoleId);
+    const end = polePositionOverrides.get(conductor.endPoleId);
+    if (!start && !end) return conductor;
+    return {
+      ...conductor,
+      path: [
+        start
+          ? [start[0], start[1], start[2] + POWER_POLE_HEIGHT_AGL_METERS]
+          : conductor.path[0],
+        end
+          ? [end[0], end[1], end[2] + POWER_POLE_HEIGHT_AGL_METERS]
+          : conductor.path[1],
+      ],
+    } satisfies DigitalTwinConductorPath;
+  });
   return { conductors, poles };
 }
 
@@ -158,15 +239,75 @@ export function resolveDigitalTwinPowerPoleModelUrl(
 
 /** Render canonical conductor geometry and a pole model at every unique support. */
 export function createDigitalTwinPowerLineLayers(
-  lines: readonly DigitalTwinPowerLineAsset[],
+  network: DigitalTwinPowerLineNetwork,
   {
     modelUrl,
-    surfaceElevations,
-  }: { modelUrl: string } & DigitalTwinPowerLineSurfaceOptions
-): [PathLayer<DigitalTwinConductorPath>, ScenegraphLayer<DigitalTwinPowerPole>] {
-  const network = buildDigitalTwinPowerLineNetwork(lines, {
-    surfaceElevations,
+    interaction,
+  }: {
+    modelUrl: string;
+    interaction?: DigitalTwinPowerPoleInteraction;
+  }
+): [
+  PathLayer<DigitalTwinConductorPath>,
+  ScenegraphLayer<DigitalTwinPowerPole>,
+  ScatterplotLayer<DigitalTwinPowerPole>,
+] {
+  const gestureFor = (
+    info: { x?: number; y?: number },
+    event: {
+      offsetCenter?: { x: number; y: number };
+      srcEvent?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean };
+    }
+  ): DigitalTwinPoleGesture => ({
+    additive: Boolean(
+      event.srcEvent?.ctrlKey ||
+        event.srcEvent?.metaKey ||
+        event.srcEvent?.shiftKey
+    ),
+    screen: [
+      event.offsetCenter?.x ?? info.x ?? 0,
+      event.offsetCenter?.y ?? info.y ?? 0,
+    ],
   });
+  const poleEventHandlers: Pick<
+    ScenegraphLayerProps<DigitalTwinPowerPole>,
+    "onHover" | "onClick" | "onDragStart" | "onDrag" | "onDragEnd"
+  > = {
+    onHover: (info) => {
+      interaction?.onHover?.(info.picked ? info.object : null);
+      return Boolean(info.picked);
+    },
+    onClick: (info, event) => {
+      if (!info.object) return false;
+      interaction?.onSelect?.(info.object, gestureFor(info, event));
+      return true;
+    },
+    onDragStart: (info, event) => {
+      if (!info.object) return false;
+      interaction?.onDragStart?.(info.object, gestureFor(info, event));
+      return true;
+    },
+    onDrag: (info, event) => {
+      if (!info.object) return false;
+      interaction?.onDrag?.(info.object, gestureFor(info, event));
+      return true;
+    },
+    onDragEnd: (info, event) => {
+      if (!info.object) return false;
+      interaction?.onDragEnd?.(info.object, gestureFor(info, event));
+      return true;
+    },
+  };
+  const poleInteractionColor = (pole: DigitalTwinPowerPole) =>
+    interaction?.selectedPoleIds.has(pole.id)
+      ? ([245, 158, 11, 255] as const)
+      : interaction?.hoveredPoleId === pole.id
+        ? ([96, 210, 255, 255] as const)
+        : ([255, 255, 255, 255] as const);
+  const interactionUpdateTrigger = [
+    interaction?.hoveredPoleId,
+    ...(interaction?.selectedPoleIds ?? []),
+  ];
   return [
     new PathLayer<DigitalTwinConductorPath>({
       id: "digital-twin-power-line-conductors",
@@ -191,7 +332,47 @@ export function createDigitalTwinPowerLineLayers(
       getPosition: (pole) => pole.position,
       getOrientation: (pole) => [0, pole.modelYaw, 90],
       getScale: (pole) => pole.scale,
-      pickable: false,
+      getColor: poleInteractionColor,
+      updateTriggers: {
+        getColor: interactionUpdateTrigger,
+      },
+      pickable: true,
+      autoHighlight: true,
+      highlightColor: [96, 210, 255, 96],
+      ...poleEventHandlers,
+    }),
+    new ScatterplotLayer<DigitalTwinPowerPole>({
+      id: "digital-twin-power-line-pole-pick-halos",
+      data: network.poles,
+      getPosition: (pole) => pole.position,
+      getRadius: 10,
+      radiusUnits: "pixels",
+      radiusMinPixels: 10,
+      radiusMaxPixels: 14,
+      filled: true,
+      stroked: true,
+      getFillColor: (pole) => {
+        const [red, green, blue] = poleInteractionColor(pole);
+        return interaction?.selectedPoleIds.has(pole.id) ||
+          interaction?.hoveredPoleId === pole.id
+          ? [red, green, blue, 28]
+          : [0, 0, 0, 0];
+      },
+      getLineColor: (pole) => {
+        const color = poleInteractionColor(pole);
+        return interaction?.selectedPoleIds.has(pole.id) ||
+          interaction?.hoveredPoleId === pole.id
+          ? color
+          : [0, 0, 0, 0];
+      },
+      getLineWidth: 2,
+      lineWidthUnits: "pixels",
+      updateTriggers: {
+        getFillColor: interactionUpdateTrigger,
+        getLineColor: interactionUpdateTrigger,
+      },
+      pickable: true,
+      ...poleEventHandlers,
     }),
   ];
 }

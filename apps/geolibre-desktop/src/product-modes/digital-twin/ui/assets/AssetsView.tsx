@@ -24,14 +24,22 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   TooltipProvider,
   surfaceThemeClassName,
   type DigitalTwinRegion,
   type SurfaceTheme,
 } from "@geolibre/ui";
 import {
+  Activity,
   Cable,
   ChevronRight,
+  CircleAlert,
+  CloudSun,
+  Database,
   FileText,
   MapPin,
   Plus,
@@ -41,6 +49,7 @@ import {
   TriangleAlert,
   Trash2,
   Upload,
+  Wind,
   X,
 } from "lucide-react";
 import {
@@ -252,6 +261,43 @@ function PropertyRows({
         </div>
       ))}
     </dl>
+  );
+}
+
+function AssetSectionHeading({
+  children,
+  icon,
+}: {
+  children: ReactNode;
+  icon?: ReactNode;
+}) {
+  return (
+    <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      {icon}
+      {children}
+    </h3>
+  );
+}
+
+function AssetMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3">
+      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+        {icon}
+        {label}
+      </div>
+      <p className="mt-2 text-lg font-semibold tabular-nums text-foreground">
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -641,159 +687,372 @@ function AssetProperties({
       setDeleting(false);
     }
   };
-  const geometryRows =
-    asset.kind === "power_line"
-      ? [
-          { label: "Vertices", value: asset.coordinates.length },
-          {
-            label: "Start",
-            value: `${asset.coordinates[0]?.lat}, ${asset.coordinates[0]?.lon}`,
-          },
-          {
-            label: "End",
-            value: `${asset.coordinates.at(-1)?.lat}, ${
-              asset.coordinates.at(-1)?.lon
-            }`,
-          },
-          {
-            label: "Support elevations",
-            value: `${asset.coordinates[0].elevationM.toLocaleString()}–${asset.coordinates[1].elevationM.toLocaleString()} m`,
-          },
-          ...(asset.conductor
-            ? [
-                {
-                  label: "Span length",
-                  value: `${asset.conductor.spanLengthM.toLocaleString()} m`,
-                },
-                {
-                  label: "Conductor diameter",
-                  value: `${(
-                    asset.conductor.conductorDiameterM * 1_000
-                  ).toLocaleString()} mm`,
-                },
-                {
-                  label: "Horizontal tension",
-                  value: `${asset.conductor.horizontalTensionN.toLocaleString()} N`,
-                },
-                {
-                  label: "Static sag",
-                  value:
-                    asset.conductor.staticSagM === null
-                      ? "Not available"
-                      : `${asset.conductor.staticSagM.toLocaleString()} m`,
-                },
-              ]
-            : []),
-          ...(asset.latestPhysics
-            ? [
-                {
-                  label: "Latest physics",
-                  value:
-                    asset.latestPhysics.status === "succeeded"
-                      ? `${asset.latestPhysics.source.toUpperCase()} · tick ${asset.latestPhysics.tick}`
-                      : `Failed · tick ${asset.latestPhysics.tick}`,
-                },
-                ...(asset.latestPhysics.status === "succeeded"
-                  ? [
-                      {
-                        label: "Wind speed",
-                        value: `${asset.latestPhysics.windSpeedMps.toLocaleString()} m/s`,
-                      },
-                      {
-                        label: "Max displacement",
-                        value: `${asset.latestPhysics.maxDisplacementM.toLocaleString()} m`,
-                      },
-                    ]
-                  : []),
-              ]
-            : []),
-        ]
-      : [
-          {
-            label: "Location",
-            value: `${asset.location.lat}, ${asset.location.lon}`,
-          },
-          {
-            label: "Height",
-            value:
-              asset.heightM === null ? "Not supplied" : `${asset.heightM} m`,
-          },
-          {
-            label: "Canopy radius",
-            value:
-              asset.canopyRadiusM === null
-                ? "Not supplied"
-                : `${asset.canopyRadiusM} m`,
-          },
-          {
-            label: "Source reference",
-            value: asset.sourceRef ?? "Not supplied",
-          },
-        ];
   const Icon = asset.kind === "power_line" ? Cable : TreePine;
+  const physics = asset.kind === "power_line" ? asset.latestPhysics : null;
   return (
     <aside
       aria-label={`Properties for ${assetName(asset)}`}
       className="flex min-h-0 w-[420px] shrink-0 flex-col border-l border-separator bg-card"
     >
-      <header className="p-5">
+      <header className="p-4">
         <div className="flex items-start gap-3">
-          <span className="grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Icon className="size-5" />
+          <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+            <Icon aria-hidden="true" className="size-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <Badge variant="outline">API asset</Badge>
-            <h2 className="mt-2 truncate text-lg font-semibold">
-              {assetName(asset)}
-            </h2>
-            <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-              {asset.assetId}
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="truncate text-base font-semibold">
+                {assetName(asset)}
+              </h2>
+              <Badge variant="outline">{kindLabel(asset.kind)}</Badge>
+            </div>
+            <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+              {asset.assetId} · {regionName}
             </p>
           </div>
           <Button
             aria-label="Close properties"
+            className="-mr-2 -mt-2 size-11 shrink-0"
             onClick={onClose}
             size="icon"
             variant="ghost"
           >
-            <X />
+            <X aria-hidden="true" />
           </Button>
         </div>
-        <Button className="mt-4 w-full" onClick={onEdit}>
+        <Button className="mt-4 min-h-11 w-full" onClick={onEdit}>
           Edit properties
         </Button>
       </header>
       <Separator />
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-6 p-5">
-          <section>
-            <h3 className="mb-2 text-sm font-semibold">Catalog identity</h3>
-            <PropertyRows
-              rows={[
-                { label: "Type", value: kindLabel(asset.kind) },
-                { label: "Region", value: regionName },
-                { label: "Stable ID", value: asset.assetId, mono: true },
-              ]}
-            />
-          </section>
-          <Separator />
-          <section>
-            <h3 className="mb-2 text-sm font-semibold">
-              Geometry and attributes
-            </h3>
-            <PropertyRows rows={geometryRows} />
-          </section>
-          {error ? (
-            <p className="text-sm text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
+      <Tabs className="min-h-0 flex-1 gap-0" defaultValue="properties">
+        <div className="border-b px-4 py-2">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="properties">Properties</TabsTrigger>
+            <TabsTrigger value="environment">Environment</TabsTrigger>
+            <TabsTrigger value="lineage">Lineage</TabsTrigger>
+          </TabsList>
         </div>
-      </ScrollArea>
+        <ScrollArea className="min-h-0 flex-1">
+          <TabsContent className="space-y-5 p-4" value="properties">
+            <section>
+              <AssetSectionHeading>Identity</AssetSectionHeading>
+              <PropertyRows
+                rows={[
+                  { label: "Asset ID", value: asset.assetId, mono: true },
+                  { label: "Region", value: regionName },
+                  { label: "Asset type", value: kindLabel(asset.kind) },
+                ]}
+              />
+            </section>
+
+            {asset.kind === "power_line" ? (
+              <>
+                <section>
+                  <AssetSectionHeading
+                    icon={<MapPin aria-hidden="true" className="size-3.5" />}
+                  >
+                    Support positions
+                  </AssetSectionHeading>
+                  <PropertyRows
+                    rows={[
+                      {
+                        label: "Start",
+                        value: `${asset.coordinates[0].lat.toFixed(
+                          6
+                        )}°, ${asset.coordinates[0].lon.toFixed(6)}°`,
+                      },
+                      {
+                        label: "Start elevation",
+                        value: `${asset.coordinates[0].elevationM.toLocaleString()} m`,
+                      },
+                      {
+                        label: "End",
+                        value: `${asset.coordinates[1].lat.toFixed(
+                          6
+                        )}°, ${asset.coordinates[1].lon.toFixed(6)}°`,
+                      },
+                      {
+                        label: "End elevation",
+                        value: `${asset.coordinates[1].elevationM.toLocaleString()} m`,
+                      },
+                    ]}
+                  />
+                </section>
+                <section>
+                  <AssetSectionHeading
+                    icon={<Cable aria-hidden="true" className="size-3.5" />}
+                  >
+                    Conductor
+                  </AssetSectionHeading>
+                  {asset.conductor ? (
+                    <PropertyRows
+                      rows={[
+                        {
+                          label: "Span length",
+                          value: `${asset.conductor.spanLengthM.toLocaleString()} m`,
+                        },
+                        {
+                          label: "Diameter",
+                          value: `${(
+                            asset.conductor.conductorDiameterM * 1_000
+                          ).toLocaleString()} mm`,
+                        },
+                        {
+                          label: "Mass",
+                          value: `${asset.conductor.massPerMeterKgM.toLocaleString()} kg/m`,
+                        },
+                        {
+                          label: "Horizontal tension",
+                          value: `${asset.conductor.horizontalTensionN.toLocaleString()} N`,
+                        },
+                        {
+                          label: "Static sag",
+                          value:
+                            asset.conductor.staticSagM === null
+                              ? "Not available"
+                              : `${asset.conductor.staticSagM.toLocaleString()} m`,
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <p className="mt-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                      Operational conductor properties are not available yet.
+                    </p>
+                  )}
+                </section>
+              </>
+            ) : (
+              <>
+                <section>
+                  <AssetSectionHeading
+                    icon={<MapPin aria-hidden="true" className="size-3.5" />}
+                  >
+                    Position
+                  </AssetSectionHeading>
+                  <PropertyRows
+                    rows={[
+                      {
+                        label: "Latitude",
+                        value: `${asset.location.lat.toFixed(6)}°`,
+                      },
+                      {
+                        label: "Longitude",
+                        value: `${asset.location.lon.toFixed(6)}°`,
+                      },
+                    ]}
+                  />
+                </section>
+                <section>
+                  <AssetSectionHeading>Vegetation</AssetSectionHeading>
+                  <PropertyRows
+                    rows={[
+                      {
+                        label: "Species",
+                        value: asset.species?.replaceAll("_", " ") ?? "Not supplied",
+                      },
+                      {
+                        label: "Height",
+                        value:
+                          asset.heightM === null
+                            ? "Not supplied"
+                            : `${asset.heightM} m`,
+                      },
+                      {
+                        label: "Canopy radius",
+                        value:
+                          asset.canopyRadiusM === null
+                            ? "Not supplied"
+                            : `${asset.canopyRadiusM} m`,
+                      },
+                    ]}
+                  />
+                </section>
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent className="space-y-5 p-4" value="environment">
+            {physics ? (
+              <>
+                <section>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <AssetSectionHeading>
+                        Latest Engine result
+                      </AssetSectionHeading>
+                      <p className="mt-1 text-sm font-medium text-foreground">
+                        {assetName(asset)}
+                      </p>
+                    </div>
+                    <Badge
+                      className="uppercase tracking-[0.06em]"
+                      variant={
+                        physics.status === "succeeded"
+                          ? "secondary"
+                          : "destructive"
+                      }
+                    >
+                      {physics.status === "succeeded" ? (
+                        <Activity aria-hidden="true" />
+                      ) : (
+                        <CircleAlert aria-hidden="true" />
+                      )}
+                      {physics.source}
+                    </Badge>
+                  </div>
+                  {physics.status === "succeeded" ? (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <AssetMetric
+                        icon={<Wind aria-hidden="true" className="size-3.5" />}
+                        label="Wind speed"
+                        value={`${physics.windSpeedMps.toFixed(1)} m/s`}
+                      />
+                      <AssetMetric
+                        icon={
+                          <Activity aria-hidden="true" className="size-3.5" />
+                        }
+                        label="Max movement"
+                        value={`${physics.maxDisplacementM.toFixed(2)} m`}
+                      />
+                    </div>
+                  ) : (
+                    <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                      The latest solver result failed: {physics.failureKind.replaceAll(
+                        "_",
+                        " "
+                      )}.
+                    </p>
+                  )}
+                </section>
+                <section>
+                  <AssetSectionHeading>Result details</AssetSectionHeading>
+                  <PropertyRows
+                    rows={[
+                      { label: "Completed tick", value: physics.tick },
+                      ...(physics.status === "succeeded"
+                        ? [
+                            {
+                              label: "Midspan movement",
+                              value: `${physics.midspanDisplacementM.toFixed(
+                                2
+                              )} m`,
+                            },
+                            {
+                              label: "Max position",
+                              value: `${physics.maxDisplacementPositionM.toFixed(
+                                2
+                              )} m`,
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </section>
+              </>
+            ) : (
+              <div className="rounded-lg border border-dashed p-5 text-center">
+                <CloudSun
+                  aria-hidden="true"
+                  className="mx-auto size-5 text-muted-foreground"
+                />
+                <p className="mt-2 text-sm font-medium text-foreground">
+                  No completed environment result
+                </p>
+                <p className="mx-auto mt-1 max-w-[32ch] text-xs leading-relaxed text-muted-foreground">
+                  {asset.kind === "power_line"
+                    ? "Run a scenario to calculate wind response for this conductor span."
+                    : "Environmental calculations are not available for this tree asset."}
+                </p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent className="space-y-5 p-4" value="lineage">
+            <section>
+              <AssetSectionHeading
+                icon={<Database aria-hidden="true" className="size-3.5" />}
+              >
+                Digital Twin Engine
+              </AssetSectionHeading>
+              <PropertyRows
+                rows={[
+                  {
+                    label: "Resource",
+                    value: `/api/v1/regions/${asset.regionId}/assets/${asset.assetId}`,
+                    mono: true,
+                  },
+                  {
+                    label: "Geometry model",
+                    value:
+                      asset.kind === "power_line"
+                        ? "Conductor span endpoints"
+                        : "Point asset",
+                  },
+                  {
+                    label: "Source of truth",
+                    value: "Versioned Engine state",
+                  },
+                ]}
+              />
+            </section>
+            {physics ? (
+              <section>
+                <AssetSectionHeading>
+                  Calculation lineage
+                </AssetSectionHeading>
+                <PropertyRows
+                  rows={[
+                    { label: "Weather version", value: physics.weatherVersion },
+                    { label: "Weather source", value: physics.weatherSourceRef },
+                    { label: "Model", value: physics.modelVersion },
+                    {
+                      label: "Solver",
+                      value: physics.solverVersion ?? physics.source.toUpperCase(),
+                    },
+                    {
+                      label: "Line snapshot",
+                      value: physics.lineSnapshot,
+                    },
+                    ...(physics.surrogateConfidence === null
+                      ? []
+                      : [
+                          {
+                            label: "Model confidence",
+                            value: `${Math.round(
+                              physics.surrogateConfidence * 100
+                            )}%`,
+                          },
+                        ]),
+                  ]}
+                />
+              </section>
+            ) : null}
+            {asset.kind === "tree" ? (
+              <section>
+                <AssetSectionHeading>Source record</AssetSectionHeading>
+                <PropertyRows
+                  rows={[
+                    {
+                      label: "Source reference",
+                      value: asset.sourceRef ?? "Not supplied",
+                    },
+                  ]}
+                />
+              </section>
+            ) : null}
+          </TabsContent>
+        </ScrollArea>
+      </Tabs>
       <Separator />
       <footer className="p-3">
+        {error ? (
+          <p className="mb-2 px-2 text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
         <Button
-          className="w-full text-destructive hover:text-destructive"
+          className="min-h-11 w-full text-destructive hover:text-destructive"
           disabled={deleting}
           onClick={() => void remove()}
           variant="ghost"

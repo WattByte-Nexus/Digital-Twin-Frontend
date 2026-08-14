@@ -1,5 +1,6 @@
+import { WebMercatorViewport, type Viewport } from "@deck.gl/core";
 import { Tile3DLayer } from "@deck.gl/geo-layers";
-import { PointCloudLayer } from "@deck.gl/layers";
+import { PointCloudLayer, type PointCloudLayerProps } from "@deck.gl/layers";
 import type { DigitalTwinReadyPointCloudDataset } from "../../lib/digital-twin-point-cloud";
 
 export const MISSING_POINT_RGB_VERTEX_INJECTION = `
@@ -8,9 +9,155 @@ export const MISSING_POINT_RGB_VERTEX_INJECTION = `
   }
 `;
 
+interface PointCloudTileProps {
+  tile?: {
+    extras?: {
+      samplingSpacingMeters?: unknown;
+    };
+  };
+}
+
+type DigitalTwinPointCloudLayerProps = PointCloudLayerProps & PointCloudTileProps;
+
+/**
+ * LiDAR surfel sizing controls.
+ *
+ * `radiusToSpacingRatio` changes coverage at every zoom. The soft cap keeps
+ * medium views crisp; beyond it, projected radii ease toward the close-range
+ * maximum so native leaves remain legible without returning to giant discs.
+ * Keep all values positive and `closeRangeMaxRadiusPixels` above the soft cap.
+ */
+export const POINT_CLOUD_SURFEL_SIZING = {
+  radiusToSpacingRatio: 0.75,
+  softCapRadiusPixels: 2,
+  closeRangeMaxRadiusPixels: 3,
+} as const;
+
+export const MAX_POINT_RADIUS_VERTEX_INJECTION = `
+  // PointCloudLayer's covering triangle has twice the rendered circle radius.
+  const float softCapRadiusPixels = ${POINT_CLOUD_SURFEL_SIZING.softCapRadiusPixels.toFixed(1)};
+  const float closeRangeMaxRadiusPixels = ${POINT_CLOUD_SURFEL_SIZING.closeRangeMaxRadiusPixels.toFixed(1)};
+  float pointTriangleRadiusPixels = length(size.xy);
+  float pointRadiusPixels = pointTriangleRadiusPixels * 0.5;
+  if (pointRadiusPixels > softCapRadiusPixels) {
+    float compressionRangePixels = closeRangeMaxRadiusPixels - softCapRadiusPixels;
+    float compressedRadiusPixels = softCapRadiusPixels + compressionRangePixels *
+      (1.0 - exp(-(pointRadiusPixels - softCapRadiusPixels) / compressionRangePixels));
+    size.xy *= compressedRadiusPixels / pointRadiusPixels;
+  }
+`;
+
+interface DigitalTwinPointCloudTileLayerProps {
+  getTraversalElevationMeters?: () => number | undefined;
+  beforeId?: string;
+}
+
+export function createDigitalTwinPointCloudTraversalViewport(
+  renderViewport: Viewport,
+  elevationMeters: number | undefined
+): Viewport {
+  if (
+    !(renderViewport instanceof WebMercatorViewport) ||
+    typeof elevationMeters !== "number" ||
+    !Number.isFinite(elevationMeters)
+  ) {
+    return renderViewport;
+  }
+
+  return new WebMercatorViewport({
+    id: renderViewport.id,
+    x: renderViewport.x,
+    y: renderViewport.y,
+    width: renderViewport.width,
+    height: renderViewport.height,
+    longitude: renderViewport.longitude,
+    latitude: renderViewport.latitude,
+    zoom: renderViewport.zoom,
+    pitch: renderViewport.pitch,
+    bearing: renderViewport.bearing,
+    position: [
+      renderViewport.position[0] ?? 0,
+      renderViewport.position[1] ?? 0,
+      elevationMeters,
+    ],
+    padding: renderViewport.padding,
+    orthographic: renderViewport.orthographic,
+    fovy: renderViewport.fovy,
+  });
+}
+
+/** Use an elevated viewport for tile selection without changing render projection. */
+export class DigitalTwinPointCloudTileLayer extends Tile3DLayer<
+  unknown,
+  DigitalTwinPointCloudTileLayerProps
+> {
+  static layerName = "DigitalTwinPointCloudTileLayer";
+
+  override activateViewport(renderViewport: Viewport): void {
+    this.internalState!.viewport = renderViewport;
+    const traversalViewport = createDigitalTwinPointCloudTraversalViewport(
+      renderViewport,
+      this.props.getTraversalElevationMeters?.()
+    );
+    const activeViewports = this.state.activeViewports as Record<string, Viewport>;
+    const lastUpdatedViewports = this.state.lastUpdatedViewports as Record<
+      string,
+      Viewport
+    > | null;
+
+    activeViewports[renderViewport.id] = traversalViewport;
+    const lastViewport = lastUpdatedViewports?.[renderViewport.id];
+    if (!lastViewport || !traversalViewport.equals(lastViewport)) {
+      this.setChangeFlags({ viewportChanged: true });
+      this.setNeedsUpdate();
+    }
+  }
+}
+
+function pointRadiusMetersForSpacing(spacingMeters: number): number {
+  return spacingMeters * POINT_CLOUD_SURFEL_SIZING.radiusToSpacingRatio;
+}
+
+function pointSizingForTile(
+  propObjects: Partial<DigitalTwinPointCloudLayerProps>[]
+): number | undefined {
+  let fallbackRadius: number | undefined;
+  let samplingSpacingMeters: number | undefined;
+
+  for (const props of propObjects) {
+    if (
+      typeof props.pointSize === "number" &&
+      Number.isFinite(props.pointSize) &&
+      props.pointSize > 0
+    ) {
+      fallbackRadius = props.pointSize;
+    }
+    const tileSpacing = props.tile?.extras?.samplingSpacingMeters;
+    if (
+      typeof tileSpacing === "number" &&
+      Number.isFinite(tileSpacing) &&
+      tileSpacing > 0
+    ) {
+      samplingSpacingMeters = tileSpacing;
+    }
+  }
+
+  return samplingSpacingMeters === undefined
+    ? fallbackRadius
+    : pointRadiusMetersForSpacing(samplingSpacingMeters);
+}
+
 /** Preserve source RGB, but keep malformed/missing zero-RGB tiles visible. */
-export class VisibleRgbPointCloudLayer extends PointCloudLayer {
+export class VisibleRgbPointCloudLayer extends PointCloudLayer<
+  unknown,
+  PointCloudTileProps
+> {
   static layerName = "VisibleRgbPointCloudLayer";
+
+  constructor(...propObjects: Partial<DigitalTwinPointCloudLayerProps>[]) {
+    const pointRadius = pointSizingForTile(propObjects);
+    super(...propObjects, pointRadius === undefined ? {} : { pointSize: pointRadius });
+  }
 
   override getShaders() {
     const shaders = super.getShaders();
@@ -18,11 +165,11 @@ export class VisibleRgbPointCloudLayer extends PointCloudLayer {
       ...shaders,
       inject: {
         ...shaders.inject,
+        "vs:DECKGL_FILTER_SIZE": MAX_POINT_RADIUS_VERTEX_INJECTION,
         "vs:DECKGL_FILTER_COLOR": MISSING_POINT_RGB_VERTEX_INJECTION,
       },
     };
   }
-
 }
 
 export const GAUSSIAN_SURFEL_FRAGMENT_INJECTION = `
@@ -60,9 +207,9 @@ export class GaussianSurfelPointCloudLayer extends VisibleRgbPointCloudLayer {
 
 export const POINT_CLOUD_TILESET_LOAD_OPTIONS = {
   tileset: {
-    // Two pixels removes coarse tile patches at close range. Request and memory
+    // One pixel removes coarse tile patches at close range. Request and memory
     // caps below keep that refinement from monopolizing the render thread.
-    maximumScreenSpaceError: 2,
+    maximumScreenSpaceError: 1,
     maximumMemoryUsage: 512,
     // Keep refinement deterministic. The adaptive loader raises this threshold
     // as the cache fills and can otherwise strand a close view at a coarse LOD.
@@ -108,7 +255,6 @@ interface SelectedPointCloudTile {
 interface DigitalTwinPointCloudLayerCallbacks {
   onError: (error: Error) => void;
   onReady?: () => void;
-  onSurfaceReferenceElevation?: (elevationMeters: number) => void;
   onDiagnostics?: (snapshot: DigitalTwinPointCloudDiagnostics) => void;
   renderMode?: DigitalTwinPointCloudRenderMode;
   beforeId?: string;
@@ -126,14 +272,14 @@ export function createDigitalTwinPointCloudLayer(
   {
     onError,
     onReady,
-    onSurfaceReferenceElevation,
     onDiagnostics,
     renderMode = "opaque",
     beforeId,
   }: DigitalTwinPointCloudLayerCallbacks
-): Tile3DLayer {
+): DigitalTwinPointCloudTileLayer {
   let visiblePointsReported = false;
   let tileset: PointCloudTilesetDiagnosticsSource | null = null;
+  let traversalElevationMeters: number | undefined;
 
   const reportError = (error: Error) => {
     if (!visiblePointsReported) onError(error);
@@ -176,13 +322,14 @@ export function createDigitalTwinPointCloudLayer(
     return selectedTiles;
   };
 
-  return new Tile3DLayer({
+  return new DigitalTwinPointCloudTileLayer({
     id: `digital-twin-point-cloud-${dataset.datasetId}`,
     data: dataset.tilesetUrl,
-    // Tile3DLayer defines pointSize in pixels. Keeping previews at a one-pixel
-    // radius prevents coarse hierarchy points from merging into opaque,
-    // tile-shaped sheets while native leaves still resolve at close zoom.
-    pointSize: 1,
+    getTraversalElevationMeters: () => traversalElevationMeters,
+    // A leaf records zero geometric error, so use the dataset's native spacing
+    // as its world-space coverage. Preview tiles replace this radius with their
+    // own sampling spacing; the vertex hook caps only the projected footprint.
+    pointSize: pointRadiusMetersForSpacing(dataset.minimumSpacingMeters),
     pickable: false,
     operation: "draw",
     beforeId,
@@ -199,7 +346,7 @@ export function createDigitalTwinPointCloudLayer(
           renderMode === "gaussian"
             ? GaussianSurfelPointCloudLayer
             : VisibleRgbPointCloudLayer,
-        sizeUnits: "pixels",
+        sizeUnits: "meters",
       },
     },
     onTilesetLoad: (loadedTileset) => {
@@ -209,7 +356,7 @@ export function createDigitalTwinPointCloudLayer(
         typeof referenceElevation === "number" &&
         Number.isFinite(referenceElevation)
       ) {
-        onSurfaceReferenceElevation?.(referenceElevation);
+        traversalElevationMeters = referenceElevation;
       }
       reportDiagnostics();
     },

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MapView } from "@deck.gl/core";
 import { PathLayer } from "@deck.gl/layers";
 import {
   composeDigitalTwinSurfaceLayers,
@@ -11,15 +10,11 @@ import {
   digitalTwinSurfaceCoordinateKey,
   sampleDigitalTwinSurfaceElevations,
 } from "../packages/map/src/digital-twin-surface-state";
-import {
-  createDigitalTwinSurfaceMapView,
-  resolveDigitalTwinSurfaceViewElevation,
-} from "../packages/map/src/digital-twin-surface-view";
 import { createDigitalTwinMapSurfaceLayers } from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-map-module";
 
 test("the product map module places point clouds on the shared surface", () => {
   const groups = createDigitalTwinMapSurfaceLayers({
-    powerLines: [],
+    powerLineNetwork: undefined,
     pointCloud: {
       dataset: {
         datasetId: "golden-lidar",
@@ -158,69 +153,4 @@ test("shared-surface samples are unexaggerated and complete", () => {
     ]),
     null
   );
-});
-
-test("deck traversal uses terrain elevation and falls back to the dataset", () => {
-  let mapElevation = 0;
-  const elevationSource = {
-    getMapCenterElevation: () => mapElevation,
-    getSurfaceReferenceElevation: () => 1_617.69,
-  };
-
-  assert.equal(resolveDigitalTwinSurfaceViewElevation(elevationSource), 1_617.69);
-
-  const view = createDigitalTwinSurfaceMapView(elevationSource);
-  const baseViewState = {
-    longitude: -105.2705,
-    latitude: 40.015,
-    zoom: 21.5,
-    pitch: 60,
-  };
-  assert.deepEqual(view.filterViewState(baseViewState).position, [
-    0,
-    0,
-    1_617.69,
-  ]);
-
-  mapElevation = 1_642.25;
-  const terrainViewState = view.filterViewState(baseViewState);
-  assert.equal(terrainViewState.zoom, 21.5);
-  assert.deepEqual(terrainViewState.position, [0, 0, 1_642.25]);
-});
-
-test("the corrected deck camera approaches elevated point-cloud leaves", () => {
-  const viewState = {
-    longitude: -105.2705,
-    latitude: 40.015,
-    zoom: 21.5,
-    pitch: 60,
-    bearing: 0,
-  };
-  const dataPosition = [-105.2705, 40.015, 1_617.69];
-  const seaLevelViewport = new MapView({ id: "mapbox" }).makeViewport({
-    width: 900,
-    height: 896,
-    viewState,
-  });
-  const surfaceViewport = createDigitalTwinSurfaceMapView({
-    getMapCenterElevation: () => 0,
-    getSurfaceReferenceElevation: () => 1_617.69,
-  }).makeViewport({ width: 900, height: 896, viewState });
-
-  assert.ok(seaLevelViewport);
-  assert.ok(surfaceViewport);
-  const seaLevelPoint = seaLevelViewport.projectPosition(dataPosition);
-  const surfacePoint = surfaceViewport.projectPosition(dataPosition);
-  const distance = (camera: number[], point: number[]) =>
-    Math.hypot(...camera.map((value, index) => value - point[index]));
-
-  const incorrectDistance = distance(
-    seaLevelViewport.cameraPosition,
-    seaLevelPoint
-  );
-  const correctedDistance = distance(
-    surfaceViewport.cameraPosition,
-    surfacePoint
-  );
-  assert.ok(correctedDistance * 50 < incorrectDistance);
 });

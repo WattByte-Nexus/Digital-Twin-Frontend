@@ -222,6 +222,21 @@ describe("Digital Twin frontend composition", () => {
     assert.match(assetsViewSource, /deleteDigitalTwinAsset/);
     assert.match(assetsViewSource, /Add assets/);
     assert.match(assetsViewSource, /Edit properties/);
+    assert.match(
+      assetsViewSource,
+      /<TabsTrigger value="properties">Properties<\/TabsTrigger>/
+    );
+    assert.match(
+      assetsViewSource,
+      /<TabsTrigger value="environment">Environment<\/TabsTrigger>/
+    );
+    assert.match(
+      assetsViewSource,
+      /<TabsTrigger value="lineage">Lineage<\/TabsTrigger>/
+    );
+    assert.match(assetsViewSource, /Latest Engine result/);
+    assert.match(assetsViewSource, /physics\.weatherVersion/);
+    assert.match(assetsViewSource, /physics\.maxDisplacementM/);
     assert.match(assetsViewSource, /<FilterSearch/);
     assert.match(assetsViewSource, /<Table>/);
     assert.match(assetsViewSource, /sort\("region"\)/);
@@ -260,12 +275,15 @@ describe("Digital Twin frontend composition", () => {
     );
   });
 
-  it("refines point clouds without turning coarse previews into solid sheets", () => {
-    assert.match(lidarSource, /maximumScreenSpaceError:\s*2/);
+  it("refines point clouds while keeping survey-spacing coverage bounded", () => {
+    assert.match(lidarSource, /maximumScreenSpaceError:\s*1/);
     assert.match(lidarSource, /maximumMemoryUsage:\s*512/);
     assert.match(lidarSource, /memoryAdjustedScreenSpaceError:\s*false/);
-    assert.match(lidarSource, /pointSize:\s*1/);
-    assert.match(lidarSource, /sizeUnits:\s*"pixels"/);
+    assert.match(lidarSource, /pointRadiusMetersForSpacing\(dataset\.minimumSpacingMeters\)/);
+    assert.match(lidarSource, /sizeUnits:\s*"meters"/);
+    assert.match(lidarSource, /softCapRadiusPixels:\s*2/);
+    assert.match(lidarSource, /closeRangeMaxRadiusPixels:\s*3/);
+    assert.match(lidarSource, /1\.0 - exp/);
     assert.match(workspaceSource, /missing RGB is shown in cyan/);
   });
 

@@ -20,11 +20,6 @@ export {
   type DigitalTwinSurfaceLayerGroup,
 } from "./digital-twin-surface-layers";
 export {
-  createDigitalTwinSurfaceMapView,
-  resolveDigitalTwinSurfaceViewElevation,
-  type DigitalTwinSurfaceViewElevationSource,
-} from "./digital-twin-surface-view";
-export {
   applyDigitalTwinSurfaceElevationState,
   digitalTwinSurfaceCoordinateKey,
   sampleDigitalTwinSurfaceElevations,

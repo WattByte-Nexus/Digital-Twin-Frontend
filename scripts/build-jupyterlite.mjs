@@ -5,13 +5,13 @@
 // (WASM) kernel — no server. The desktop (Tauri) build launches a real
 // JupyterLab server instead and does not use this output.
 //
-// This step needs the `jupyter lite` CLI (see
-// apps/geolibre-desktop/jupyterlite/requirements.txt:
-//   pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
-// ). It is intentionally **best-effort**: if the CLI is not installed, it logs a
-// warning and exits 0 so a Node-only `npm run build` still succeeds. When the
-// assets are absent the Notebook panel shows a "not built" message on web; run
-// this script (or install the deps) to enable it.
+// This step uses an installed `jupyter lite` CLI or asks uv to provide the
+// requirements from apps/geolibre-desktop/jupyterlite/requirements.txt in an
+// isolated environment. It is intentionally **best-effort**: if neither path is
+// available, it logs a warning and exits 0 so a Node-only `npm run build` still
+// succeeds. When the assets are absent the Notebook panel shows a "not built"
+// message on web; run this script after installing uv or the requirements to
+// enable it.
 //
 // Output: apps/geolibre-desktop/public/jupyterlite/  (git-ignored; Vite copies
 // public/ into dist/ at build time).
@@ -33,6 +33,11 @@ const notebookClientDest = resolve(contentsDir, "geolibre.py");
 const welcomeSrc = resolve(repoRoot, "backend/geolibre_server/notebook_examples/Welcome.ipynb");
 const welcomeDest = resolve(contentsDir, "Welcome.ipynb");
 const outputDir = resolve(repoRoot, "apps/geolibre-desktop/public/jupyterlite");
+const requirementsFile = resolve(liteDir, "requirements.txt");
+const uvEnvironment = {
+  ...process.env,
+  UV_CACHE_DIR: process.env.UV_CACHE_DIR ?? resolve(repoRoot, ".uv-cache"),
+};
 
 const isWin = process.platform === "win32";
 
@@ -61,19 +66,33 @@ if (onlyIfMissing && existsSync(resolve(outputDir, "lab", "index.html"))) {
   process.exit(0);
 }
 
-// Probe for the CLI. `jupyter lite --version` exits non-zero / ENOENT when the
-// jupyterlite-core package (or jupyter itself) is missing.
-const probe = spawnSync("jupyter", ["lite", "--version"], {
+// Prefer an already-installed CLI. When it is absent, uv can provide the build
+// dependencies in a cached, isolated environment without modifying the user's
+// system Python.
+let command = "jupyter";
+let commandPrefix = [];
+let probe = spawnSync(command, ["lite", "--version"], {
   cwd: repoRoot,
   shell: isWin,
   stdio: "ignore",
 });
 
 if (probe.status !== 0) {
+  command = "uv";
+  commandPrefix = ["run", "--with-requirements", requirementsFile, "--", "jupyter"];
+  probe = spawnSync(command, [...commandPrefix, "lite", "--version"], {
+    cwd: repoRoot,
+    env: uvEnvironment,
+    shell: isWin,
+    stdio: "inherit",
+  });
+}
+
+if (probe.status !== 0) {
   console.warn(
-    "[build-jupyterlite] `jupyter lite` is not available — skipping the " +
+    "[build-jupyterlite] neither `jupyter lite` nor `uv` is available — skipping the " +
       "JupyterLite build. The web Notebook panel will show a 'not built' " +
-      "message. To enable it, install the build deps:\n" +
+      "message. To enable it, install uv or install the build deps directly:\n" +
       "  pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt\n" +
       "then re-run `npm run build:jupyterlite`.",
   );
@@ -90,10 +109,21 @@ copyFileSync(welcomeSrc, welcomeDest);
 rmSync(outputDir, { recursive: true, force: true });
 
 const result = spawnSync(
-  "jupyter",
-  ["lite", "build", "--lite-dir", liteDir, "--contents", contentsDir, "--output-dir", outputDir],
+  command,
+  [
+    ...commandPrefix,
+    "lite",
+    "build",
+    "--lite-dir",
+    liteDir,
+    "--contents",
+    contentsDir,
+    "--output-dir",
+    outputDir,
+  ],
   {
     cwd: repoRoot,
+    env: command === "uv" ? uvEnvironment : process.env,
     shell: isWin,
     stdio: "inherit",
   },

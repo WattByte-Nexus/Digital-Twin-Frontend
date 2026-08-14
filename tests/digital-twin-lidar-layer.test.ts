@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { WebMercatorViewport } from "@deck.gl/core";
+import { PointCloudLayer } from "@deck.gl/layers";
 import {
+  createDigitalTwinPointCloudTraversalViewport,
   createDigitalTwinPointCloudLayer,
+  DigitalTwinPointCloudTileLayer,
   GAUSSIAN_SURFEL_FRAGMENT_INJECTION,
   GaussianSurfelPointCloudLayer,
   MISSING_POINT_RGB_VERTEX_INJECTION,
+  POINT_CLOUD_SURFEL_SIZING,
   VisibleRgbPointCloudLayer,
 } from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-lidar";
 import type { DigitalTwinReadyPointCloudDataset } from "../apps/geolibre-desktop/src/lib/digital-twin-point-cloud";
@@ -34,7 +39,13 @@ describe("Digital Twin LiDAR fusion layer", () => {
     assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.pointClouds, true);
   });
 
-  it("keeps coarse LOD previews sparse instead of painting tile-shaped sheets", () => {
+  it("keeps point coverage tied to survey spacing without moving geometry with the camera", (context) => {
+    context.mock.method(PointCloudLayer.prototype, "getShaders", () => ({
+      vs: "",
+      fs: "",
+      modules: [],
+      inject: {},
+    }));
     const layer = createDigitalTwinPointCloudLayer(DATASET, {
       beforeId: "digital-twin-reference-road-labels",
       onError: () => {},
@@ -43,10 +54,10 @@ describe("Digital Twin LiDAR fusion layer", () => {
 
     assert.equal(layer.props.id, "digital-twin-point-cloud-golden-lidar");
     assert.equal(layer.props.data, DATASET.tilesetUrl);
-    assert.equal(layer.props.pointSize, 1);
+    assert.equal(layer.props.pointSize, 0.375);
     assert.equal(layer.props.pickable, false);
     assert.equal(layer.props.operation, "draw");
-    assert.equal(layer.props.loadOptions?.tileset?.maximumScreenSpaceError, 2);
+    assert.equal(layer.props.loadOptions?.tileset?.maximumScreenSpaceError, 1);
     assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 512);
     assert.equal(layer.props.loadOptions?.tileset?.maxRequests, 8);
     assert.equal(layer.props.loadOptions?.tileset?.debounceTime, 100);
@@ -60,7 +71,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
       layer.props._subLayerProps?.pointcloud?.type,
       VisibleRgbPointCloudLayer
     );
-    assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "pixels");
+    assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "meters");
     assert.equal(layer.props.beforeId, "digital-twin-reference-road-labels");
     assert.match(
       MISSING_POINT_RGB_VERTEX_INJECTION,
@@ -70,6 +81,75 @@ describe("Digital Twin LiDAR fusion layer", () => {
       MISSING_POINT_RGB_VERTEX_INJECTION,
       /vec4\(0\.22, 0\.74, 0\.97, 0\.90\)/
     );
+    const shaders = new VisibleRgbPointCloudLayer({ id: "coverage-test", data: [] })
+      .getShaders();
+    assert.match(
+      shaders.inject?.["vs:DECKGL_FILTER_SIZE"] ?? "",
+      /1\.0 - exp/
+    );
+    assert.deepEqual(POINT_CLOUD_SURFEL_SIZING, {
+      radiusToSpacingRatio: 0.75,
+      softCapRadiusPixels: 2,
+      closeRangeMaxRadiusPixels: 3,
+    });
+  });
+
+  it("scales each hierarchy tile without letting previews become giant discs", (context) => {
+    context.mock.method(PointCloudLayer.prototype, "getShaders", () => ({
+      vs: "",
+      fs: "",
+      modules: [],
+      inject: {},
+    }));
+    const nativeLeafRadiusMeters = 0.375;
+    const pointLayer = (samplingSpacingMeters: number) =>
+      new VisibleRgbPointCloudLayer(
+        {
+          id: `spacing-${samplingSpacingMeters}`,
+          data: [],
+          pointSize: nativeLeafRadiusMeters,
+        },
+        {
+          tile: { extras: { samplingSpacingMeters } },
+        } as never
+      );
+
+    assert.equal(pointLayer(2).props.pointSize, 1.5);
+    assert.equal(pointLayer(4).props.pointSize, 3);
+    assert.equal(pointLayer(0).props.pointSize, nativeLeafRadiusMeters);
+    assert.match(
+      pointLayer(2).getShaders().inject?.["vs:DECKGL_FILTER_SIZE"] ?? "",
+      /softCapRadiusPixels = 2\.0/
+    );
+    assert.match(
+      pointLayer(2).getShaders().inject?.["vs:DECKGL_FILTER_SIZE"] ?? "",
+      /closeRangeMaxRadiusPixels = 3\.0/
+    );
+  });
+
+  it("corrects LOD traversal without moving the interleaved render viewport", () => {
+    const renderViewport = new WebMercatorViewport({
+      id: "mapbox",
+      width: 900,
+      height: 896,
+      longitude: -105.2705,
+      latitude: 40.015,
+      zoom: 14,
+      pitch: 60,
+      bearing: 0,
+      position: [0, 0, 0],
+    });
+    const renderProjection = [...renderViewport.viewProjectionMatrix];
+
+    const traversalViewport = createDigitalTwinPointCloudTraversalViewport(
+      renderViewport,
+      1_617.69
+    );
+
+    assert.notEqual(traversalViewport, renderViewport);
+    assert.deepEqual(renderViewport.position, [0, 0, 0]);
+    assert.deepEqual(renderViewport.viewProjectionMatrix, renderProjection);
+    assert.deepEqual(traversalViewport.position, [0, 0, 1_617.69]);
   });
 
   it("enables Gaussian surfels only when the quality mode is requested", () => {
@@ -125,7 +205,6 @@ describe("Digital Twin LiDAR fusion layer", () => {
 
   it("exposes loaders.gl scene diagnostics at tile lifecycle boundaries", () => {
     const diagnostics: unknown[] = [];
-    const surfaceElevations: number[] = [];
     const counters = new Map([
       ["Tiles In Memory", 12],
       ["Points/Vertices", 842_000],
@@ -143,8 +222,6 @@ describe("Digital Twin LiDAR fusion layer", () => {
     const layer = createDigitalTwinPointCloudLayer(DATASET, {
       onError: () => {},
       onDiagnostics: (snapshot) => diagnostics.push(snapshot),
-      onSurfaceReferenceElevation: (elevation) =>
-        surfaceElevations.push(elevation),
     });
 
     layer.props.onTilesetLoad(tileset as never);
@@ -152,7 +229,8 @@ describe("Digital Twin LiDAR fusion layer", () => {
     layer.props.onTileUnload({} as never);
 
     assert.equal(diagnostics.length, 3);
-    assert.deepEqual(surfaceElevations, [1_617.69]);
+    assert.ok(layer instanceof DigitalTwinPointCloudTileLayer);
+    assert.equal(layer.props.getTraversalElevationMeters?.(), 1_617.69);
     assert.deepEqual(diagnostics.at(-1), {
       datasetId: "golden-lidar",
       residentTileCount: 12,

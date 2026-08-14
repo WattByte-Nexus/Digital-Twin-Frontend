@@ -184,6 +184,15 @@ export {
   type SimulationPopoverProps,
 } from "./components/simulation-popover";
 export {
+  PolePropertiesPopover,
+  type PolePropertiesAsset,
+  type PolePropertiesConnectedSpan,
+  type PolePropertiesLocation,
+  type PolePropertiesObservation,
+  type PolePropertiesPhysics,
+  type PolePropertiesPopoverProps,
+} from "./components/pole-properties-popover";
+export {
   WeatherSettingsPanel,
   WeatherSettingsFloatingPanel,
   WeatherSummaryBar,

@@ -2,12 +2,13 @@ import {
   DIGITAL_TWIN_SHARED_SURFACE,
   type DigitalTwinSurfaceLayerGroup,
 } from "@geolibre/map/digital-twin-surface-layers";
-import type { DigitalTwinPowerLineAsset } from "../../lib/digital-twin-assets";
 import type { DigitalTwinReadyPointCloudDataset } from "../../lib/digital-twin-point-cloud";
 import { createDigitalTwinPointCloudLayer } from "./digital-twin-lidar";
 import {
   createDigitalTwinPowerLineLayers,
   resolveDigitalTwinPowerPoleModelUrl,
+  type DigitalTwinPowerLineNetwork,
+  type DigitalTwinPowerPoleInteraction,
 } from "./digital-twin-power-line-rendering";
 import { DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID } from "./digital-twin-map-ids";
 
@@ -20,12 +21,11 @@ export interface DigitalTwinMapPointCloud {
   dataset: DigitalTwinReadyPointCloudDataset;
   onError: (error: Error) => void;
   onReady?: () => void;
-  onSurfaceReferenceElevation?: (elevationMeters: number) => void;
 }
 
 export interface DigitalTwinMapSurfaceLayerOptions {
-  powerLines: readonly DigitalTwinPowerLineAsset[];
-  powerLineSurfaceElevations?: ReadonlyMap<string, number>;
+  powerLineNetwork?: DigitalTwinPowerLineNetwork;
+  poleInteraction?: DigitalTwinPowerPoleInteraction;
   pointCloud?: DigitalTwinMapPointCloud;
 }
 
@@ -34,19 +34,22 @@ export interface DigitalTwinMapSurfaceLayerOptions {
  * the scene by adding another declared group on the shared world surface.
  */
 export function createDigitalTwinMapSurfaceLayers({
-  powerLines,
-  powerLineSurfaceElevations,
+  powerLineNetwork,
+  poleInteraction,
   pointCloud,
 }: DigitalTwinMapSurfaceLayerOptions): DigitalTwinSurfaceLayerGroup[] {
   const groups: DigitalTwinSurfaceLayerGroup[] = [];
 
-  if (powerLines.length > 0) {
+  if (
+    powerLineNetwork &&
+    (powerLineNetwork.conductors.length > 0 || powerLineNetwork.poles.length > 0)
+  ) {
     groups.push({
       id: DIGITAL_TWIN_POWER_LINE_SURFACE_GROUP_ID,
       surface: DIGITAL_TWIN_SHARED_SURFACE,
-      layers: createDigitalTwinPowerLineLayers(powerLines, {
+      layers: createDigitalTwinPowerLineLayers(powerLineNetwork, {
         modelUrl: resolveDigitalTwinPowerPoleModelUrl(),
-        surfaceElevations: powerLineSurfaceElevations,
+        interaction: poleInteraction,
       }),
     });
   }
@@ -60,8 +63,6 @@ export function createDigitalTwinMapSurfaceLayers({
           beforeId: DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
           onError: pointCloud.onError,
           onReady: pointCloud.onReady,
-          onSurfaceReferenceElevation:
-            pointCloud.onSurfaceReferenceElevation,
         }),
       ],
     });

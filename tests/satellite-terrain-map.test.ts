@@ -44,8 +44,13 @@ test("satellite terrain map includes its reference overlay in the initial style"
 test("satellite terrain map owns one portable interleaved deck surface", () => {
   assert.match(satelliteTerrainMapSource, /new MapboxOverlay\(/);
   assert.match(satelliteTerrainMapSource, /interleaved:\s*true/);
+  assert.doesNotMatch(satelliteTerrainMapSource, /\bviews:/);
   assert.match(satelliteTerrainMapSource, /surfaceLayers/);
   assert.match(satelliteTerrainMapSource, /composeDigitalTwinSurfaceLayers/);
+  assert.match(satelliteTerrainMapSource, /onSurfaceClick/);
+  assert.match(satelliteTerrainMapSource, /getCursor/);
+  assert.match(satelliteTerrainMapSource, /isDragging \? "grabbing"/);
+  assert.match(satelliteTerrainMapSource, /isHovering \? "grab"/);
   assert.match(satelliteTerrainMapSource, /map\.once\("style\.load", handleLoad\)/);
   assert.doesNotMatch(satelliteTerrainMapSource, /map\.once\("load", handleLoad\)/);
   assert.match(satelliteTerrainMapSource, /powerPreference:\s*"low-power"/);

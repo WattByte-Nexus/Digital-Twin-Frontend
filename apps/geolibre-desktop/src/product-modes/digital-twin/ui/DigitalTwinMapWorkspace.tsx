@@ -90,6 +90,7 @@ import {
   type DigitalTwinPointCloudResult,
 } from "../../../lib/digital-twin-point-cloud";
 import { createDigitalTwinMapSurfaceLayers } from "../digital-twin-map-module";
+import { buildDigitalTwinPowerLineNetwork } from "../digital-twin-power-line-rendering";
 import {
   createDigitalTwinSatelliteTerrainConfig,
   DIGITAL_TWIN_INITIAL_VIEW,
@@ -112,6 +113,7 @@ import { RunsView } from "./views/RunsView";
 import { ScenariosView } from "./views/ScenariosView";
 import type { ScenarioMapController } from "./views/ScenarioBuilder";
 import { SettingsView } from "./views/SettingsView";
+import { useDigitalTwinPoleInteraction } from "./use-digital-twin-pole-interaction";
 
 export type WorkspaceTheme = "light" | "dark";
 
@@ -479,10 +481,6 @@ export function DigitalTwinMapWorkspace({
   const [readyPointCloudDatasetKey, setReadyPointCloudDatasetKey] = useState<
     string | null
   >(null);
-  const [pointCloudSurfaceReference, setPointCloudSurfaceReference] = useState<{
-    datasetKey: string;
-    elevationMeters: number;
-  } | null>(null);
   const [displaySettings, setDisplaySettings] =
     useState<DigitalTwinMapDisplaySettings>(
       DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS
@@ -759,7 +757,6 @@ export function DigitalTwinMapWorkspace({
   useEffect(() => {
     if (!showLidar || !activeRegionId) {
       setReadyPointCloudDatasetKey(null);
-      setPointCloudSurfaceReference(null);
       setPointCloud({ status: "none" });
       return;
     }
@@ -767,7 +764,6 @@ export function DigitalTwinMapWorkspace({
     const controller = new AbortController();
     let disposed = false;
     setReadyPointCloudDatasetKey(null);
-    setPointCloudSurfaceReference(null);
     setPointCloud({ status: "loading" });
     void fetchActiveDigitalTwinPointCloud(digitalTwinApiUrl, activeRegionId, {
       signal: controller.signal,
@@ -1017,21 +1013,37 @@ export function DigitalTwinMapWorkspace({
     powerLineSurfaceKey,
   ]);
 
-  const surfaceLayers = useMemo(() => {
-    const powerLineSurfaceElevations =
-      powerLineSurfaceState?.networkKey === powerLineSurfaceKey
-        ? powerLineSurfaceState.elevations
-        : undefined;
-    const powerLinesReady =
-      !displaySettings.elevation || powerLineSurfaceElevations !== undefined;
-    const powerLines =
+  const powerLineSurfaceElevations =
+    powerLineSurfaceState?.networkKey === powerLineSurfaceKey
+      ? powerLineSurfaceState.elevations
+      : undefined;
+  const powerLinesReady =
+    !displaySettings.elevation || powerLineSurfaceElevations !== undefined;
+  const basePowerLineNetwork = useMemo(
+    () =>
       regionAssets.status === "ready" &&
       regionAssets.regionId === activeRegionId &&
       regionalPowerLines.length > 0 &&
       powerLinesReady
-        ? regionalPowerLines
-        : [];
+        ? buildDigitalTwinPowerLineNetwork(regionalPowerLines, {
+            surfaceElevations: powerLineSurfaceElevations,
+          })
+        : undefined,
+    [
+      activeRegionId,
+      powerLineSurfaceElevations,
+      powerLinesReady,
+      regionAssets,
+      regionalPowerLines,
+    ]
+  );
+  const poleMapInteraction = useDigitalTwinPoleInteraction({
+    map: mapInstance,
+    network: basePowerLineNetwork,
+    networkKey: activeRegionId,
+  });
 
+  const surfaceLayers = useMemo(() => {
     const activePointCloud =
       showLidar &&
       displaySettings.pointClouds &&
@@ -1041,8 +1053,8 @@ export function DigitalTwinMapWorkspace({
         : undefined;
 
     return createDigitalTwinMapSurfaceLayers({
-      powerLines,
-      powerLineSurfaceElevations,
+      powerLineNetwork: poleMapInteraction.network,
+      poleInteraction: poleMapInteraction.layerInteraction,
       pointCloud: activePointCloud
         ? {
             dataset: activePointCloud,
@@ -1060,34 +1072,17 @@ export function DigitalTwinMapWorkspace({
               setReadyPointCloudDatasetKey(
                 pointCloudDatasetKey(activePointCloud)
               ),
-            onSurfaceReferenceElevation: (elevationMeters) =>
-              setPointCloudSurfaceReference({
-                datasetKey: pointCloudDatasetKey(activePointCloud),
-                elevationMeters,
-              }),
           }
         : undefined,
     });
   }, [
     activeRegionId,
-    displaySettings.elevation,
     displaySettings.pointClouds,
     pointCloud,
-    powerLineSurfaceKey,
-    powerLineSurfaceState,
-    regionAssets,
-    regionalPowerLines,
+    poleMapInteraction.layerInteraction,
+    poleMapInteraction.network,
     showLidar,
   ]);
-
-  const surfaceReferenceElevationMeters =
-    showLidar &&
-    displaySettings.pointClouds &&
-    pointCloud.status === "ready" &&
-    pointCloudSurfaceReference?.datasetKey ===
-      pointCloudDatasetKey(pointCloud.dataset)
-      ? pointCloudSurfaceReference.elevationMeters
-      : undefined;
 
   const activePointCloudStatus = pointCloudStatusText(
     pointCloud,
@@ -1212,11 +1207,11 @@ export function DigitalTwinMapWorkspace({
           key={mapboxUrls?.satelliteTileUrlTemplate}
           {...satelliteTerrainConfig}
           surfaceLayers={surfaceLayers}
-          surfaceReferenceElevationMeters={surfaceReferenceElevationMeters}
           satelliteVisible={displaySettings.satellite}
           elevationEnabled={displaySettings.elevation}
           themeMode={activeThemeMode}
           referenceOverlayVisibility={displaySettings}
+          onSurfaceClick={poleMapInteraction.onSurfaceClick}
           onMapReady={handleMapReady}
         />
       ) : (
@@ -1340,6 +1335,14 @@ export function DigitalTwinMapWorkspace({
           : regionAssets.status === "error"
           ? `Regional assets failed to load: ${regionAssets.error.message}`
           : "No regional assets loaded."}
+      </output>
+
+      <output aria-live="polite" className="sr-only">
+        {poleMapInteraction.stagedMoveCount > 0
+          ? `${poleMapInteraction.stagedMoveCount} pole move ${
+              poleMapInteraction.stagedMoveCount === 1 ? "is" : "are"
+            } staged as scenario intent.`
+          : "No pole moves are staged."}
       </output>
     </div>
   );
