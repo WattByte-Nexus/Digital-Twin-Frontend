@@ -24,6 +24,7 @@ import {
   DEFAULT_WEATHER_SETTINGS,
   DigitalTwinMapToolbar,
   DigitalTwinMonitoringStatus,
+  PolePropertiesPopover,
   DigitalTwinSidebar,
   DigitalTwinTopbar,
   SidebarInset,
@@ -90,6 +91,7 @@ import {
   type DigitalTwinPointCloudResult,
 } from "../../../lib/digital-twin-point-cloud";
 import { createDigitalTwinMapSurfaceLayers } from "../digital-twin-map-module";
+import { createDigitalTwinPolePropertiesAsset } from "../digital-twin-pole-properties";
 import { buildDigitalTwinPowerLineNetwork } from "../digital-twin-power-line-rendering";
 import {
   createDigitalTwinSatelliteTerrainConfig,
@@ -1042,6 +1044,29 @@ export function DigitalTwinMapWorkspace({
     network: basePowerLineNetwork,
     networkKey: activeRegionId,
   });
+  const selectedPoleProperties = useMemo(() => {
+    const selection = poleMapInteraction.popoverSelection;
+    const network = poleMapInteraction.network;
+    if (!selection || !network) return null;
+    const pole = network.poles.find(
+      (candidate) => candidate.id === selection.poleId
+    );
+    if (!pole) return null;
+    return {
+      asset: createDigitalTwinPolePropertiesAsset({
+        network,
+        pole,
+        powerLines: regionalPowerLines,
+        regionId: activeRegionId,
+      }),
+      screenPosition: selection.screenPosition,
+    };
+  }, [
+    activeRegionId,
+    poleMapInteraction.network,
+    poleMapInteraction.popoverSelection,
+    regionalPowerLines,
+  ]);
 
   const surfaceLayers = useMemo(() => {
     const activePointCloud =
@@ -1217,6 +1242,19 @@ export function DigitalTwinMapWorkspace({
       ) : (
         <DigitalTwinMapCredentialsNotice />
       )}
+
+      {selectedPoleProperties ? (
+        <PolePropertiesPopover
+          asset={selectedPoleProperties.asset}
+          onOpenChange={(open) => {
+            if (!open) poleMapInteraction.clearSelection();
+          }}
+          open
+          screenPosition={selectedPoleProperties.screenPosition}
+          side="right"
+          theme={activeThemeMode}
+        />
+      ) : null}
 
       <div
         aria-hidden="true"
