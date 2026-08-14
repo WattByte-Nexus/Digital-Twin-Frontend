@@ -4,6 +4,7 @@ import { cn } from "../lib/utils";
 import {
   anchorForPanelPosition,
   constrainPanelGeometry,
+  fitScaleForPanel,
   positionForPanelAnchor,
   snapPanelToNearestEdge,
   type FloatingPanelAnchor,
@@ -35,6 +36,7 @@ export interface FloatingMapPanelProps {
   edgeInset?: number;
   fitToBounds?: boolean;
   minimumSize?: FloatingPanelSize;
+  maximumScale?: number;
   onAnchorChange?: (anchor: FloatingPanelAnchor) => void;
   anchor?: FloatingPanelAnchor;
 }
@@ -82,6 +84,7 @@ export function FloatingMapPanel({
   defaultSize = DEFAULT_PANEL_SIZE,
   edgeInset = 16,
   fitToBounds = false,
+  maximumScale = 1,
   minimumSize = DEFAULT_MINIMUM_SIZE,
   onAnchorChange,
   anchor,
@@ -113,10 +116,11 @@ export function FloatingMapPanel({
           edgeInset,
         );
         if (fitToBounds) {
-          const scale = Math.min(
-            1,
-            Math.max(0, bounds.width - edgeInset * 2) / defaultSize.width,
-            Math.max(0, bounds.height - edgeInset * 2) / defaultSize.height,
+          const scale = fitScaleForPanel(
+            defaultSize,
+            bounds,
+            edgeInset,
+            maximumScale,
           );
           next = {
             position: next.position,
@@ -153,7 +157,15 @@ export function FloatingMapPanel({
     const observer = new ResizeObserver(updateBounds);
     observer.observe(overlay);
     return () => observer.disconnect();
-  }, [anchor, defaultDock, defaultSize, edgeInset, fitToBounds, minimumSize]);
+  }, [
+    anchor,
+    defaultDock,
+    defaultSize,
+    edgeInset,
+    fitToBounds,
+    maximumScale,
+    minimumSize,
+  ]);
 
   const dock = React.useCallback(
     (edge: "bottom" | "left" | "right" | "top") => {

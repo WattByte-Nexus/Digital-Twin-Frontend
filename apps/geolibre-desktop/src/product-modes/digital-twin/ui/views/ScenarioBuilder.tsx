@@ -7,6 +7,7 @@ import {
   DEFAULT_WEATHER_SETTINGS,
   FloatingMapPanel,
   FloatingMapPanelDragHandle,
+  fitScaleForPanel,
   Input,
   Label,
   Popover,
@@ -52,6 +53,7 @@ import {
   type RefObject,
   type SetStateAction,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -88,6 +90,12 @@ const SETUP_STEPS = [
   { id: "model", label: "Model", Icon: SlidersHorizontal },
   { id: "review", label: "Review", Icon: FileText },
 ] as const;
+
+const RUN_SETUP_SIZE = { width: 416, height: 831 };
+const WEATHER_EDITOR_SIZE = { width: 380, height: 832 };
+const PANEL_EDGE_INSET = 16;
+const PANEL_GAP = 12;
+const MAXIMUM_PANEL_SCALE = 1.25;
 
 function pointId(): string {
   return `ignition-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -256,6 +264,8 @@ export function ScenarioBuilder({
     edge: "right",
     offset: 0,
   });
+  const builderRef = useRef<HTMLDivElement>(null);
+  const [weatherEditorScale, setWeatherEditorScale] = useState(1);
   const [weather, setWeather] = useState<WeatherSettingsValue>(() => {
     const initialWeather = initialRequest?.weather ?? {
       ...DEFAULT_WEATHER_SETTINGS,
@@ -267,6 +277,30 @@ export function ScenarioBuilder({
     };
     return { ...initialWeather, events: { ...initialWeather.events } };
   });
+
+  useLayoutEffect(() => {
+    const builder = builderRef.current;
+    if (!builder) return;
+
+    const updateScale = () => {
+      setWeatherEditorScale(
+        fitScaleForPanel(
+          {
+            width: RUN_SETUP_SIZE.width + PANEL_GAP + WEATHER_EDITOR_SIZE.width,
+            height: Math.max(RUN_SETUP_SIZE.height, WEATHER_EDITOR_SIZE.height),
+          },
+          { width: builder.clientWidth, height: builder.clientHeight },
+          PANEL_EDGE_INSET,
+          MAXIMUM_PANEL_SCALE,
+        ),
+      );
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(builder);
+    return () => observer.disconnect();
+  }, []);
 
   useIgnitionMap({
     enabled: placementActive && activeStep === "ignitions",
@@ -345,7 +379,10 @@ export function ScenarioBuilder({
   };
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-hidden bg-background">
+    <div
+      className="relative h-full min-h-0 w-full overflow-hidden bg-background"
+      ref={builderRef}
+    >
       <div className="absolute inset-0">{mapSlot}</div>
 
       <Popover>
@@ -353,6 +390,7 @@ export function ScenarioBuilder({
           aria-label="Simulation run setup"
           defaultSize={{ width: 416, height: 831 }}
           fitToBounds
+          maximumScale={weatherEditorScale}
           onAnchorChange={setRunSetupAnchor}
         >
           <PopoverAnchor asChild>
@@ -1027,12 +1065,29 @@ export function ScenarioBuilder({
           side={weatherEditorSide}
           sideOffset={12}
         >
-          <WeatherSettingsPanel
-            location={location}
-            onValueChange={setWeather}
-            theme={theme}
-            value={weather}
-          />
+          <div
+            style={{
+              height: WEATHER_EDITOR_SIZE.height * weatherEditorScale,
+              width: WEATHER_EDITOR_SIZE.width * weatherEditorScale,
+            }}
+          >
+            <div
+              className="origin-top-left"
+              style={{
+                height: WEATHER_EDITOR_SIZE.height,
+                transform: `scale(${weatherEditorScale})`,
+                width: WEATHER_EDITOR_SIZE.width,
+              }}
+            >
+              <WeatherSettingsPanel
+                className="h-full max-h-none w-full max-w-none"
+                location={location}
+                onValueChange={setWeather}
+                theme={theme}
+                value={weather}
+              />
+            </div>
+          </div>
         </PopoverContent>
       </Popover>
     </div>

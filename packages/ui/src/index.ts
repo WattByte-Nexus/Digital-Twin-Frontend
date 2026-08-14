@@ -41,9 +41,10 @@ export {
   type FloatingMapPanelProps,
   type FloatingMapLauncherProps,
 } from "./components/floating-map-panel";
-export type {
-  FloatingPanelAnchor,
-  FloatingPanelEdge,
+export {
+  fitScaleForPanel,
+  type FloatingPanelAnchor,
+  type FloatingPanelEdge,
 } from "./components/floating-map-panel-geometry";
 export {
   Avatar,

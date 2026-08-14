@@ -2,10 +2,32 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   anchorForPanelPosition,
+  fitScaleForPanel,
   constrainPanelGeometry,
   positionForPanelAnchor,
   snapPanelToNearestEdge,
 } from "../packages/ui/src/components/floating-map-panel-geometry";
+
+test("floating map panels scale proportionally with their bounds", () => {
+  assert.equal(
+    fitScaleForPanel(
+      { width: 380, height: 832 },
+      { width: 1920, height: 1080 },
+      16,
+      1.25,
+    ),
+    1.25,
+  );
+  assert.equal(
+    fitScaleForPanel(
+      { width: 808, height: 832 },
+      { width: 700, height: 600 },
+      16,
+      1.25,
+    ),
+    568 / 832,
+  );
+});
 
 test("floating map panels snap to the nearest map edge", () => {
   assert.deepEqual(

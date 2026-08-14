@@ -29,6 +29,25 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
+export function fitScaleForPanel(
+  size: FloatingPanelSize,
+  bounds: FloatingPanelBounds,
+  inset: number,
+  maximumScale = 1,
+): number {
+  const availableWidth = Math.max(0, bounds.width - inset * 2);
+  const availableHeight = Math.max(0, bounds.height - inset * 2);
+
+  return Math.max(
+    0,
+    Math.min(
+      maximumScale,
+      availableWidth / size.width,
+      availableHeight / size.height,
+    ),
+  );
+}
+
 export function constrainPanelGeometry(
   geometry: FloatingPanelGeometry,
   bounds: FloatingPanelBounds,
