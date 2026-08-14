@@ -5,7 +5,6 @@ import {
   buildSatelliteTerrainStyle,
   SATELLITE_LAYER_ID,
   SATELLITE_SOURCE_ID,
-  setElevationEnabled,
   setSatelliteVisibility,
   setTerrainGroundVisibility,
   TERRAIN_BACKGROUND_LAYER_ID,
@@ -17,14 +16,10 @@ import {
   SATELLITE_REFERENCE_SOURCE_ID,
   setSatelliteReferenceVisibility,
 } from "../packages/map/src/satellite-reference-overlay";
-import { syncTerrainCameraTarget } from "../packages/map/src/terrain-camera-target";
+import { applyDigitalTwinSurfaceElevationState } from "../packages/map/src/digital-twin-surface-state";
 
 const satelliteTerrainMapSource = readFileSync(
   new URL("../packages/map/src/SatelliteTerrainMap.tsx", import.meta.url),
-  "utf8"
-);
-const mapboxAttributionLogoSource = readFileSync(
-  new URL("../packages/map/src/MapboxAttributionLogo.tsx", import.meta.url),
   "utf8"
 );
 const satelliteTerrainConfigSource = readFileSync(
@@ -49,7 +44,10 @@ test("satellite terrain map includes its reference overlay in the initial style"
 test("satellite terrain map owns one portable interleaved deck surface", () => {
   assert.match(satelliteTerrainMapSource, /new MapboxOverlay\(/);
   assert.match(satelliteTerrainMapSource, /interleaved:\s*true/);
-  assert.match(satelliteTerrainMapSource, /deckLayers/);
+  assert.match(satelliteTerrainMapSource, /surfaceLayers/);
+  assert.match(satelliteTerrainMapSource, /composeDigitalTwinSurfaceLayers/);
+  assert.match(satelliteTerrainMapSource, /map\.once\("style\.load", handleLoad\)/);
+  assert.doesNotMatch(satelliteTerrainMapSource, /map\.once\("load", handleLoad\)/);
   assert.match(satelliteTerrainMapSource, /powerPreference:\s*"low-power"/);
   assert.doesNotMatch(
     satelliteTerrainMapSource,
@@ -57,25 +55,37 @@ test("satellite terrain map owns one portable interleaved deck surface", () => {
   );
 });
 
-test("terrain camera follows a loaded 3D dataset elevation", () => {
-  let centerElevation = 0;
-  let centerClampedToGround = true;
+test("terrain camera rejects a 3D tile-origin elevation offset", () => {
+  let centerElevation = 1_925.696;
+  let centerClampedToGround = false;
+  let terrain: unknown = null;
   const map = {
-    getCenterElevation: () => centerElevation,
     getCenterClampedToGround: () => centerClampedToGround,
-    setCenterElevation: (value: number) => {
-      centerElevation = value;
-    },
     setCenterClampedToGround: (value: boolean) => {
       centerClampedToGround = value;
     },
+    setTerrain: (value: unknown) => {
+      terrain = value;
+      centerElevation = value ? 1_642.25 : 0;
+    },
   };
 
-  syncTerrainCameraTarget(map, 1_925.696);
-  assert.equal(centerClampedToGround, false);
-  assert.equal(centerElevation, 1_925.696);
+  applyDigitalTwinSurfaceElevationState(map, {
+    enabled: true,
+    exaggeration: 1,
+  });
+  assert.deepEqual(terrain, {
+    source: TERRAIN_SOURCE_ID,
+    exaggeration: 1,
+  });
+  assert.equal(centerClampedToGround, true);
+  assert.equal(centerElevation, 1_642.25);
 
-  syncTerrainCameraTarget(map);
+  applyDigitalTwinSurfaceElevationState(map, {
+    enabled: false,
+    exaggeration: 1,
+  });
+  assert.equal(terrain, null);
   assert.equal(centerClampedToGround, true);
   assert.equal(centerElevation, 0);
 });
@@ -85,7 +95,9 @@ test("Digital Twin ships a Mapbox Streets operational reference stack in the ini
     satelliteTerrainConfigSource,
     /streetsTileJsonUrl:\s*string/
   );
+  assert.match(satelliteTerrainConfigSource, /mapboxGlyphsUrl:\s*string/);
   assert.match(satelliteTerrainConfigSource, /url:\s*streetsTileJsonUrl/);
+  assert.match(satelliteTerrainConfigSource, /glyphs:\s*mapboxGlyphsUrl/);
   assert.doesNotMatch(satelliteTerrainConfigSource, /tiles\.openfreemap\.org/);
   assert.match(
     satelliteTerrainConfigSource,
@@ -465,16 +477,16 @@ test("Digital Twin uses Mapbox Satellite without USGS or DRAPP imagery", () => {
   assert.doesNotMatch(satelliteTerrainMapSource, /satelliteFallbackSource/);
 });
 
-test("satellite terrain map shows Mapbox attribution and logo", () => {
-  assert.match(satelliteTerrainMapSource, /attributionControl:\s*\{/);
-  assert.match(satelliteTerrainMapSource, /<MapboxAttributionLogo \/>/);
-  assert.match(mapboxAttributionLogoSource, /data-mapbox-logo/);
-  assert.match(mapboxAttributionLogoSource, /https:\/\/www\.mapbox\.com\//);
+test("satellite terrain map hides vendor attribution chrome", () => {
+  assert.match(satelliteTerrainMapSource, /attributionControl:\s*false/);
+  assert.doesNotMatch(satelliteTerrainMapSource, /MapboxAttributionLogo/);
 });
 
 test("satellite imagery toggles independently from elevation", () => {
   const layoutCalls: Array<[string, string, string]> = [];
   const terrainCalls: unknown[] = [];
+  let centerElevation = 0;
+  let centerClampedToGround = true;
   const map = {
     getLayer: (id: string) =>
       id === SATELLITE_LAYER_ID ||
@@ -487,6 +499,14 @@ test("satellite imagery toggles independently from elevation", () => {
     setTerrain: (terrain: unknown) => {
       terrainCalls.push(terrain);
     },
+    getCenterElevation: () => centerElevation,
+    getCenterClampedToGround: () => centerClampedToGround,
+    setCenterElevation: (value: number) => {
+      centerElevation = value;
+    },
+    setCenterClampedToGround: (value: boolean) => {
+      centerClampedToGround = value;
+    },
   };
 
   setSatelliteVisibility(
@@ -498,16 +518,14 @@ test("satellite imagery toggles independently from elevation", () => {
     false,
     true
   );
-  setElevationEnabled(
-    map as Parameters<typeof setElevationEnabled>[0],
-    false,
-    1.5
-  );
-  setElevationEnabled(
-    map as Parameters<typeof setElevationEnabled>[0],
-    true,
-    1.5
-  );
+  applyDigitalTwinSurfaceElevationState(map, {
+    enabled: false,
+    exaggeration: 1.5,
+  });
+  applyDigitalTwinSurfaceElevationState(map, {
+    enabled: true,
+    exaggeration: 1.5,
+  });
   setTerrainGroundVisibility(
     map as Parameters<typeof setTerrainGroundVisibility>[0],
     false,

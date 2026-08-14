@@ -219,7 +219,7 @@ export function RunPlaybackWorkspace({
       },
     );
     return () => controller.abort();
-  }, [apiUrl, reloadToken, run.id]);
+  }, [apiUrl, reloadToken, run.completedTicks, run.id, run.resultAvailable, run.status]);
 
   const sampleCount = behavior.status === "ready" ? behavior.data.samples.length : 0;
   const selectedSample = behavior.status === "ready" ? behavior.data.samples[sampleIndex] : undefined;

@@ -27,6 +27,13 @@ const lidarSource = readFileSync(
   ),
   "utf8"
 );
+const mapModuleSource = readFileSync(
+  new URL(
+    "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-map-module.ts",
+    import.meta.url
+  ),
+  "utf8"
+);
 const scenarioBuilderSource = readFileSync(
   new URL(
     "../apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/ScenarioBuilder.tsx",
@@ -183,18 +190,22 @@ describe("Digital Twin frontend composition", () => {
   it("streams the active region point cloud from the Digital Twin Engine", () => {
     assert.match(workspaceSource, /fetchActiveDigitalTwinPointCloud/);
     assert.match(workspaceSource, /new AbortController\(\)/);
-    assert.match(workspaceSource, /createDigitalTwinPointCloudLayer/);
+    assert.match(workspaceSource, /createDigitalTwinMapSurfaceLayers/);
+    assert.match(mapModuleSource, /createDigitalTwinPointCloudLayer/);
+    assert.match(mapModuleSource, /DIGITAL_TWIN_SHARED_SURFACE/);
     assert.match(workspaceSource, /Point-cloud metadata loading/);
     assert.match(workspaceSource, /aria-live="polite"/);
     assert.doesNotMatch(workspaceSource, /createGoldenUsgsLidarLayer/);
     assert.doesNotMatch(workspaceSource, /\/data\/usgs-lidar\/golden-city/);
   });
 
-  it("renders canonical power-line assets and poles in the shared deck overlay", () => {
+  it("renders canonical assets through one shared surface module", () => {
     assert.match(workspaceSource, /fetchDigitalTwinAssets/);
-    assert.match(workspaceSource, /createDigitalTwinPowerLineLayers/);
-    assert.match(workspaceSource, /resolveDigitalTwinPowerPoleModelUrl/);
-    assert.match(workspaceSource, /deckLayers=\{deckLayers\}/);
+    assert.match(mapModuleSource, /createDigitalTwinPowerLineLayers/);
+    assert.match(mapModuleSource, /resolveDigitalTwinPowerPoleModelUrl/);
+    assert.match(workspaceSource, /surfaceLayers=\{surfaceLayers\}/);
+    assert.doesNotMatch(workspaceSource, /createDigitalTwinPowerLineLayers/);
+    assert.doesNotMatch(workspaceSource, /createDigitalTwinPointCloudLayer/);
     assert.doesNotMatch(workspaceSource, /fetchDigitalTwinPowerLines/);
     assert.doesNotMatch(workspaceSource, /new MapboxOverlay/);
   });
@@ -249,10 +260,12 @@ describe("Digital Twin frontend composition", () => {
     );
   });
 
-  it("refines point clouds densely when zoomed in with spacing-sized surfels", () => {
+  it("refines point clouds without turning coarse previews into solid sheets", () => {
     assert.match(lidarSource, /maximumScreenSpaceError:\s*2/);
     assert.match(lidarSource, /maximumMemoryUsage:\s*512/);
-    assert.match(lidarSource, /sizeUnits:\s*"meters"/);
+    assert.match(lidarSource, /memoryAdjustedScreenSpaceError:\s*false/);
+    assert.match(lidarSource, /pointSize:\s*1/);
+    assert.match(lidarSource, /sizeUnits:\s*"pixels"/);
     assert.match(workspaceSource, /missing RGB is shown in cyan/);
   });
 

@@ -7,8 +7,7 @@ import {
 } from "@geolibre/map";
 import { DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS } from "@geolibre/ui";
 import type { ExpressionSpecification } from "maplibre-gl";
-
-export const DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID = `${SATELLITE_REFERENCE_LAYER_PREFIX}road-labels`;
+import { DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID } from "./digital-twin-map-ids";
 
 const REFERENCE_NAME: ExpressionSpecification = [
   "coalesce",
@@ -16,20 +15,8 @@ const REFERENCE_NAME: ExpressionSpecification = [
   ["get", "name"],
 ];
 
-/**
- * A bounded, sprite-free operational reference stack. It is part of the
- * initial MapLibre style so a remote style or icon failure cannot remove road
- * and place context after the world has already mounted.
- *
- * Production deployments can proxy the TileJSON and glyph endpoints through
- * the same origin without changing the layer contract.
- */
-const DIGITAL_TWIN_REFERENCE_OVERLAY = {
-  source: {
-    type: "vector",
-    url: "https://tiles.openfreemap.org/planet",
-  },
-  glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+/** Mapbox Streets v8 layers for the Digital Twin operational reference stack. */
+const DIGITAL_TWIN_REFERENCE_LAYER_STACK = {
   layers: [
     {
       category: "water",
@@ -66,8 +53,9 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}parks`,
         type: "fill",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "park",
+        "source-layer": "landuse",
         minzoom: 4,
+        filter: ["==", ["get", "class"], "park"],
         paint: {
           "fill-color": "#4ade80",
           "fill-opacity": 0.08,
@@ -81,7 +69,8 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}boundaries`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "boundary",
+        "source-layer": "admin",
+        filter: ["match", ["get", "worldview"], ["all", "US"], true, false],
         paint: {
           "line-color": "rgba(254, 240, 138, 0.82)",
           "line-dasharray": [3, 2],
@@ -114,8 +103,8 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         minzoom: 15,
         paint: {
           "fill-extrusion-color": "#f8fafc",
-          "fill-extrusion-height": ["coalesce", ["get", "render_height"], 3],
-          "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+          "fill-extrusion-height": ["coalesce", ["get", "height"], 3],
+          "fill-extrusion-base": ["coalesce", ["get", "min_height"], 0],
           "fill-extrusion-opacity": 0.16,
         },
       },
@@ -126,7 +115,7 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-major-casing`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation",
+        "source-layer": "road",
         filter: [
           "all",
           [
@@ -163,7 +152,7 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-motorway`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation",
+        "source-layer": "road",
         filter: ["all", ["==", ["get", "class"], "motorway"]],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
@@ -197,7 +186,7 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-trunk-primary`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation",
+        "source-layer": "road",
         filter: [
           "all",
           ["match", ["get", "class"], ["primary", "trunk"], true, false],
@@ -226,7 +215,7 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-secondary-casing`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation",
+        "source-layer": "road",
         filter: [
           "all",
           ["match", ["get", "class"], ["secondary", "tertiary"], true, false],
@@ -253,7 +242,7 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-secondary`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation",
+        "source-layer": "road",
         filter: [
           "all",
           ["match", ["get", "class"], ["secondary", "tertiary"], true, false],
@@ -282,8 +271,11 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-minor-casing`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation",
-        filter: ["all", ["==", ["get", "class"], "minor"]],
+        "source-layer": "road",
+        filter: [
+          "all",
+          ["match", ["get", "class"], ["street", "street_limited"], true, false],
+        ],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": "#cfcdca",
@@ -318,8 +310,11 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-minor`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation",
-        filter: ["all", ["==", ["get", "class"], "minor"]],
+        "source-layer": "road",
+        filter: [
+          "all",
+          ["match", ["get", "class"], ["street", "street_limited"], true, false],
+        ],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": "#fff",
@@ -344,7 +339,7 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-service-casing`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation",
+        "source-layer": "road",
         filter: [
           "all",
           ["match", ["get", "class"], ["service", "track"], true, false],
@@ -373,7 +368,7 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-service`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation",
+        "source-layer": "road",
         filter: [
           "all",
           ["match", ["get", "class"], ["service", "track"], true, false],
@@ -402,7 +397,7 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-path`,
         type: "line",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation",
+        "source-layer": "road",
         minzoom: 14,
         filter: [
           "all",
@@ -431,12 +426,12 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
         type: "symbol",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation_name",
+        "source-layer": "road",
         minzoom: 11,
         layout: {
           "symbol-placement": "line",
           "text-field": REFERENCE_NAME,
-          "text-font": ["Noto Sans Regular"],
+          "text-font": ["Open Sans Regular"],
           "text-size": ["interpolate", ["linear"], ["zoom"], 11, 11, 18, 14],
         },
         paint: {
@@ -453,13 +448,13 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-shields`,
         type: "symbol",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "transportation_name",
+        "source-layer": "road",
         minzoom: 8,
         filter: ["has", "ref"],
         layout: {
           "symbol-placement": "line-center",
           "text-field": ["get", "ref"],
-          "text-font": ["Noto Sans Regular"],
+          "text-font": ["Open Sans Regular"],
           "text-size": ["interpolate", ["linear"], ["zoom"], 8, 9, 18, 12],
           "text-allow-overlap": false,
         },
@@ -477,10 +472,11 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}place-labels`,
         type: "symbol",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "place",
+        "source-layer": "place_label",
+        filter: ["match", ["get", "worldview"], ["all", "US"], true, false],
         layout: {
           "text-field": REFERENCE_NAME,
-          "text-font": ["Noto Sans Regular"],
+          "text-font": ["Open Sans Regular"],
           "text-size": ["interpolate", ["linear"], ["zoom"], 5, 12, 14, 18],
           "text-offset": [0, 0.7],
           "text-variable-anchor": ["top", "bottom", "left", "right"],
@@ -499,12 +495,12 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}poi-labels`,
         type: "symbol",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "poi",
+        "source-layer": "poi_label",
         minzoom: 14,
         filter: ["has", "name"],
         layout: {
           "text-field": REFERENCE_NAME,
-          "text-font": ["Noto Sans Regular"],
+          "text-font": ["Open Sans Regular"],
           "text-size": ["interpolate", ["linear"], ["zoom"], 14, 10, 18, 12],
           "text-offset": [0, 0.65],
           "text-variable-anchor": ["top", "bottom", "left", "right"],
@@ -524,12 +520,34 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}water-labels`,
         type: "symbol",
         source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "water_name",
-        filter: ["has", "name"],
+        "source-layer": "natural_label",
+        filter: [
+          "all",
+          ["has", "name"],
+          [
+            "match",
+            ["get", "class"],
+            [
+              "bay",
+              "canal",
+              "ocean",
+              "reservoir",
+              "river",
+              "sea",
+              "stream",
+              "water",
+              "water_feature",
+              "wetland",
+            ],
+            true,
+            false,
+          ],
+          ["match", ["get", "worldview"], ["all", "US"], true, false],
+        ],
         layout: {
           "symbol-placement": "point",
           "text-field": REFERENCE_NAME,
-          "text-font": ["Noto Sans Regular"],
+          "text-font": ["Open Sans Regular"],
           "text-size": ["interpolate", ["linear"], ["zoom"], 7, 11, 18, 14],
           "text-letter-spacing": 0.08,
           "text-max-width": 9,
@@ -543,7 +561,25 @@ const DIGITAL_TWIN_REFERENCE_OVERLAY = {
       },
     },
   ],
-} satisfies SatelliteReferenceOverlay;
+} satisfies Pick<SatelliteReferenceOverlay, "layers">;
+
+/**
+ * Builds the sprite-free reference overlay with runtime-authenticated Mapbox
+ * Streets TileJSON and glyph endpoints.
+ */
+function createDigitalTwinReferenceOverlay(
+  streetsTileJsonUrl: string,
+  mapboxGlyphsUrl: string
+): SatelliteReferenceOverlay {
+  return {
+    source: {
+      type: "vector",
+      url: streetsTileJsonUrl,
+    },
+    glyphs: mapboxGlyphsUrl,
+    layers: DIGITAL_TWIN_REFERENCE_LAYER_STACK.layers,
+  };
+}
 
 export const DIGITAL_TWIN_INITIAL_VIEW = {
   center: [-105.2211, 39.7555],
@@ -554,13 +590,20 @@ export const DIGITAL_TWIN_INITIAL_VIEW = {
 
 /** Builds the map foundation around one provider-managed imagery pyramid. */
 export function createDigitalTwinSatelliteTerrainConfig(
-  satelliteTileJsonUrl: string
+  satelliteTileUrlTemplate: string,
+  streetsTileJsonUrl: string,
+  mapboxGlyphsUrl: string
 ): SatelliteTerrainMapProps {
   return {
     satelliteSource: {
-      url: satelliteTileJsonUrl,
+      tiles: [satelliteTileUrlTemplate],
+      tileSize: 256,
+      maxzoom: 22,
     },
-    referenceOverlay: DIGITAL_TWIN_REFERENCE_OVERLAY,
+    referenceOverlay: createDigitalTwinReferenceOverlay(
+      streetsTileJsonUrl,
+      mapboxGlyphsUrl
+    ),
     referenceOverlayVisibility: DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS,
     terrainSource: {
       url: "https://tiles.mapterhorn.com/tilejson.json",

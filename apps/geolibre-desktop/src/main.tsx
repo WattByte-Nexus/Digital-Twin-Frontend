@@ -129,7 +129,7 @@ void Promise.all([
     ReactDOM.createRoot(document.getElementById("root")!).render(
       <React.StrictMode>
         <I18nextProvider i18n={i18n}>
-          <Toaster closeButton position="bottom-right" />
+          <Toaster gap={16} offset={24} position="bottom-right" visibleToasts={3} />
           <AppErrorBoundary>
             <TooltipProvider delayDuration={200}>
               <App />

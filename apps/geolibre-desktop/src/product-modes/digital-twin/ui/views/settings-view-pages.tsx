@@ -275,7 +275,7 @@ export function SimulationPresetsPage() {
 
   return (
     <SettingsPageBody>
-      <div className="flex items-start gap-3 border-y border-border bg-muted/20 p-4 text-sm">
+      <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-sm shadow-sm">
         <CircleHelp className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div>
           <p className="font-medium">Presets are starting values, not hidden engine configuration.</p>
@@ -508,7 +508,7 @@ export function AlertRoutingPage() {
         </Table>
       </SettingsCard>
 
-      <div>
+      <div className="grid gap-4">
         <SettingsCard title="Escalation policy">
           <SettingsRows>
             <SettingRow htmlFor="settings-escalate-alerts" label="Escalate unacknowledged alerts">
@@ -567,7 +567,7 @@ const MEMBERS = [
 export function MembersAccessPage() {
   return (
     <SettingsPageBody>
-      <div className="grid border-y border-border xl:grid-cols-3">
+      <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-sm xl:grid-cols-3">
         <SummaryCard icon={<ShieldCheck />} label="Owners" value="1" />
         <SummaryCard icon={<LockKeyhole />} label="Admins" value="1" />
         <SummaryCard icon={<Activity />} label="Active members" value="2" />
@@ -626,7 +626,7 @@ export function MembersAccessPage() {
           </TableBody>
         </Table>
       </SettingsCard>
-      <div className="flex items-start gap-3 border-y border-border bg-muted/20 p-4 text-xs text-muted-foreground">
+      <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-xs text-muted-foreground shadow-sm">
         <Info className="mt-0.5 size-4 shrink-0" />
         Member actions are intentionally disabled until organization identity and role APIs are connected.
       </div>
@@ -641,7 +641,7 @@ export function EngineStatusPage({
 }) {
   return (
     <SettingsPageBody>
-      <div className="grid border-y border-border xl:grid-cols-4">
+      <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-sm xl:grid-cols-4">
         <SummaryCard icon={<Server />} label="Engine API" status="Connected" value="Ready" />
         <SummaryCard icon={<Gauge />} label="Run queue" status="Healthy" value="0 queued" />
         <SummaryCard icon={<Database />} label="Snapshot store" status="Available" value="SQLite" />
@@ -695,7 +695,7 @@ export function EngineStatusPage({
 
 function SettingsPageBody({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-5 py-2 sm:px-8 sm:py-3">
+    <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-4 px-5 pb-12 sm:px-8">
       {children}
     </div>
   );

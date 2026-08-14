@@ -2115,7 +2115,8 @@ export function DesktopShell({
       onDrop={handleDrop}
     >
       {createPortal(mapSurface, mapContentEl)}
-      {layoutOptions.toolbarVisible ? (
+      {layoutOptions.toolbarVisible &&
+      !(workspaceMode === "digital-twin" && digitalTwinWorkspaceView === "settings") ? (
         workspaceMode === "digital-twin" ? (
           <SectionErrorBoundary label="Digital Twin header">
             <DigitalTwinHeader

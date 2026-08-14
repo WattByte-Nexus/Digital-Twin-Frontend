@@ -7,6 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./digital-twin-surface-layers": "./src/digital-twin-surface-layers.ts",
+    "./digital-twin-surface-state": "./src/digital-twin-surface-state.ts",
     "./satellite-terrain-style": "./src/satellite-terrain-style.ts"
   },
   "dependencies": {

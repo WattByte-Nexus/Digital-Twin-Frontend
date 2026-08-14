@@ -45,6 +45,24 @@ test.describe("Digital Twin settings", () => {
 
     await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Alert routing", exact: true })).toBeVisible();
+    const productSidebar = page.locator(
+      '[data-slot="sidebar-container"][aria-label="Digital Twin navigation"]',
+    );
+    const productTopbar = page.locator(
+      'header[aria-label="Digital Twin application header"]',
+    );
+    await expect(productSidebar).toHaveCount(0);
+    await expect(productTopbar).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Close settings and return to workspace" }),
+    ).toBeVisible();
+    const settingsSearch = page.getByRole("searchbox", { name: "Search settings" });
+    await expect(settingsSearch).toBeVisible();
+    await settingsSearch.fill("map");
+    await expect(page.getByRole("button", { name: "Map & display" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Preferences" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Map & display" })).toBeVisible();
+    await settingsSearch.clear();
 
     await page.getByRole("button", { name: "Preferences", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible();
@@ -69,5 +87,11 @@ test.describe("Digital Twin settings", () => {
     await page.getByRole("button", { name: "Status & health", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Status & health", exact: true })).toBeVisible();
     await expect(page.getByText("Requires restart", { exact: true })).toBeVisible();
+
+    await page
+      .getByRole("button", { name: "Close settings and return to workspace" })
+      .click();
+    await expect(productSidebar).toBeVisible();
+    await expect(productTopbar).toBeVisible();
   });
 });

@@ -2,7 +2,6 @@ import type { SurfaceTheme } from "../../lib/surface-theme";
 
 export type WeatherMode = "auto" | "manual";
 export type WeatherTheme = SurfaceTheme;
-export type TimeFormat = "12" | "24";
 export type WeatherEventKey =
   | "wind"
   | "windDirection"
@@ -19,7 +18,6 @@ export interface WeatherSettingsValue {
   date: string;
   hour: number;
   minute: number;
-  timeFormat: TimeFormat;
   season: string;
   temperature: number;
   events: Record<WeatherEventKey, number>;
@@ -69,7 +67,6 @@ export const DEFAULT_WEATHER_SETTINGS: WeatherSettingsValue = {
   date: "2024-10-07",
   hour: 14,
   minute: 7,
-  timeFormat: "24",
   season: "Spring",
   temperature: 41,
   events: DEFAULT_WEATHER_EVENTS,

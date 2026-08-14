@@ -14,6 +14,7 @@ const run: DigitalTwinRunRecord = {
     kind: "scenario",
     correlation_id: "request-1",
     scenario_id: "scenario-1",
+    scenario_name: "Foothills wind test",
     base_weather_version: "2026-08-11T12:00:00Z",
     ignition_points: [{ lat: 40, lon: -105 }],
     duration_hours: 2,
@@ -31,6 +32,20 @@ const run: DigitalTwinRunRecord = {
     final_burned_cells: 44,
     burned_area_hectares: 5.04,
     peak_spread_rate_hectares_per_hour: 2.7,
+    land_cover_breakdown: [
+      {
+        class_id: 7292,
+        label: "Rocky Mountain Aspen Forest and Woodland",
+        area_hectares: 3.6,
+        percentage: 71.4,
+      },
+      {
+        class_id: 7733,
+        label: "Southern Rocky Mountain Ponderosa Pine Woodland",
+        area_hectares: 1.44,
+        percentage: 28.6,
+      },
+    ],
   },
   failure: null,
 };
@@ -191,5 +206,42 @@ test("run tab loading surfaces API problem details", async () => {
         }),
     }),
     /Run not found/,
+  );
+});
+
+test("run tab loading rejects incomplete run metrics before rendering", async () => {
+  const incompleteRun = {
+    ...run,
+    metrics: {
+      final_burning_cells: 12,
+      final_burned_cells: 44,
+      peak_spread_rate_hectares_per_hour: 2.7,
+    },
+  };
+
+  await assert.rejects(
+    loadRunTab("http://engine.test", "run/1", "overview", {
+      fetchImpl: async () => json(incompleteRun),
+    }),
+    /invalid run metrics/i,
+  );
+});
+
+test("run tab loading rejects malformed EVT land-cover entries", async () => {
+  const invalidRun = {
+    ...run,
+    metrics: {
+      ...run.metrics!,
+      land_cover_breakdown: [
+        { class_id: 7292, label: "", area_hectares: 5.04, percentage: 101 },
+      ],
+    },
+  };
+
+  await assert.rejects(
+    loadRunTab("http://engine.test", "run/1", "overview", {
+      fetchImpl: async () => json(invalidRun),
+    }),
+    /invalid run metrics/i,
   );
 });

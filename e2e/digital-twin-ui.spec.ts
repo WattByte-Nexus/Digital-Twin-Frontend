@@ -26,6 +26,7 @@ const COMPLETED_RUN = {
   trigger: {
     kind: "scenario",
     scenario_id: "scenario-1",
+    scenario_name: "Boulder test scenario",
     ignition_points: [{ lat: 40.02, lon: -105.24 }],
     duration_hours: 2,
     delta_t_hours: 1,
@@ -36,7 +37,27 @@ const COMPLETED_RUN = {
     { tick: 2, world_state_ref: "state://tick-2" },
   ],
   final_result_ref: "state://final",
+  metrics: {
+    final_burning_cells: 24,
+    final_burned_cells: 24,
+    burned_area_hectares: 2.16,
+    peak_spread_rate_hectares_per_hour: 1.08,
+  },
   failure: null,
+};
+
+const STARTED_RUN = {
+  ...COMPLETED_RUN,
+  status: "STARTED",
+  tick_refs: [{ tick: 1, world_state_ref: "state://tick-1" }],
+  final_result_ref: null,
+};
+
+const QUEUED_RUN = {
+  ...COMPLETED_RUN,
+  status: "QUEUED",
+  tick_refs: [],
+  final_result_ref: null,
 };
 
 function resultForTick(tick: number) {
@@ -215,6 +236,111 @@ test.describe("WattByte Nexus Figma workspace", () => {
     await expect(page).toHaveURL(/\/regions\/boulder-co\/runs$/);
     await expect(page.getByRole("heading", { name: "Runs", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Something went wrong" })).toHaveCount(0);
+  });
+
+  test("updates an active run to completed without reloading the page", async ({
+    page,
+  }) => {
+    let catalogRequests = 0;
+    let engineRunCompleted = false;
+    await page.route("**/api/digital-twin/access", async (route) => {
+      await route.fulfill({ json: ACCESS_RESPONSE });
+    });
+    await page.route("**/api/v1/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/api/v1/simulation-runs")) {
+        catalogRequests += 1;
+        await route.fulfill({
+          json: {
+            items: [engineRunCompleted ? COMPLETED_RUN : STARTED_RUN],
+          },
+        });
+        return;
+      }
+      await fulfillEngineRoute(route);
+    });
+    await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+
+    await page.goto(process.env.DIGITAL_TWIN_E2E_URL ?? "/");
+    await page.getByRole("button", { name: /Runs:/ }).click();
+
+    await expect(page.getByText("Running", { exact: true })).toBeVisible();
+    engineRunCompleted = true;
+    await expect(page.getByText("Completed", { exact: true })).toBeVisible();
+    expect(catalogRequests).toBeGreaterThanOrEqual(2);
+    const terminalRequestCount = catalogRequests;
+    await page.waitForTimeout(2_500);
+    expect(catalogRequests).toBe(terminalRequestCount);
+  });
+
+  test("live-refreshes run details when the Engine publishes progress", async ({
+    page,
+  }) => {
+    let engineRunCompleted = false;
+    await page.route("**/api/digital-twin/access", async (route) => {
+      await route.fulfill({ json: ACCESS_RESPONSE });
+    });
+    await page.route("**/api/v1/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/api/v1/simulation-runs")) {
+        await route.fulfill({
+          json: { items: [engineRunCompleted ? COMPLETED_RUN : QUEUED_RUN] },
+        });
+        return;
+      }
+      if (path.endsWith("/api/v1/simulation-runs/run-1")) {
+        await route.fulfill({
+          json: engineRunCompleted ? COMPLETED_RUN : QUEUED_RUN,
+        });
+        return;
+      }
+      await fulfillEngineRoute(route);
+    });
+    await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+
+    await page.goto(process.env.DIGITAL_TWIN_E2E_URL ?? "/");
+    await page.getByRole("button", { name: /Runs:/ }).click();
+    await page.getByRole("button", { name: "Boulder test scenario" }).click();
+
+    await expect(page.getByText("Queued", { exact: true })).toBeVisible();
+    await expect(page.getByText("0 / 2", { exact: true })).toBeVisible();
+    await expect(page.getByText("No ticks", { exact: true })).toBeVisible();
+    engineRunCompleted = true;
+    await expect(page.getByText("Completed", { exact: true })).toBeVisible();
+    await expect(page.getByText("2 / 2", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("slider", { name: "Simulation playback tick" })
+    ).toBeEnabled();
+  });
+
+  test("fits the selected region from both zoom controls without region assets", async ({
+    page,
+  }) => {
+    await openDigitalTwin(page);
+    const canvas = page.locator(".maplibregl-canvas");
+    const zoomIn = page.getByRole("button", { name: "Zoom in" });
+
+    const expectCameraChange = async (zoomToRegion: () => Promise<void>) => {
+      await zoomIn.click();
+      await zoomIn.click();
+      await page.waitForTimeout(1_000);
+      const before = await canvas.screenshot();
+      await zoomToRegion();
+      await page.waitForTimeout(500);
+      const after = await canvas.screenshot();
+      expect(Buffer.compare(before, after)).not.toBe(0);
+    };
+
+    await expectCameraChange(async () => {
+      await page.getByRole("button", { name: "Zoom to selected region" }).click();
+    });
+
+    await expectCameraChange(async () => {
+      await page.keyboard.press(
+        process.platform === "darwin" ? "Meta+KeyK" : "Control+KeyK"
+      );
+      await page.getByRole("option", { name: "Zoom to selected region" }).click();
+    });
   });
 
   test("run playback changes the map for each durable tick", async ({ page }) => {

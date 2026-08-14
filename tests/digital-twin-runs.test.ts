@@ -61,6 +61,7 @@ test("fetchDigitalTwinRunCatalog loads every region and run page from the API", 
               kind: "scenario",
               correlation_id: "request-1",
               scenario_id: "scenario-west-wind",
+              scenario_name: "West wind drill",
               base_weather_version: "2026-08-11T15:00:00Z",
               ignition_points: [{ lat: 40.02, lon: -105.27 }],
               duration_hours: 4,
@@ -125,13 +126,27 @@ test("fetchDigitalTwinRunCatalog loads every region and run page from the API", 
   );
   assert.equal(new URL(requestedUrls[2]).searchParams.get("cursor"), "20");
   assert.equal(new URL(requestedUrls[3]).searchParams.get("cursor"), "20");
-  assert.deepEqual(catalog.regions.map((region) => region.name), ["Boulder County", "Golden"]);
+  assert.deepEqual(catalog.regions, [
+    {
+      id: "boulder-co",
+      name: "Boulder County",
+      status: "published",
+      bounds: { west: -105.7, south: 39.8, east: -104.9, north: 40.3 },
+    },
+    {
+      id: "golden-co",
+      name: "Golden",
+      status: "published",
+      bounds: { west: -105.4, south: 39.6, east: -105, north: 40 },
+    },
+  ]);
   assert.deepEqual(catalog.runs[0], {
     id: "run-1",
     simulationId: "simulation-1",
     regionId: "boulder-co",
     regionName: "Boulder County",
     scenarioId: "scenario-west-wind",
+    scenarioName: "West wind drill",
     triggerKind: "scenario",
     status: "STARTED",
     ignitionPoints: [{ id: "run-1-ignition-1", latitude: 40.02, longitude: -105.27 }],
@@ -158,6 +173,7 @@ test("filterDigitalTwinRuns filters authoritative API fields", () => {
       regionId: "boulder-co",
       regionName: "Boulder County",
       scenarioId: "scenario-west-wind",
+      scenarioName: "West wind drill",
       triggerKind: "scenario" as const,
       status: "STARTED" as const,
       ignitionPoints: [],
@@ -175,6 +191,7 @@ test("filterDigitalTwinRuns filters authoritative API fields", () => {
       regionId: "golden-co",
       regionName: "Golden",
       scenarioId: null,
+      scenarioName: null,
       triggerKind: "manual" as const,
       status: "COMPLETED" as const,
       ignitionPoints: [],
@@ -253,6 +270,7 @@ test("submitDigitalTwinScenarioRun creates an Engine scenario then submits every
   const accepted = await submitDigitalTwinScenarioRun(
     "https://engine.example.com",
     {
+      scenarioName: "Foothills wind test",
       regionId: "boulder-co",
       durationHours: 4,
       ignitionPoints: [
@@ -274,6 +292,7 @@ test("submitDigitalTwinScenarioRun creates an Engine scenario then submits every
   ]);
   const scenario = JSON.parse(String(requests[2].init?.body));
   assert.deepEqual(scenario, {
+    name: "Foothills wind test",
     region_id: "boulder-co",
     geometry: {
       type: "Polygon",

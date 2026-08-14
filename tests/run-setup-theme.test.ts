@@ -80,7 +80,7 @@ describe("Run setup theme", () => {
   it("gives each setup step real run information and settings", () => {
     assert.match(scenarioBuilderSource, /Selected region/);
     assert.match(scenarioBuilderSource, /Valid date/);
-    assert.match(scenarioBuilderSource, /Weather events/);
+    assert.match(scenarioBuilderSource, /Weather observations/);
     assert.match(scenarioBuilderSource, /Fuel moisture/);
     assert.match(scenarioBuilderSource, /Ember spotting/);
     assert.match(scenarioBuilderSource, /Crown fire/);

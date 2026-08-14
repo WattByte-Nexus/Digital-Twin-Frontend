@@ -9,6 +9,7 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  ScrollArea,
   Skeleton,
   Table,
   TableBody,
@@ -34,6 +35,7 @@ import {
 
 interface RunDetailTabsProps {
   apiUrl: string;
+  refreshKey: string;
   runId: string;
 }
 
@@ -168,19 +170,64 @@ function ExposurePanel({ data }: { data: Extract<RunTabData, { kind: "exposure" 
     }
     return [...counts.entries()].sort(([left], [right]) => left.localeCompare(right));
   }, [data.exposedAssets]);
+  const landCover = data.run.metrics?.land_cover_breakdown ?? [];
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
-      <Card className="gap-3 px-5 py-5">
-        <span className="text-sm text-muted-foreground">Assets intersecting the burned footprint</span>
-        <strong className="text-4xl font-semibold tracking-tight">{data.exposedAssets.length.toLocaleString()}</strong>
-        <span className="text-xs text-muted-foreground">Calculated from the run result and region asset APIs</span>
-      </Card>
+    <div className="grid gap-4">
       <Card className="gap-4 py-5">
-        <CardHeader className="px-5"><CardTitle className="text-base">Exposure by asset type</CardTitle><CardDescription>Authoritative region assets spatially intersected with the result geometry</CardDescription></CardHeader>
+        <CardHeader className="px-5">
+          <CardTitle className="text-base">Affected land cover</CardTitle>
+          <CardDescription>
+            Final burned-or-burning area grouped by the retained LANDFIRE EVT classification
+          </CardDescription>
+        </CardHeader>
         <CardContent className="px-5">
-          {groups.length ? <Table><TableHeader><TableRow><TableHead>Asset type</TableHead><TableHead className="text-right">Exposed</TableHead></TableRow></TableHeader><TableBody>{groups.map(([type, count]) => <TableRow key={type}><TableCell>{titleCase(type)}</TableCell><TableCell className="text-right tabular-nums">{count}</TableCell></TableRow>)}</TableBody></Table> : <p className="py-6 text-center text-sm text-muted-foreground">No region assets intersect the current burned footprint.</p>}
+          {landCover.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>EVT class</TableHead>
+                  <TableHead>Land-cover type</TableHead>
+                  <TableHead className="text-right">Area</TableHead>
+                  <TableHead className="text-right">Share</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {landCover.map((entry) => (
+                  <TableRow key={entry.class_id}>
+                    <TableCell className="font-mono text-xs tabular-nums">
+                      {entry.class_id}
+                    </TableCell>
+                    <TableCell className="font-medium">{entry.label}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {entry.area_hectares.toLocaleString(undefined, { maximumFractionDigits: 2 })} ha
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {entry.percentage.toLocaleString(undefined, { maximumFractionDigits: 1 })}%
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Land-cover composition is available when the simulation completes.
+            </p>
+          )}
         </CardContent>
       </Card>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
+        <Card className="gap-3 px-5 py-5">
+          <span className="text-sm text-muted-foreground">Assets intersecting the burned footprint</span>
+          <strong className="text-4xl font-semibold tracking-tight">{data.exposedAssets.length.toLocaleString()}</strong>
+          <span className="text-xs text-muted-foreground">Calculated from the run result and region asset APIs</span>
+        </Card>
+        <Card className="gap-4 py-5">
+          <CardHeader className="px-5"><CardTitle className="text-base">Exposure by asset type</CardTitle><CardDescription>Authoritative region assets spatially intersected with the result geometry</CardDescription></CardHeader>
+          <CardContent className="px-5">
+            {groups.length ? <Table><TableHeader><TableRow><TableHead>Asset type</TableHead><TableHead className="text-right">Exposed</TableHead></TableRow></TableHeader><TableBody>{groups.map(([type, count]) => <TableRow key={type}><TableCell>{titleCase(type)}</TableCell><TableCell className="text-right tabular-nums">{count}</TableCell></TableRow>)}</TableBody></Table> : <p className="py-6 text-center text-sm text-muted-foreground">No region assets intersect the current burned footprint.</p>}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -209,11 +256,13 @@ function ActivityPanel({ data }: { data: Extract<RunTabData, { kind: "activity" 
     <Card className="gap-4 py-5">
       <CardHeader className="px-5"><CardTitle className="text-base">Activity and logs</CardTitle><CardDescription>Durable lifecycle and tick lineage from the run API</CardDescription></CardHeader>
       <CardContent className="px-5">
-        <div className="space-y-3">
-          <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><CircleDot aria-hidden="true" className="mt-0.5 size-4 fill-muted-foreground text-primary-foreground" /><div><p className="text-sm font-medium text-foreground">Run accepted</p><p className="font-mono text-xs text-muted-foreground">{displayValue(data.run.trigger.correlation_id)}</p></div></div>
-          {ticks.map(({ tick, world_state_ref: reference }) => <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3" key={tick}><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 fill-primary text-primary-foreground" /><div><p className="text-sm font-medium text-foreground">Tick {tick} completed</p><p className="font-mono text-xs text-muted-foreground break-all">{reference}</p></div></div>)}
-          <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><StatusIcon aria-hidden="true" className={`mt-0.5 size-4 ${statusIconColor}`} /><div><p className="text-sm font-medium text-foreground">Current status: {titleCase(data.run.status)}</p>{data.run.failure ? <p className="mt-1 text-xs text-foreground">{displayValue(data.run.failure.message ?? data.run.failure.detail ?? data.run.failure.error_type)}</p> : null}</div></div>
-        </div>
+        <ScrollArea className="h-[min(32rem,50vh)] supports-[height:1dvh]:h-[min(32rem,50dvh)] [&_[data-radix-scroll-area-viewport]]:overscroll-contain">
+          <div className="space-y-3 pe-4">
+            <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><CircleDot aria-hidden="true" className="mt-0.5 size-4 fill-muted-foreground text-primary-foreground" /><div><p className="text-sm font-medium text-foreground">Run accepted</p><p className="font-mono text-xs text-muted-foreground">{displayValue(data.run.trigger.correlation_id)}</p></div></div>
+            {ticks.map(({ tick, world_state_ref: reference }) => <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3" key={tick}><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 fill-primary text-primary-foreground" /><div><p className="text-sm font-medium text-foreground">Tick {tick} completed</p><p className="font-mono text-xs text-muted-foreground break-all">{reference}</p></div></div>)}
+            <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><StatusIcon aria-hidden="true" className={`mt-0.5 size-4 ${statusIconColor}`} /><div><p className="text-sm font-medium text-foreground">Current status: {titleCase(data.run.status)}</p>{data.run.failure ? <p className="mt-1 text-xs text-foreground">{displayValue(data.run.failure.message ?? data.run.failure.detail ?? data.run.failure.error_type)}</p> : null}</div></div>
+          </div>
+        </ScrollArea>
       </CardContent>
     </Card>
   );
@@ -233,7 +282,7 @@ function TabPanel({ state, onRetry }: { state: TabLoadState | undefined; onRetry
   return <ActivityPanel data={state.data} />;
 }
 
-export function RunDetailTabs({ apiUrl, runId }: RunDetailTabsProps) {
+export function RunDetailTabs({ apiUrl, refreshKey, runId }: RunDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<RunDetailTab>("overview");
   const [states, setStates] = useState<Partial<Record<RunDetailTab, TabLoadState>>>({});
   const [reloadToken, setReloadToken] = useState(0);
@@ -250,7 +299,7 @@ export function RunDetailTabs({ apiUrl, runId }: RunDetailTabsProps) {
       },
     );
     return () => controller.abort();
-  }, [activeTab, apiUrl, reloadToken, runId]);
+  }, [activeTab, apiUrl, refreshKey, reloadToken, runId]);
 
   return (
     <Tabs onValueChange={(value) => setActiveTab(value as RunDetailTab)} value={activeTab}>

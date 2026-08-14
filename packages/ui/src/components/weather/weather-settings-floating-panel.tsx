@@ -12,9 +12,11 @@ import type { FloatingPanelAnchor } from "../floating-map-panel-geometry";
 import type { WeatherSettingsPanelProps } from "./types";
 import { WeatherSettingsPanel } from "./weather-settings-panel";
 
-const WEATHER_PANEL_SIZE = { width: 380, height: 820 };
+const WEATHER_PANEL_WIDTH = 380;
+const WEATHER_PANEL_FORM_HEIGHT = 832;
 
-export interface WeatherSettingsFloatingPanelProps extends WeatherSettingsPanelProps {
+export interface WeatherSettingsFloatingPanelProps
+  extends WeatherSettingsPanelProps {
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
@@ -37,7 +39,10 @@ export function WeatherSettingsFloatingPanel({
   });
   const [panelPresent, setPanelPresent] = React.useState(isOpen);
   React.useEffect(() => {
-    if (!isOpen && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (
+      !isOpen &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
       setPanelPresent(false);
     }
   }, [isOpen]);
@@ -52,6 +57,15 @@ export function WeatherSettingsFloatingPanel({
       Weather settings
     </Button>
   );
+  const panelHeight =
+    WEATHER_PANEL_FORM_HEIGHT +
+    (panelProps.value?.mode === "auto" && panelProps.autoWeatherStatus
+      ? 24
+      : 0) +
+    (panelProps.value?.mode === "auto" &&
+    (panelProps.autoWeatherCondition || panelProps.autoWeatherSource)
+      ? 64
+      : 0);
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
@@ -71,7 +85,7 @@ export function WeatherSettingsFloatingPanel({
         <FloatingMapPanel
           anchor={anchor}
           aria-label="Weather settings"
-          defaultSize={WEATHER_PANEL_SIZE}
+          defaultSize={{ width: WEATHER_PANEL_WIDTH, height: panelHeight }}
           fitToBounds
           onAnchorChange={setAnchor}
         >
@@ -80,7 +94,7 @@ export function WeatherSettingsFloatingPanel({
               "relative h-full origin-center",
               isOpen
                 ? "animate-in fade-in-0 zoom-in-95"
-                : "pointer-events-none animate-out fade-out-0 zoom-out-95",
+                : "pointer-events-none animate-out fade-out-0 zoom-out-95"
             )}
             data-state={isOpen ? "open" : "closed"}
             onAnimationEnd={(event) => {

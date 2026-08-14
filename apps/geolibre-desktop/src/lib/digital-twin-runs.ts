@@ -15,10 +15,18 @@ export type DigitalTwinRunStatus =
 
 export type DigitalTwinRunTriggerKind = "scenario" | "manual" | "automatic";
 
+export interface DigitalTwinRegionBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
 export interface DigitalTwinRegionRecord {
   id: string;
   name: string;
   status: "draft" | "published";
+  bounds: DigitalTwinRegionBounds;
 }
 
 export interface DigitalTwinRunRecord {
@@ -27,6 +35,7 @@ export interface DigitalTwinRunRecord {
   regionId: string;
   regionName: string;
   scenarioId: string | null;
+  scenarioName: string | null;
   triggerKind: DigitalTwinRunTriggerKind;
   status: DigitalTwinRunStatus;
   ignitionPoints: Array<{
@@ -49,6 +58,7 @@ export interface DigitalTwinRunCatalog {
 }
 
 export interface DigitalTwinScenarioRunSubmission {
+  scenarioName: string;
   regionId: string;
   durationHours: number;
   ignitionPoints: ReadonlyArray<{
@@ -85,6 +95,16 @@ const RUN_STATUSES = new Set<DigitalTwinRunStatus>([
   "COMPLETED",
   "FAILED",
 ]);
+
+const ACTIVE_RUN_STATUSES = new Set<DigitalTwinRunStatus>([
+  "QUEUED",
+  "STARTED",
+  "CANCEL_REQUESTED",
+]);
+
+export function isDigitalTwinRunActive(status: DigitalTwinRunStatus): boolean {
+  return ACTIVE_RUN_STATUSES.has(status);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -131,7 +151,7 @@ function parseRegion(value: unknown): DigitalTwinRegionRecord {
   if (!id || !name || (status !== "draft" && status !== "published")) {
     throw new Error("Digital Twin API returned an invalid region record.");
   }
-  return { id, name, status };
+  return { id, name, status, bounds: parseRegionBounds(value) };
 }
 
 function parseIgnitionPoint(
@@ -159,11 +179,13 @@ function triggerData(trigger: Record<string, unknown>, runId: string) {
   const kind = trigger.kind;
   if (kind === "scenario") {
     const scenarioId = nonEmptyString(trigger.scenario_id);
-    if (!scenarioId || !Array.isArray(trigger.ignition_points)) {
+    const scenarioName = nonEmptyString(trigger.scenario_name);
+    if (!scenarioId || !scenarioName || !Array.isArray(trigger.ignition_points)) {
       throw new Error(`Run ${runId} has an invalid scenario trigger.`);
     }
     return {
       scenarioId,
+      scenarioName,
       triggerKind: "scenario" as const,
       ignitionPoints: trigger.ignition_points.map((point, index) =>
         parseIgnitionPoint(point, runId, index),
@@ -177,6 +199,7 @@ function triggerData(trigger: Record<string, unknown>, runId: string) {
   const time = isRecord(trigger.time) ? trigger.time : {};
   return {
     scenarioId: null,
+    scenarioName: null,
     triggerKind: kind === "manual" ? ("manual" as const) : ("automatic" as const),
     ignitionPoints: [ignition],
     durationHours: finiteNumber(time.duration_hours),
@@ -184,7 +207,7 @@ function triggerData(trigger: Record<string, unknown>, runId: string) {
   };
 }
 
-function parseRun(
+export function parseDigitalTwinRun(
   value: unknown,
   regionNames: ReadonlyMap<string, string>,
 ): DigitalTwinRunRecord {
@@ -223,6 +246,7 @@ function parseRun(
     regionId,
     regionName: regionNames.get(regionId) ?? regionId,
     scenarioId: trigger.scenarioId,
+    scenarioName: trigger.scenarioName,
     triggerKind: trigger.triggerKind,
     status: status as DigitalTwinRunStatus,
     ignitionPoints: trigger.ignitionPoints,
@@ -298,13 +322,37 @@ export async function fetchDigitalTwinRunCatalog(
   ]);
   const regions = regionValues.map(parseRegion);
   const regionNames = new Map(regions.map((region) => [region.id, region.name]));
-  const runs = runValues.map((run) => parseRun(run, regionNames));
+  const runs = runValues.map((run) => parseDigitalTwinRun(run, regionNames));
   return { regions, runs };
+}
+
+export async function fetchDigitalTwinRun(
+  value: string,
+  runId: string,
+  options: {
+    fetchImpl?: FetchLike;
+    regionNames?: ReadonlyMap<string, string>;
+    signal?: AbortSignal;
+  } = {},
+): Promise<DigitalTwinRunRecord> {
+  const apiUrl = normalizeDigitalTwinApiUrl(value);
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
+  if (!fetchImpl) throw new Error("This environment cannot connect to the Digital Twin API.");
+  const response = await fetchImpl(
+    resolveDigitalTwinApiUrl(
+      apiUrl,
+      `/api/v1/simulation-runs/${encodeURIComponent(runId)}`,
+    ),
+    { headers: { Accept: "application/json" }, signal: options.signal },
+  );
+  if (!response.ok) throw await apiFailure(response, "Digital Twin run request");
+  return parseDigitalTwinRun(await response.json(), options.regionNames ?? new Map());
 }
 
 function assertScenarioRunSubmission(
   submission: DigitalTwinScenarioRunSubmission,
 ): void {
+  if (!submission.scenarioName.trim()) throw new Error("A scenario name is required.");
   if (!submission.regionId.trim()) throw new Error("A simulation region is required.");
   if (!Number.isFinite(submission.durationHours) || submission.durationHours <= 0) {
     throw new Error("Simulation duration must be greater than zero.");
@@ -335,12 +383,7 @@ function assertScenarioRunSubmission(
   }
 }
 
-function parseRegionBounds(value: unknown): {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-} {
+function parseRegionBounds(value: unknown): DigitalTwinRegionBounds {
   if (!isRecord(value) || !isRecord(value.bounds)) {
     throw new Error("Digital Twin API returned an invalid region boundary.");
   }
@@ -419,6 +462,7 @@ export async function submitDigitalTwinScenarioRun(
         "Idempotency-Key": `scenario-${submissionId}`,
       },
       body: JSON.stringify({
+        name: submission.scenarioName.trim(),
         region_id: regionId,
         geometry: {
           type: "Polygon",
@@ -483,6 +527,7 @@ export function filterDigitalTwinRuns(
       run.regionId,
       run.regionName,
       run.scenarioId,
+      run.scenarioName,
       run.triggerKind,
     ]
       .filter(Boolean)

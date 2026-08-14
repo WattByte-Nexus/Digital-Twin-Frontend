@@ -148,6 +148,7 @@ export function DigitalTwinWorkspace({
   const launchSimulation = useCallback(
     async (request: ScenarioRunRequest, idempotencyKey: string) => {
       const submission = await submitDigitalTwinScenarioRun(defaultDigitalTwinApiUrl(), {
+        scenarioName: request.scenario,
         regionId: request.regionId,
         durationHours: request.durationHours,
         ignitionPoints: request.ignitionPoints,
@@ -226,7 +227,10 @@ export function DigitalTwinWorkspace({
         inert={activeView !== "settings"}
         role={activeView === "settings" ? "main" : undefined}
       >
-        <SettingsView onOpenRealSettings={onOpenRealSettings} />
+        <SettingsView
+          onClose={() => onNavigate("live")}
+          onOpenRealSettings={onOpenRealSettings}
+        />
       </div>
 
       <SimulationPopover

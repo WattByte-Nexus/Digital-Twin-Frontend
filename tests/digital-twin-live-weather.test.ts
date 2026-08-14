@@ -64,6 +64,17 @@ describe("Digital Twin live weather", () => {
                   lat: 40.02,
                   lon: -105.27,
                   elevation_m: 1_612,
+                  wind_speed_m_s: 10,
+                  wind_from_degrees: 90,
+                  text_description: "Light rain",
+                  quality_status: "accepted",
+                  source_provider: "nws",
+                },
+                {
+                  station_id: "KDEN",
+                  observed_at: "2026-08-12T17:50:00Z",
+                  lat: 39.86,
+                  lon: -104.67,
                   dew_point_c: 8.5,
                   relative_humidity_pct: 42,
                   wind_gust_m_s: 12,
@@ -71,7 +82,6 @@ describe("Digital Twin live weather", () => {
                   barometric_pressure_pa: 83_500,
                   sea_level_pressure_pa: 101_200,
                   visibility_m: 16_000,
-                  text_description: "Light rain",
                   quality_status: "accepted",
                   source_provider: "nws",
                 },
@@ -225,7 +235,18 @@ describe("Digital Twin live weather", () => {
     assert.deepEqual(weather.readings, [
       { band: "wind_velocity", label: "Wind speed", unit: "m/s", value: 8 },
     ]);
-    assert.deepEqual(weather.unavailableReadingLabels, ["Precipitation"]);
+    assert.deepEqual(weather.unavailableReadingLabels, [
+      "Air temperature",
+      "Dew point",
+      "Relative humidity",
+      "Wind direction",
+      "Wind gust",
+      "Precipitation in last hour",
+      "Barometric pressure",
+      "Sea-level pressure",
+      "Visibility",
+      "Precipitation",
+    ]);
     assert.deepEqual(sampledLongitudes.slice(0, 2), ["-105.27", "-105"]);
   });
 });

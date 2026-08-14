@@ -25,6 +25,18 @@ test("the selected region can be fitted from both map and command-palette contro
   assert.match(workspaceSource, /const zoomToSelectedRegion = \(\) => \{/);
   assert.match(
     workspaceSource,
+    /const selectedRegionBounds = activeCatalogRegion\?\.bounds;/,
+  );
+  assert.match(
+    workspaceSource,
+    /const canZoomToSelectedRegion =\s*mapInstance !== null && selectedRegionBounds !== undefined;/,
+  );
+  assert.match(
+    workspaceSource,
+    /\[selectedRegionBounds\.west, selectedRegionBounds\.south\],[\s\S]*?\[selectedRegionBounds\.east, selectedRegionBounds\.north\]/,
+  );
+  assert.match(
+    workspaceSource,
     /<Button[\s\S]*?size="icon"[\s\S]*?aria-label="Zoom to selected region"[\s\S]*?onClick=\{zoomToSelectedRegion\}/,
   );
   assert.match(

@@ -139,6 +139,15 @@ export function WeatherSettingsPanel({
   const autoReadingByBand = new Map(
     autoWeatherReadings?.map((reading) => [reading.id, reading])
   );
+  if (
+    !autoReadingByBand.has("wind_direction") &&
+    autoReadingByBand.has("wind_towards_direction")
+  ) {
+    autoReadingByBand.set(
+      "wind_direction",
+      autoReadingByBand.get("wind_towards_direction")!
+    );
+  }
   const autoReadingBands = new Set(autoReadingByBand.keys());
   const liveTemperatureAvailable = autoReadingBands.has("temperature_c");
 
@@ -217,7 +226,7 @@ export function WeatherSettingsPanel({
           ) : null}
 
           <fieldset
-            className="space-y-4 disabled:opacity-55 [@media(max-height:900px)]:space-y-2"
+            className="space-y-4 [@media(max-height:900px)]:space-y-2"
             disabled={value.mode === "auto"}
           >
             <div className="space-y-2 [@media(max-height:900px)]:space-y-1">
@@ -234,14 +243,11 @@ export function WeatherSettingsPanel({
             <div className="space-y-2 [@media(max-height:900px)]:space-y-1">
               <SectionLabel>Time of the Day</SectionLabel>
               <TimeOfDayControl
+                disabled={value.mode === "auto"}
                 hour={value.hour}
                 minute={value.minute}
-                format={value.timeFormat}
                 onTimeChange={(hour, minute) =>
                   setValue((current) => ({ ...current, hour, minute }))
-                }
-                onFormatChange={(timeFormat) =>
-                  setValue((current) => ({ ...current, timeFormat }))
                 }
               />
             </div>
@@ -311,6 +317,7 @@ export function WeatherSettingsPanel({
                       minimum={row.minimum}
                       onChange={(next) => updateEvent(row.event, next)}
                       step={row.step}
+                      unavailable={value.mode === "auto" && !autoReading}
                       unit={row.unit}
                       value={
                         value.mode === "auto" && autoReading

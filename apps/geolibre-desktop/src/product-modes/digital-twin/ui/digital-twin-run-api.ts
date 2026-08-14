@@ -16,6 +16,7 @@ export interface DigitalTwinRunTrigger {
   kind?: "manual" | "scenario";
   correlation_id?: string;
   scenario_id?: string;
+  scenario_name?: string;
   base_weather_version?: string;
   weather_version?: string;
   physics_result_version?: string;
@@ -46,6 +47,12 @@ export interface DigitalTwinRunRecord {
     final_burned_cells: number;
     burned_area_hectares: number;
     peak_spread_rate_hectares_per_hour: number;
+    land_cover_breakdown: Array<{
+      class_id: number;
+      label: string;
+      area_hectares: number;
+      percentage: number;
+    }>;
   } | null;
   failure: { error_type?: string; message?: string; detail?: string } | null;
 }
@@ -94,6 +101,47 @@ function apiErrorMessage(status: number, body: unknown): string {
   }
   if (typeof body === "string" && body.trim()) return body;
   return `Digital Twin API request failed (${status}).`;
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isLandCoverBreakdownEntry(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    Number.isInteger(entry.class_id) &&
+    isNonNegativeFiniteNumber(entry.class_id) &&
+    typeof entry.label === "string" &&
+    Boolean(entry.label.trim()) &&
+    isNonNegativeFiniteNumber(entry.area_hectares) &&
+    isNonNegativeFiniteNumber(entry.percentage) &&
+    entry.percentage <= 100
+  );
+}
+
+function assertRunMetrics(
+  value: unknown,
+): asserts value is DigitalTwinRunRecord["metrics"] {
+  if (value === null) return;
+  const metrics = value as Record<string, unknown>;
+  const landCoverBreakdown = metrics.land_cover_breakdown;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    isNonNegativeFiniteNumber(metrics.final_burning_cells) &&
+    isNonNegativeFiniteNumber(metrics.final_burned_cells) &&
+    isNonNegativeFiniteNumber(metrics.burned_area_hectares) &&
+    isNonNegativeFiniteNumber(metrics.peak_spread_rate_hectares_per_hour) &&
+    Array.isArray(landCoverBreakdown) &&
+    landCoverBreakdown.length > 0 &&
+    landCoverBreakdown.every(isLandCoverBreakdownEntry)
+  ) {
+    return;
+  }
+  throw new Error("Digital Twin API returned invalid run metrics.");
 }
 
 async function getJson<T>(
@@ -145,6 +193,7 @@ export async function loadRunTab(
     fetchImpl,
     options.signal,
   );
+  assertRunMetrics(run.metrics);
 
   if (tab === "overview" || tab === "inputs" || tab === "activity") {
     return { kind: tab, run };

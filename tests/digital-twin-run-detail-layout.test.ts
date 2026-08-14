@@ -33,7 +33,7 @@ const playbackWorkspaceSource = readFileSync(
 test("simulation history opens a run from its scenario cell", () => {
   assert.match(
     runsViewSource,
-    /<TableCell>\s*<Button[\s\S]*?onClick=\{\(\) => onOpenRun\(run\.id\)\}[\s\S]*?\{run\.scenarioId \?\? "—"\}[\s\S]*?<\/Button>\s*<\/TableCell>/,
+    /<TableCell>\s*<Button[\s\S]*?onClick=\{\(\) => onOpenRun\(run\.id\)\}[\s\S]*?\{run\.scenarioName \?\? "—"\}[\s\S]*?<\/Button>\s*<\/TableCell>/,
   );
   assert.match(
     runsViewSource,
@@ -60,7 +60,12 @@ test("run detail positions graphs beside or below the expandable map and provide
   assert.match(runTabsSource, /<TabsTrigger value="overview">Overview<\/TabsTrigger>/);
   assert.match(runTabsSource, /fill-primary text-primary-foreground/);
   assert.match(runTabsSource, /text-sm font-medium text-foreground">Tick \{tick\} completed/);
+  assert.match(runTabsSource, /<ScrollArea className="h-\[min\(32rem,50vh\)\][^"]*scroll-area-viewport[^\"]*overscroll-contain/);
   assert.match(runTabsSource, /fill-\[hsl\(var\(--dt-status-ok-text\)\)\]/);
   assert.match(runTabsSource, /fill-destructive text-destructive-foreground/);
+  assert.match(runDetailSource, /label="Area consumed"/);
   assert.match(runTabsSource, /run\.metrics\.burned_area_hectares/);
+  assert.match(runTabsSource, /Affected land cover/);
+  assert.match(runTabsSource, /entry\.area_hectares/);
+  assert.match(runTabsSource, /entry\.percentage/);
 });

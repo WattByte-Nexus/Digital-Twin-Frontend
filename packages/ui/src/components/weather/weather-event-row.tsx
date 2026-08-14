@@ -12,6 +12,7 @@ export interface WeatherEventRowProps {
   minimum?: number;
   onChange: (value: number) => void;
   step?: number;
+  unavailable?: boolean;
   unit: string;
   value: number;
 }
@@ -23,6 +24,7 @@ export function WeatherEventRow({
   maximum = 100,
   minimum = 0,
   step = 1,
+  unavailable = false,
   onChange,
 }: WeatherEventRowProps) {
   const id = `weather-${label.toLowerCase().replaceAll(" ", "-")}`;
@@ -47,40 +49,48 @@ export function WeatherEventRow({
     <div className="grid grid-cols-[minmax(0,1fr)_104px] items-center gap-2">
       <Label
         className="truncate text-[11px] font-medium text-muted-foreground"
-        htmlFor={id}
+        htmlFor={unavailable ? undefined : id}
       >
         {label}
       </Label>
       <div className="relative">
-        <Input
-          id={id}
-          className="input-compact-number h-8 min-w-0 ps-3 pe-10 text-right tabular-nums"
-          type="text"
-          inputMode={acceptsDecimal ? "decimal" : "numeric"}
-          pattern={acceptsDecimal ? "[0-9]*[.]?[0-9]*" : "[0-9]*"}
-          value={draft}
-          onFocus={() => {
-            editingRef.current = true;
-          }}
-          onChange={(event) => {
-            const raw = event.target.value;
-            const validDraft = acceptsDecimal
-              ? DECIMAL_DRAFT.test(raw)
-              : INTEGER_DRAFT.test(raw);
-            if (!validDraft) return;
+        {unavailable ? (
+          <div className="flex h-8 items-center justify-end rounded-md border bg-muted px-3 text-xs text-muted-foreground">
+            Unavailable
+          </div>
+        ) : (
+          <>
+            <Input
+              id={id}
+              className="input-compact-number h-8 min-w-0 ps-3 pe-10 text-right tabular-nums"
+              type="text"
+              inputMode={acceptsDecimal ? "decimal" : "numeric"}
+              pattern={acceptsDecimal ? "[0-9]*[.]?[0-9]*" : "[0-9]*"}
+              value={draft}
+              onFocus={() => {
+                editingRef.current = true;
+              }}
+              onChange={(event) => {
+                const raw = event.target.value;
+                const validDraft = acceptsDecimal
+                  ? DECIMAL_DRAFT.test(raw)
+                  : INTEGER_DRAFT.test(raw);
+                if (!validDraft) return;
 
-            setDraft(raw);
-            if (raw === "" || raw === "." || raw === "-") return;
+                setDraft(raw);
+                if (raw === "" || raw === "." || raw === "-") return;
 
-            const next = Number(raw);
-            if (Number.isFinite(next))
-              onChange(clampWeatherValue(next, minimum, maximum));
-          }}
-          onBlur={commitDraft}
-        />
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
-          {unit}
-        </span>
+                const next = Number(raw);
+                if (Number.isFinite(next))
+                  onChange(clampWeatherValue(next, minimum, maximum));
+              }}
+              onBlur={commitDraft}
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
+              {unit}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

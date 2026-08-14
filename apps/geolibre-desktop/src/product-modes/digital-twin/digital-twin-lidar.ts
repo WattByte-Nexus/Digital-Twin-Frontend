@@ -8,14 +8,6 @@ export const MISSING_POINT_RGB_VERTEX_INJECTION = `
   }
 `;
 
-export const ADAPTIVE_SURFEL_VERTEX_INJECTION = `
-  float projectedSurfelRadius = length(size.xy);
-  if (projectedSurfelRadius > 0.0) {
-    float clampedSurfelRadius = clamp(projectedSurfelRadius, 2.0, 10.0);
-    size.xy *= clampedSurfelRadius / projectedSurfelRadius;
-  }
-`;
-
 /** Preserve source RGB, but keep malformed/missing zero-RGB tiles visible. */
 export class VisibleRgbPointCloudLayer extends PointCloudLayer {
   static layerName = "VisibleRgbPointCloudLayer";
@@ -27,7 +19,6 @@ export class VisibleRgbPointCloudLayer extends PointCloudLayer {
       inject: {
         ...shaders.inject,
         "vs:DECKGL_FILTER_COLOR": MISSING_POINT_RGB_VERTEX_INJECTION,
-        "vs:DECKGL_FILTER_SIZE": ADAPTIVE_SURFEL_VERTEX_INJECTION,
       },
     };
   }
@@ -69,13 +60,16 @@ export class GaussianSurfelPointCloudLayer extends VisibleRgbPointCloudLayer {
 
 export const POINT_CLOUD_TILESET_LOAD_OPTIONS = {
   tileset: {
-    // Start with the hierarchy's previews and refine only after the camera
-    // settles. Native leaves remain available without blocking interaction.
+    // Two pixels removes coarse tile patches at close range. Request and memory
+    // caps below keep that refinement from monopolizing the render thread.
     maximumScreenSpaceError: 2,
     maximumMemoryUsage: 512,
-    memoryAdjustedScreenSpaceError: true,
+    // Keep refinement deterministic. The adaptive loader raises this threshold
+    // as the cache fills and can otherwise strand a close view at a coarse LOD.
+    memoryAdjustedScreenSpaceError: false,
     throttleRequests: true,
-    maxRequests: 12,
+    // Bound concurrent parsing and GPU uploads so refinement stays interactive.
+    maxRequests: 8,
     // Camera motion can otherwise trigger a traversal for every input event.
     debounceTime: 100,
     // Engine tiles are georeferenced once and remain stationary.
@@ -96,6 +90,7 @@ export interface DigitalTwinPointCloudDiagnostics {
 }
 
 interface PointCloudTilesetDiagnosticsSource {
+  cartographicCenter: ArrayLike<number> | null;
   stats: {
     get: (name: string) => { count: number };
   };
@@ -105,17 +100,18 @@ interface PointCloudTilesetDiagnosticsSource {
   isLoaded: () => boolean;
 }
 
+interface SelectedPointCloudTile {
+  contentAvailable: boolean;
+  content?: { pointCount?: number };
+}
+
 interface DigitalTwinPointCloudLayerCallbacks {
   onError: (error: Error) => void;
   onReady?: () => void;
-  onCameraTargetElevation?: (elevationMeters: number) => void;
+  onSurfaceReferenceElevation?: (elevationMeters: number) => void;
   onDiagnostics?: (snapshot: DigitalTwinPointCloudDiagnostics) => void;
   renderMode?: DigitalTwinPointCloudRenderMode;
   beforeId?: string;
-}
-
-function pointRadiusForSpacing(minimumSpacingMeters: number): number {
-  return Math.max(0.05, minimumSpacingMeters * 0.75);
 }
 
 /**
@@ -130,72 +126,94 @@ export function createDigitalTwinPointCloudLayer(
   {
     onError,
     onReady,
-    onCameraTargetElevation,
+    onSurfaceReferenceElevation,
     onDiagnostics,
     renderMode = "opaque",
     beforeId,
   }: DigitalTwinPointCloudLayerCallbacks
 ): Tile3DLayer {
-  let firstTileLoaded = false;
-  let cameraTargetElevationReported = false;
+  let visiblePointsReported = false;
   let tileset: PointCloudTilesetDiagnosticsSource | null = null;
 
   const reportError = (error: Error) => {
-    if (!firstTileLoaded) onError(error);
+    if (!visiblePointsReported) onError(error);
   };
 
   const reportDiagnostics = () => {
-    if (!onDiagnostics || !tileset) return;
+    if (!tileset) return;
+    const visiblePointCount = tileset.stats.get("Points/Vertices").count;
+    if (!onDiagnostics) return;
 
     onDiagnostics({
       datasetId: dataset.datasetId,
       residentTileCount: tileset.stats.get("Tiles In Memory").count,
       selectedTileCount: tileset.selectedTiles.length,
-      visiblePointCount: tileset.stats.get("Points/Vertices").count,
+      visiblePointCount,
       gpuMemoryUsageBytes: tileset.gpuMemoryUsageInBytes,
       screenSpaceError: tileset.memoryAdjustedScreenSpaceError,
       settled: tileset.isLoaded(),
     });
   };
 
+  const handleTraversalComplete = <Tile extends SelectedPointCloudTile>(
+    selectedTiles: Tile[]
+  ): Tile[] => {
+    if (!visiblePointsReported) {
+      const visiblePointCount = selectedTiles.reduce((count, tile) => {
+        const pointCount = tile.content?.pointCount;
+        return tile.contentAvailable &&
+          typeof pointCount === "number" &&
+          Number.isFinite(pointCount)
+          ? count + pointCount
+          : count;
+      }, 0);
+      if (visiblePointCount > 0) {
+        visiblePointsReported = true;
+        onReady?.();
+      }
+    }
+    if (onDiagnostics) queueMicrotask(reportDiagnostics);
+    return selectedTiles;
+  };
+
   return new Tile3DLayer({
     id: `digital-twin-point-cloud-${dataset.datasetId}`,
     data: dataset.tilesetUrl,
-    pointSize: pointRadiusForSpacing(dataset.minimumSpacingMeters),
+    // Tile3DLayer defines pointSize in pixels. Keeping previews at a one-pixel
+    // radius prevents coarse hierarchy points from merging into opaque,
+    // tile-shaped sheets while native leaves still resolve at close zoom.
+    pointSize: 1,
     pickable: false,
     operation: "draw",
     beforeId,
-    loadOptions: POINT_CLOUD_TILESET_LOAD_OPTIONS,
+    loadOptions: {
+      ...POINT_CLOUD_TILESET_LOAD_OPTIONS,
+      tileset: {
+        ...POINT_CLOUD_TILESET_LOAD_OPTIONS.tileset,
+        onTraversalComplete: handleTraversalComplete,
+      },
+    },
     _subLayerProps: {
       pointcloud: {
         type:
           renderMode === "gaussian"
             ? GaussianSurfelPointCloudLayer
             : VisibleRgbPointCloudLayer,
-        sizeUnits: "meters",
+        sizeUnits: "pixels",
       },
     },
     onTilesetLoad: (loadedTileset) => {
       tileset = loadedTileset;
-      reportDiagnostics();
-    },
-    onTileLoad: (tile) => {
-      const cameraTargetElevation = tile.parent
-        ? undefined
-        : tile.content?.cartographicOrigin?.[2];
+      const referenceElevation = loadedTileset.cartographicCenter?.[2];
       if (
-        !cameraTargetElevationReported &&
-        Number.isFinite(cameraTargetElevation)
+        typeof referenceElevation === "number" &&
+        Number.isFinite(referenceElevation)
       ) {
-        cameraTargetElevationReported = true;
-        onCameraTargetElevation?.(cameraTargetElevation);
-      }
-      if (!firstTileLoaded) {
-        firstTileLoaded = true;
-        onReady?.();
+        onSurfaceReferenceElevation?.(referenceElevation);
       }
       reportDiagnostics();
     },
+    onTileLoad: reportDiagnostics,
     onTileUnload: reportDiagnostics,
     // @loaders.gl calls this as (tile, message, url), despite deck.gl's type
     // declaration naming the string arguments in the opposite order.

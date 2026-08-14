@@ -1,6 +1,15 @@
-import type { Layer } from "@deck.gl/core";
-import { getMapboxSatelliteTileJsonUrl } from "@geolibre/core";
-import { SatelliteTerrainMap } from "@geolibre/map";
+import {
+  getMapboxGlyphsUrl,
+  getMapboxSatelliteTileUrlTemplate,
+  getMapboxStreetsTileJsonUrl,
+} from "@geolibre/core";
+import {
+  digitalTwinSurfaceCoordinateKey,
+  sampleDigitalTwinSurfaceElevations,
+  SatelliteTerrainMap,
+  TERRAIN_SOURCE_ID,
+  type DigitalTwinSurfaceCoordinate,
+} from "@geolibre/map";
 import {
   Button,
   CommandDialog,
@@ -66,6 +75,7 @@ import { fetchDigitalTwinLiveWeather } from "../../../lib/digital-twin-live-weat
 import {
   digitalTwinRunStatusLabel,
   fetchDigitalTwinRunCatalog,
+  isDigitalTwinRunActive,
   submitDigitalTwinScenarioRun,
   type DigitalTwinRunCatalog,
 } from "../../../lib/digital-twin-runs";
@@ -79,15 +89,10 @@ import {
   fetchActiveDigitalTwinPointCloud,
   type DigitalTwinPointCloudResult,
 } from "../../../lib/digital-twin-point-cloud";
-import { createDigitalTwinPointCloudLayer } from "../digital-twin-lidar";
-import {
-  createDigitalTwinPowerLineLayers,
-  resolveDigitalTwinPowerPoleModelUrl,
-} from "../digital-twin-power-line-rendering";
+import { createDigitalTwinMapSurfaceLayers } from "../digital-twin-map-module";
 import {
   createDigitalTwinSatelliteTerrainConfig,
   DIGITAL_TWIN_INITIAL_VIEW,
-  DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
 } from "../satellite-terrain-config";
 import {
   createWeatherSunSimulationController,
@@ -128,6 +133,24 @@ type WeatherDataLoadState =
   | { status: "error"; error: Error };
 
 type EngineHealthLoadState = "checking" | DigitalTwinEngineHealth;
+
+const RUN_CATALOG_POLL_INTERVAL_MS = 2_000;
+
+interface DigitalTwinMapboxUrls {
+  glyphsUrl: string;
+  satelliteTileUrlTemplate: string;
+  streetsTileJsonUrl: string;
+}
+
+function getDigitalTwinMapboxUrls(): DigitalTwinMapboxUrls | undefined {
+  const glyphsUrl = getMapboxGlyphsUrl();
+  const satelliteTileUrlTemplate = getMapboxSatelliteTileUrlTemplate();
+  const streetsTileJsonUrl = getMapboxStreetsTileJsonUrl();
+  if (!glyphsUrl || !satelliteTileUrlTemplate || !streetsTileJsonUrl) {
+    return undefined;
+  }
+  return { glyphsUrl, satelliteTileUrlTemplate, streetsTileJsonUrl };
+}
 
 type LiveWeatherLoadState =
   | { status: "idle" }
@@ -204,7 +227,6 @@ function applyLiveWeather(
     date: observedAt.date,
     hour: observedAt.hour,
     minute: observedAt.minute,
-    timeFormat: "24",
     season: seasonForMonth(observedAt.month),
     temperature:
       weather.temperatureC === undefined
@@ -408,9 +430,7 @@ export function DigitalTwinMapWorkspace({
   onSelectRegion,
   onToggleTheme,
 }: DigitalTwinMapWorkspaceProps) {
-  const [mapboxSatelliteTileJsonUrl, setMapboxSatelliteTileJsonUrl] = useState(
-    () => getMapboxSatelliteTileJsonUrl()
-  );
+  const [mapboxUrls, setMapboxUrls] = useState(getDigitalTwinMapboxUrls);
   const mapRef = useRef<MapLibreMap | null>(null);
   const mapParkingHostRef = useRef<HTMLDivElement | null>(null);
   const [mapContentEl] = useState(() => {
@@ -459,7 +479,7 @@ export function DigitalTwinMapWorkspace({
   const [readyPointCloudDatasetKey, setReadyPointCloudDatasetKey] = useState<
     string | null
   >(null);
-  const [pointCloudCameraTarget, setPointCloudCameraTarget] = useState<{
+  const [pointCloudSurfaceReference, setPointCloudSurfaceReference] = useState<{
     datasetKey: string;
     elevationMeters: number;
   } | null>(null);
@@ -478,12 +498,42 @@ export function DigitalTwinMapWorkspace({
   const [scenarioBuilderOpen, setScenarioBuilderOpen] = useState(false);
   const satelliteTerrainConfig = useMemo(
     () =>
-      mapboxSatelliteTileJsonUrl
-        ? createDigitalTwinSatelliteTerrainConfig(mapboxSatelliteTileJsonUrl)
+      mapboxUrls
+        ? createDigitalTwinSatelliteTerrainConfig(
+            mapboxUrls.satelliteTileUrlTemplate,
+            mapboxUrls.streetsTileJsonUrl,
+            mapboxUrls.glyphsUrl
+          )
         : undefined,
-    [mapboxSatelliteTileJsonUrl]
+    [mapboxUrls]
   );
   const activeRegionId = controlledRegionId ?? localRegionId;
+  const powerLineSurfaceCoordinates = useMemo(() => {
+    const coordinates = new Map<string, DigitalTwinSurfaceCoordinate>();
+    for (const line of regionalPowerLines) {
+      for (const coordinate of line.coordinates) {
+        const key = digitalTwinSurfaceCoordinateKey(
+          coordinate.lon,
+          coordinate.lat
+        );
+        coordinates.set(key, [coordinate.lon, coordinate.lat]);
+      }
+    }
+    return [...coordinates.values()];
+  }, [regionalPowerLines]);
+  const powerLineSurfaceKey = useMemo(
+    () =>
+      `${activeRegionId}:${powerLineSurfaceCoordinates
+        .map(([longitude, latitude]) =>
+          digitalTwinSurfaceCoordinateKey(longitude, latitude)
+        )
+        .join("|")}`,
+    [activeRegionId, powerLineSurfaceCoordinates]
+  );
+  const [powerLineSurfaceState, setPowerLineSurfaceState] = useState<{
+    networkKey: string;
+    elevations: ReadonlyMap<string, number>;
+  } | null>(null);
   const activeDestination = controlledDestination ?? localDestination;
   const activeRegion = regions.find((region) => region.id === activeRegionId);
   const showLiveMapChrome =
@@ -504,8 +554,7 @@ export function DigitalTwinMapWorkspace({
     useState<TimeOfDayLightingOverlay>(() => timeOfDayLightingOverlay(90));
 
   useEffect(() => {
-    const refresh = () =>
-      setMapboxSatelliteTileJsonUrl(getMapboxSatelliteTileJsonUrl());
+    const refresh = () => setMapboxUrls(getDigitalTwinMapboxUrls());
     window.addEventListener("geolibre:runtime-env-change", refresh);
     return () =>
       window.removeEventListener("geolibre:runtime-env-change", refresh);
@@ -527,27 +576,49 @@ export function DigitalTwinMapWorkspace({
 
   useEffect(() => {
     const controller = new AbortController();
+    let pollTimeout: number | undefined;
+    let pollingActiveRuns = false;
     setRunCatalogLoading(true);
     setRunCatalogError(null);
-    void fetchDigitalTwinRunCatalog(digitalTwinApiUrl, {
-      signal: controller.signal,
-    }).then(
-      (catalog) => {
-        if (controller.signal.aborted) return;
-        setRunCatalog(catalog);
-        setRunCatalogLoading(false);
-      },
-      (cause: unknown) => {
-        if (controller.signal.aborted) return;
-        setRunCatalogError(
-          cause instanceof Error
-            ? cause
-            : new Error("Digital Twin runs request failed.")
-        );
-        setRunCatalogLoading(false);
-      }
-    );
-    return () => controller.abort();
+
+    const schedulePoll = () => {
+      pollTimeout = window.setTimeout(
+        loadCatalog,
+        RUN_CATALOG_POLL_INTERVAL_MS
+      );
+    };
+    const loadCatalog = () => {
+      void fetchDigitalTwinRunCatalog(digitalTwinApiUrl, {
+        signal: controller.signal,
+      }).then(
+        (catalog) => {
+          if (controller.signal.aborted) return;
+          pollingActiveRuns = catalog.runs.some((run) =>
+            isDigitalTwinRunActive(run.status)
+          );
+          setRunCatalog(catalog);
+          setRunCatalogError(null);
+          setRunCatalogLoading(false);
+          if (pollingActiveRuns) schedulePoll();
+        },
+        (cause: unknown) => {
+          if (controller.signal.aborted) return;
+          setRunCatalogError(
+            cause instanceof Error
+              ? cause
+              : new Error("Digital Twin runs request failed.")
+          );
+          setRunCatalogLoading(false);
+          if (pollingActiveRuns) schedulePoll();
+        }
+      );
+    };
+
+    loadCatalog();
+    return () => {
+      controller.abort();
+      if (pollTimeout !== undefined) window.clearTimeout(pollTimeout);
+    };
   }, [digitalTwinApiUrl, runCatalogRequest]);
 
   useEffect(() => {
@@ -688,7 +759,7 @@ export function DigitalTwinMapWorkspace({
   useEffect(() => {
     if (!showLidar || !activeRegionId) {
       setReadyPointCloudDatasetKey(null);
-      setPointCloudCameraTarget(null);
+      setPointCloudSurfaceReference(null);
       setPointCloud({ status: "none" });
       return;
     }
@@ -696,7 +767,7 @@ export function DigitalTwinMapWorkspace({
     const controller = new AbortController();
     let disposed = false;
     setReadyPointCloudDatasetKey(null);
-    setPointCloudCameraTarget(null);
+    setPointCloudSurfaceReference(null);
     setPointCloud({ status: "loading" });
     void fetchActiveDigitalTwinPointCloud(digitalTwinApiUrl, activeRegionId, {
       signal: controller.signal,
@@ -753,7 +824,10 @@ export function DigitalTwinMapWorkspace({
           cause instanceof Error
             ? cause
             : new Error("Regional asset request failed.");
-        console.error("Digital Twin regional assets could not be loaded", error);
+        console.error(
+          "Digital Twin regional assets could not be loaded",
+          error
+        );
         setRegionAssets({ status: "error", error });
       }
     );
@@ -877,72 +951,149 @@ export function DigitalTwinMapWorkspace({
     showLiveMapChrome,
   ]);
 
-  const deckLayers = useMemo<Layer[]>(() => {
-    const layers: Layer[] = [];
-
+  useEffect(() => {
     if (
-      regionAssets.status === "ready" &&
-      regionAssets.regionId === activeRegionId &&
-      regionalPowerLines.length > 0
+      !mapInstance ||
+      !displaySettings.elevation ||
+      powerLineSurfaceCoordinates.length === 0
     ) {
-      layers.push(
-        ...createDigitalTwinPowerLineLayers(regionalPowerLines, {
-          modelUrl: resolveDigitalTwinPowerPoleModelUrl(),
-        })
-      );
+      setPowerLineSurfaceState(null);
+      return;
     }
 
-    if (
+    let frame: number | null = null;
+    const sample = () => {
+      frame = null;
+      const elevations = sampleDigitalTwinSurfaceElevations(
+        mapInstance,
+        powerLineSurfaceCoordinates
+      );
+      if (!elevations) return;
+      console.debug("DEBUG_RUNTIME_20260812_surface_alignment", {
+        event: "power_line_surface_sample",
+        networkKey: powerLineSurfaceKey,
+        samples: [...elevations],
+      });
+      setPowerLineSurfaceState((current) => {
+        if (
+          current?.networkKey === powerLineSurfaceKey &&
+          current.elevations.size === elevations.size &&
+          [...elevations].every(
+            ([key, elevation]) => current.elevations.get(key) === elevation
+          )
+        ) {
+          return current;
+        }
+        return { networkKey: powerLineSurfaceKey, elevations };
+      });
+    };
+    const scheduleSample = () => {
+      if (frame === null) frame = window.requestAnimationFrame(sample);
+    };
+    const handleSourceData = (event: { sourceId?: string }) => {
+      if (event.sourceId === TERRAIN_SOURCE_ID) scheduleSample();
+    };
+
+    setPowerLineSurfaceState((current) =>
+      current?.networkKey === powerLineSurfaceKey ? current : null
+    );
+    scheduleSample();
+    mapInstance.on("sourcedata", handleSourceData);
+    mapInstance.on("terrain", scheduleSample);
+    mapInstance.on("style.load", scheduleSample);
+    mapInstance.on("moveend", scheduleSample);
+
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      mapInstance.off("sourcedata", handleSourceData);
+      mapInstance.off("terrain", scheduleSample);
+      mapInstance.off("style.load", scheduleSample);
+      mapInstance.off("moveend", scheduleSample);
+    };
+  }, [
+    displaySettings.elevation,
+    mapInstance,
+    powerLineSurfaceCoordinates,
+    powerLineSurfaceKey,
+  ]);
+
+  const surfaceLayers = useMemo(() => {
+    const powerLineSurfaceElevations =
+      powerLineSurfaceState?.networkKey === powerLineSurfaceKey
+        ? powerLineSurfaceState.elevations
+        : undefined;
+    const powerLinesReady =
+      !displaySettings.elevation || powerLineSurfaceElevations !== undefined;
+    const powerLines =
+      regionAssets.status === "ready" &&
+      regionAssets.regionId === activeRegionId &&
+      regionalPowerLines.length > 0 &&
+      powerLinesReady
+        ? regionalPowerLines
+        : [];
+
+    const activePointCloud =
       showLidar &&
       displaySettings.pointClouds &&
       pointCloud.status === "ready" &&
       pointCloud.dataset.regionId === activeRegionId
-    ) {
-      const datasetKey = pointCloudDatasetKey(pointCloud.dataset);
-      layers.push(
-        createDigitalTwinPointCloudLayer(pointCloud.dataset, {
-          beforeId: DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
-          onError: (error) => {
-            console.error(
-              `${pointCloud.dataset.name} could not be loaded`,
-              error
-            );
-            setPointCloud((current) =>
-              current.status === "ready" &&
-              pointCloudDatasetKey(current.dataset) === datasetKey
-                ? { status: "error", error }
-                : current
-            );
-          },
-          onCameraTargetElevation: (elevationMeters) => {
-            setPointCloudCameraTarget({ datasetKey, elevationMeters });
-          },
-          onReady: () => setReadyPointCloudDatasetKey(datasetKey),
-        })
-      );
-    }
+        ? pointCloud.dataset
+        : undefined;
 
-    return layers;
+    return createDigitalTwinMapSurfaceLayers({
+      powerLines,
+      powerLineSurfaceElevations,
+      pointCloud: activePointCloud
+        ? {
+            dataset: activePointCloud,
+            onError: (error) => {
+              const datasetKey = pointCloudDatasetKey(activePointCloud);
+              console.error(`${activePointCloud.name} could not be loaded`, error);
+              setPointCloud((current) =>
+                current.status === "ready" &&
+                pointCloudDatasetKey(current.dataset) === datasetKey
+                  ? { status: "error", error }
+                  : current
+              );
+            },
+            onReady: () =>
+              setReadyPointCloudDatasetKey(
+                pointCloudDatasetKey(activePointCloud)
+              ),
+            onSurfaceReferenceElevation: (elevationMeters) =>
+              setPointCloudSurfaceReference({
+                datasetKey: pointCloudDatasetKey(activePointCloud),
+                elevationMeters,
+              }),
+          }
+        : undefined,
+    });
   }, [
     activeRegionId,
+    displaySettings.elevation,
     displaySettings.pointClouds,
     pointCloud,
+    powerLineSurfaceKey,
+    powerLineSurfaceState,
     regionAssets,
     regionalPowerLines,
     showLidar,
   ]);
+
+  const surfaceReferenceElevationMeters =
+    showLidar &&
+    displaySettings.pointClouds &&
+    pointCloud.status === "ready" &&
+    pointCloudSurfaceReference?.datasetKey ===
+      pointCloudDatasetKey(pointCloud.dataset)
+      ? pointCloudSurfaceReference.elevationMeters
+      : undefined;
 
   const activePointCloudStatus = pointCloudStatusText(
     pointCloud,
     readyPointCloudDatasetKey,
     showLidar
   );
-  const activePointCloudCameraTargetElevation =
-    pointCloud.status === "ready" &&
-    pointCloudCameraTarget?.datasetKey ===
-      pointCloudDatasetKey(pointCloud.dataset)
-      ? pointCloudCameraTarget.elevationMeters
-      : undefined;
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
@@ -978,31 +1129,24 @@ export function DigitalTwinMapWorkspace({
   const changeViewMode = (mode: "3d" | "plan") => {
     setViewMode(mode);
     mapRef.current?.easeTo({
-      pitch:
-        mode === "3d"
-          ? DIGITAL_TWIN_INITIAL_VIEW.pitch
-          : 0,
+      pitch: mode === "3d" ? DIGITAL_TWIN_INITIAL_VIEW.pitch : 0,
       duration: 400,
     });
   };
 
+  const selectedRegionBounds = activeCatalogRegion?.bounds;
   const canZoomToSelectedRegion =
-    regionAssets.status === "ready" &&
-    regionAssets.regionId === activeRegionId &&
-    regionalPowerLines.length > 0;
+    mapInstance !== null && selectedRegionBounds !== undefined;
 
   const zoomIn = () => mapRef.current?.zoomIn();
   const zoomOut = () => mapRef.current?.zoomOut();
 
   const zoomToSelectedRegion = () => {
-    if (!canZoomToSelectedRegion) return;
-    const coordinates = regionalPowerLines.flatMap((line) => line.coordinates);
-    const longitudes = coordinates.map((position) => position.lon);
-    const latitudes = coordinates.map((position) => position.lat);
+    if (!selectedRegionBounds) return;
     mapRef.current?.fitBounds(
       [
-        [Math.min(...longitudes), Math.min(...latitudes)],
-        [Math.max(...longitudes), Math.max(...latitudes)],
+        [selectedRegionBounds.west, selectedRegionBounds.south],
+        [selectedRegionBounds.east, selectedRegionBounds.north],
       ],
       { padding: 96, maxZoom: 16.5, duration: 500 }
     );
@@ -1034,6 +1178,7 @@ export function DigitalTwinMapWorkspace({
     const submission = await submitDigitalTwinScenarioRun(
       digitalTwinApiUrl,
       {
+        scenarioName: request.scenario,
         regionId: request.regionId,
         durationHours: request.durationHours,
         ignitionPoints: request.ignitionPoints,
@@ -1064,10 +1209,10 @@ export function DigitalTwinMapWorkspace({
     >
       {satelliteTerrainConfig ? (
         <SatelliteTerrainMap
-          key={mapboxSatelliteTileJsonUrl}
+          key={mapboxUrls?.satelliteTileUrlTemplate}
           {...satelliteTerrainConfig}
-          cameraTargetElevation={activePointCloudCameraTargetElevation}
-          deckLayers={deckLayers}
+          surfaceLayers={surfaceLayers}
+          surfaceReferenceElevationMeters={surfaceReferenceElevationMeters}
           satelliteVisible={displaySettings.satellite}
           elevationEnabled={displaySettings.elevation}
           themeMode={activeThemeMode}
@@ -1217,19 +1362,20 @@ export function DigitalTwinMapWorkspace({
         className="min-h-0"
         style={{ "--sidebar-width": "12rem" } as CSSProperties}
       >
-        <DigitalTwinSidebar
-          activeDestination={activeDestination}
-          activeRegionId={activeRegionId}
-          appVersion={`v${APP_VERSION}`}
-          regions={regions}
-          settingsActive={settingsOpen}
-          themeMode={activeThemeMode}
-          onNavigate={navigateTo}
-          onOpenAlerts={() => navigateTo("live")}
-          onOpenData={onOpenExpertWorkspace}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onSelectRegion={selectRegion}
-        />
+        {!settingsOpen ? (
+          <DigitalTwinSidebar
+            activeDestination={activeDestination}
+            activeRegionId={activeRegionId}
+            appVersion={`v${APP_VERSION}`}
+            regions={regions}
+            themeMode={activeThemeMode}
+            onNavigate={navigateTo}
+            onOpenAlerts={() => navigateTo("live")}
+            onOpenData={onOpenExpertWorkspace}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onSelectRegion={selectRegion}
+          />
+        ) : null}
         <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden">
           <div
             aria-hidden="true"
@@ -1238,36 +1384,38 @@ export function DigitalTwinMapWorkspace({
             ref={setMapParkingHost}
           />
           {mapStarted ? createPortal(mapSurface, mapContentEl) : null}
-          <DigitalTwinTopbar
-            alerts={WORKSPACE_ALERTS}
-            alertsCount={7}
-            alertsPanelContainer={mapPanelContainer}
-            mapToolbar={
-              showLiveMapChrome ? (
-                <DigitalTwinMapToolbar
-                  className="h-10 rounded-md border-0 bg-transparent p-0 shadow-none"
-                  theme={activeThemeMode}
-                  value={displaySettings}
-                  viewMode={viewMode}
-                  onValueChange={setDisplaySettings}
-                  onViewModeChange={changeViewMode}
-                  onResetOrientation={() => {
-                    mapRef.current?.easeTo({ bearing: 0, duration: 400 });
-                  }}
-                />
-              ) : undefined
-            }
-            operator={operator}
-            organizationName={organizationName}
-            sidebarTrigger={<SidebarTrigger />}
-            themeMode={activeThemeMode}
-            onOpenAdministration={onOpenAdministration}
-            onOpenDiagnostics={onOpenDiagnostics}
-            onOpenExpertWorkspace={onOpenExpertWorkspace}
-            onOpenAlerts={() => navigateTo("live")}
-            onOpenSearch={() => setSearchOpen(true)}
-            onToggleTheme={toggleTheme}
-          />
+          {!settingsOpen ? (
+            <DigitalTwinTopbar
+              alerts={WORKSPACE_ALERTS}
+              alertsCount={7}
+              alertsPanelContainer={mapPanelContainer}
+              mapToolbar={
+                showLiveMapChrome ? (
+                  <DigitalTwinMapToolbar
+                    className="h-10 rounded-md border-0 bg-transparent p-0 shadow-none"
+                    theme={activeThemeMode}
+                    value={displaySettings}
+                    viewMode={viewMode}
+                    onValueChange={setDisplaySettings}
+                    onViewModeChange={changeViewMode}
+                    onResetOrientation={() => {
+                      mapRef.current?.easeTo({ bearing: 0, duration: 400 });
+                    }}
+                  />
+                ) : undefined
+              }
+              operator={operator}
+              organizationName={organizationName}
+              sidebarTrigger={<SidebarTrigger />}
+              themeMode={activeThemeMode}
+              onOpenAdministration={onOpenAdministration}
+              onOpenDiagnostics={onOpenDiagnostics}
+              onOpenExpertWorkspace={onOpenExpertWorkspace}
+              onOpenAlerts={() => navigateTo("live")}
+              onOpenSearch={() => setSearchOpen(true)}
+              onToggleTheme={toggleTheme}
+            />
+          ) : null}
 
           <CommandDialog
             className="top-[8%] translate-y-0"
@@ -1530,7 +1678,7 @@ export function DigitalTwinMapWorkspace({
               <SettingsView
                 accountInitials={operator.initials}
                 accountName={operator.name}
-                accountRole={operator.role}
+                onClose={() => setSettingsOpen(false)}
                 organizationName={organizationName}
               />
             </SectionErrorBoundary>

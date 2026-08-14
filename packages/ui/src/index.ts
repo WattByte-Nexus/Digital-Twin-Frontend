@@ -198,7 +198,6 @@ export {
   type WeatherMode,
   type WeatherEventKey,
   type WeatherLiveReading,
-  type TimeFormat,
   type WeatherSettingsInitialValue,
   type WeatherSummaryBarProps,
   type WeatherModeToggleProps,

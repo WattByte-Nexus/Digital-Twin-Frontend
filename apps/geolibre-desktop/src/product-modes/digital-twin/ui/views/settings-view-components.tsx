@@ -32,13 +32,13 @@ export function SettingsCard({
   title: string;
 }) {
   return (
-    <Card className="gap-0 rounded-none border-0 border-b border-border bg-transparent py-0 shadow-none">
-      <CardHeader className="gap-1.5 px-0 py-5">
+    <Card className="gap-0 overflow-hidden rounded-xl border border-border bg-card py-0 shadow-sm">
+      <CardHeader className="gap-1.5 px-5 py-4">
         <CardTitle className="text-sm">{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
         {action ? <CardAction>{action}</CardAction> : null}
       </CardHeader>
-      <CardContent className="px-0 pb-1">{children}</CardContent>
+      <CardContent className="overflow-x-auto px-5 pb-1">{children}</CardContent>
     </Card>
   );
 }

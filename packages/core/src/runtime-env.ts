@@ -112,23 +112,61 @@ export function getMapboxAccessToken(
   return trimmed || undefined;
 }
 
-const MAPBOX_SATELLITE_TILEJSON_URL =
-  "https://api.mapbox.com/v4/mapbox.satellite.json";
+const MAPBOX_SATELLITE_TILE_URL_TEMPLATE =
+  "https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}.jpg90";
+const MAPBOX_STREETS_TILEJSON_URL =
+  "https://api.mapbox.com/v4/mapbox.mapbox-streets-v8.json";
+const MAPBOX_GLYPHS_URL =
+  "https://api.mapbox.com/fonts/v1/mapbox/{fontstack}/{range}.pbf";
 
 /**
- * Builds the authenticated TileJSON URL for Mapbox's single composite
- * satellite pyramid.
+ * Builds the authenticated HTTPS template for Mapbox's satellite pyramid.
+ * The legacy TileJSON response advertises HTTP tile hosts whose redirects are
+ * blocked by browser CORS enforcement, leaving visible holes in the raster.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The XYZ tile URL template, or undefined without a Mapbox token.
+ */
+export function getMapboxSatelliteTileUrlTemplate(
+  env?: Record<string, string | undefined>,
+): string | undefined {
+  const token = getMapboxAccessToken(env);
+  if (!token) return undefined;
+  return `${MAPBOX_SATELLITE_TILE_URL_TEMPLATE}?access_token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Builds the authenticated TileJSON URL for the Mapbox Streets v8 vector
+ * tileset used by the Digital Twin reference overlay.
  *
  * @param env - Environment record (defaults to the runtime environment);
  *   injectable for testing.
  * @returns The TileJSON URL, or undefined when no Mapbox token is configured.
  */
-export function getMapboxSatelliteTileJsonUrl(
+export function getMapboxStreetsTileJsonUrl(
   env?: Record<string, string | undefined>,
 ): string | undefined {
   const token = getMapboxAccessToken(env);
   if (!token) return undefined;
-  return `${MAPBOX_SATELLITE_TILEJSON_URL}?access_token=${encodeURIComponent(token)}`;
+  return `${MAPBOX_STREETS_TILEJSON_URL}?access_token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Builds the authenticated Mapbox Fonts API template used by MapLibre symbol
+ * layers. The font stack and range placeholders are intentionally left for
+ * MapLibre to substitute at request time.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The glyph URL template, or undefined when no token is configured.
+ */
+export function getMapboxGlyphsUrl(
+  env?: Record<string, string | undefined>,
+): string | undefined {
+  const token = getMapboxAccessToken(env);
+  if (!token) return undefined;
+  return `${MAPBOX_GLYPHS_URL}?access_token=${encodeURIComponent(token)}`;
 }
 
 /**

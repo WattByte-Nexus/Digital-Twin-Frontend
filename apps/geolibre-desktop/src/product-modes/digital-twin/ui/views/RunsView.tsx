@@ -142,7 +142,7 @@ export function RunsView({
         case "status":
           return digitalTwinRunStatusLabel(run.status);
         case "scenario":
-          return run.scenarioId ?? "";
+          return run.scenarioName ?? "";
         case "region":
           return run.regionName;
         case "run":
@@ -177,6 +177,17 @@ export function RunsView({
       ),
     [runs],
   );
+  const scenarioNames = useMemo(
+    () =>
+      new Map(
+        runs.flatMap((run) =>
+          run.scenarioId && run.scenarioName
+            ? [[run.scenarioId, run.scenarioName] as const]
+            : [],
+        ),
+      ),
+    [runs],
+  );
   const regionNames = useMemo(
     () => new Map(regions.map((region) => [region.id, region.name])),
     [regions],
@@ -186,6 +197,7 @@ export function RunsView({
     return (
       <RunDetailView
         apiUrl={apiUrl}
+        key={selectedRun.id}
         mapControllerRef={mapControllerRef}
         mapSlot={mapSlot}
         onBack={onReturnToRuns}
@@ -359,7 +371,9 @@ export function RunsView({
                       >
                         <SelectMenuItem value="all">All scenarios</SelectMenuItem>
                         {scenarios.map((scenarioId) => (
-                          <SelectMenuItem key={scenarioId} value={scenarioId}>{scenarioId}</SelectMenuItem>
+                          <SelectMenuItem key={scenarioId} value={scenarioId}>
+                            {scenarioNames.get(scenarioId) ?? scenarioId}
+                          </SelectMenuItem>
                         ))}
                       </SelectMenuContent>
                     </SelectMenu>
@@ -379,7 +393,7 @@ export function RunsView({
             ) : null}
             {filters.scenarioId !== "all" ? (
               <FilterChip
-                label={`Scenario: ${filters.scenarioId}`}
+                label={`Scenario: ${scenarioNames.get(filters.scenarioId) ?? filters.scenarioId}`}
                 onRemove={() => setFilter("scenarioId", "all")}
               />
             ) : null}
@@ -482,7 +496,7 @@ export function RunsView({
                           onClick={() => onOpenRun(run.id)}
                           variant="link"
                         >
-                          {run.scenarioId ?? "—"}
+                          {run.scenarioName ?? "—"}
                         </Button>
                       </TableCell>
                       <TableCell>

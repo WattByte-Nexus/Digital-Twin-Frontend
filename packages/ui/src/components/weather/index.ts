@@ -1,4 +1,7 @@
-export { TimeOfDayControl, type TimeOfDayControlProps } from "./time-of-day-control";
+export {
+  TimeOfDayControl,
+  type TimeOfDayControlProps,
+} from "./time-of-day-control";
 export {
   WeatherEventRow,
   type WeatherEventRowProps,
@@ -19,7 +22,6 @@ export {
 export {
   DEFAULT_WEATHER_EVENTS,
   DEFAULT_WEATHER_SETTINGS,
-  type TimeFormat,
   type WeatherEventKey,
   type WeatherLiveReading,
   type WeatherMode,

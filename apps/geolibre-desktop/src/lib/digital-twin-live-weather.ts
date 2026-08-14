@@ -252,6 +252,17 @@ function nearestObservation(
   );
 }
 
+function nearestObservationWithBand(
+  observations: WeatherStationObservation[],
+  point: DigitalTwinWeatherPoint,
+  band: string
+): WeatherStationObservation | undefined {
+  return nearestObservation(
+    observations.filter((observation) => observation.values.has(band)),
+    point
+  );
+}
+
 async function sampleLayer(
   fetchImpl: FetchLike,
   apiUrl: string,
@@ -406,9 +417,14 @@ export async function fetchDigitalTwinLiveWeather(
   if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
   const griddedReadings = sampledLayers.flatMap((result) => {
     if (result.status !== "fulfilled") return [];
+    const stationObservation = nearestObservationWithBand(
+      stationObservations,
+      stationPoint,
+      result.value.layer.band
+    );
     const value =
       result.value.value ??
-      nearestStationObservation?.values.get(result.value.layer.band);
+      stationObservation?.values.get(result.value.layer.band);
     return value === undefined || value === null
       ? []
       : [
@@ -423,19 +439,33 @@ export async function fetchDigitalTwinLiveWeather(
   const readingsByBand = new Map(
     griddedReadings.map((reading) => [reading.band, reading])
   );
-  if (nearestStationObservation) {
-    for (const [band, value] of nearestStationObservation.values) {
-      if (readingsByBand.has(band)) continue;
-      const presentation = WEATHER_BAND_PRESENTATIONS[band];
-      if (!presentation) continue;
-      readingsByBand.set(band, { band, value, ...presentation });
-    }
+  for (const [band, presentation] of Object.entries(
+    WEATHER_BAND_PRESENTATIONS
+  )) {
+    if (readingsByBand.has(band)) continue;
+    const stationObservation = nearestObservationWithBand(
+      stationObservations,
+      stationPoint,
+      band
+    );
+    const value = stationObservation?.values.get(band);
+    if (value === undefined) continue;
+    readingsByBand.set(band, { band, value, ...presentation });
   }
   const readings = [...readingsByBand.values()];
   const availableBands = new Set(readings.map((reading) => reading.band));
-  const unavailableReadingLabels = layers
-    .filter((layer) => !availableBands.has(layer.band))
-    .map((layer) => layer.label);
+  const unavailableReadingLabels = [
+    ...Object.entries(WEATHER_BAND_PRESENTATIONS)
+      .filter(([band]) => !availableBands.has(band))
+      .map(([, presentation]) => presentation.label),
+    ...layers
+      .filter(
+        (layer) =>
+          !availableBands.has(layer.band) &&
+          !(layer.band in WEATHER_BAND_PRESENTATIONS)
+      )
+      .map((layer) => layer.label),
+  ];
   const valueByBand = new Map(
     readings.map((reading) => [reading.band, reading.value])
   );

@@ -13,6 +13,27 @@ export {
   type SatelliteTerrainMapProps,
 } from "./SatelliteTerrainMap";
 export {
+  composeDigitalTwinSurfaceLayers,
+  DIGITAL_TWIN_SHARED_SURFACE,
+  type ComposedDigitalTwinSurfaceLayers,
+  type DigitalTwinSharedSurface,
+  type DigitalTwinSurfaceLayerGroup,
+} from "./digital-twin-surface-layers";
+export {
+  createDigitalTwinSurfaceMapView,
+  resolveDigitalTwinSurfaceViewElevation,
+  type DigitalTwinSurfaceViewElevationSource,
+} from "./digital-twin-surface-view";
+export {
+  applyDigitalTwinSurfaceElevationState,
+  digitalTwinSurfaceCoordinateKey,
+  sampleDigitalTwinSurfaceElevations,
+  type DigitalTwinSurfaceCoordinate,
+  type DigitalTwinSurfaceElevationMap,
+  type DigitalTwinSurfaceElevationQuery,
+  type DigitalTwinSurfaceElevationState,
+} from "./digital-twin-surface-state";
+export {
   DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
   SATELLITE_REFERENCE_LAYER_PREFIX,
   SATELLITE_REFERENCE_SOURCE_ID,
@@ -26,7 +47,6 @@ export {
   buildSatelliteTerrainStyle,
   SATELLITE_LAYER_ID,
   SATELLITE_SOURCE_ID,
-  setElevationEnabled,
   setSatelliteVisibility,
   setTerrainGroundVisibility,
   TERRAIN_BACKGROUND_LAYER_ID,

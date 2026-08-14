@@ -65,10 +65,12 @@ describe("Digital Twin settings", () => {
     assert.doesNotMatch(settingsComponentsSource, /<(?:button|input|select|table)\b/);
   });
 
-  it("uses the product sidebar rhythm and flat settings sections", () => {
+  it("uses focused settings navigation and grouped settings sections", () => {
     assert.match(settingsViewSource, /SidebarMenuButton/);
     assert.match(settingsViewSource, /className="h-10 gap-3 px-3 text-sm"/);
-    assert.match(settingsComponentsSource, /rounded-none border-0 border-b/);
+    assert.match(settingsViewSource, /aria-label="Search settings"/);
+    assert.match(settingsViewSource, /aria-label="Close settings and return to workspace"/);
+    assert.match(settingsComponentsSource, /rounded-xl border border-border bg-card/);
     assert.doesNotMatch(settingsComponentsSource, /surface="glass"/);
     assert.doesNotMatch(settingsComponentsSource, /UnsavedPreviewBar/);
     assert.doesNotMatch(settingsPagesSource, /Using preview defaults/);
@@ -90,12 +92,19 @@ describe("Digital Twin settings", () => {
     assert.match(uiIndexSource, /export \{ Switch \} from "\.\/components\/switch"/);
   });
 
-  it("opens settings inside the active product shell instead of administration", () => {
+  it("opens settings as a focused workspace instead of administration", () => {
     assert.match(activeWorkspaceSource, /onOpenSettings=\{\(\) => setSettingsOpen\(true\)\}/);
-    assert.match(activeWorkspaceSource, /settingsActive=\{settingsOpen\}/);
+    assert.match(activeWorkspaceSource, /!settingsOpen \? \(/);
     assert.match(activeWorkspaceSource, /settingsOpen \? \(/);
+    assert.match(activeWorkspaceSource, /onClose=\{\(\) => setSettingsOpen\(false\)\}/);
     assert.match(activeWorkspaceSource, /accountName=\{operator\.name\}/);
     assert.match(activeWorkspaceSource, /organizationName=\{organizationName\}/);
+    assert.doesNotMatch(settingsViewSource, /accountRole/);
+    assert.doesNotMatch(activeWorkspaceSource, /accountRole=\{/);
+    assert.match(
+      settingsViewSource,
+      /border-sidebar-border bg-card text-sidebar-foreground/,
+    );
     assert.match(digitalTwinSidebarSource, /settingsActive\?: boolean/);
     assert.match(
       digitalTwinSidebarSource,

@@ -6,15 +6,18 @@ import {
 } from "@geolibre/ui";
 import {
   ArrowLeft,
+  ChartNoAxesColumnIncreasing,
   Flame,
   MapPin,
   Timer,
   Waypoints,
 } from "lucide-react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
-import { type ReactNode, type RefObject, useEffect } from "react";
+import { type ReactNode, type RefObject, useEffect, useState } from "react";
 import {
   digitalTwinRunStatusLabel,
+  fetchDigitalTwinRun,
+  isDigitalTwinRunActive,
   type DigitalTwinRunRecord,
 } from "../../../../lib/digital-twin-runs";
 import { focusMapOnIgnitions } from "../run-map-focus";
@@ -31,6 +34,7 @@ interface RunDetailViewProps {
 
 const IGNITION_SOURCE_ID = "digital-twin-run-ignition-points";
 const IGNITION_LAYER_ID = "digital-twin-run-ignition-points-circle";
+const RUN_DETAIL_POLL_INTERVAL_MS = 2_000;
 
 function RunStatusBadge({ status }: Pick<DigitalTwinRunRecord, "status">) {
   const variant =
@@ -75,7 +79,49 @@ function SummaryCard({
   );
 }
 
+function formatBurnedArea(value: number | null): string {
+  return value === null
+    ? "Not available"
+    : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ha`;
+}
+
 export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run }: RunDetailViewProps) {
+  const [liveRun, setLiveRun] = useState(run);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let pollTimeout: number | undefined;
+    let pollingActiveRun = isDigitalTwinRunActive(run.status);
+
+    const loadRun = () => {
+      void fetchDigitalTwinRun(apiUrl, run.id, {
+        regionNames: new Map([[run.regionId, run.regionName]]),
+        signal: controller.signal,
+      }).then(
+        (updatedRun) => {
+          if (controller.signal.aborted) return;
+          setLiveRun(updatedRun);
+          pollingActiveRun = isDigitalTwinRunActive(updatedRun.status);
+          if (pollingActiveRun) {
+            pollTimeout = window.setTimeout(loadRun, RUN_DETAIL_POLL_INTERVAL_MS);
+          }
+        },
+        () => {
+          if (controller.signal.aborted) return;
+          if (pollingActiveRun) {
+            pollTimeout = window.setTimeout(loadRun, RUN_DETAIL_POLL_INTERVAL_MS);
+          }
+        },
+      );
+    };
+
+    loadRun();
+    return () => {
+      controller.abort();
+      if (pollTimeout !== undefined) window.clearTimeout(pollTimeout);
+    };
+  }, [apiUrl, run.id, run.regionId, run.regionName, run.status]);
+
   useEffect(() => {
     let frame = 0;
     let attachedMap: MapLibreMap | null = null;
@@ -100,14 +146,14 @@ export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run }
       }
       if (focusedMap !== map) {
         map.resize();
-        focusMapOnIgnitions(map, run.ignitionPoints);
+      focusMapOnIgnitions(map, liveRun.ignitionPoints);
         focusedMap = map;
       }
       if (!map.isStyleLoaded()) {
         frame = window.requestAnimationFrame(render);
         return;
       }
-      const data = ignitionFeatures(run);
+      const data = ignitionFeatures(liveRun);
       const source = map.getSource(IGNITION_SOURCE_ID) as GeoJSONSource | undefined;
       if (source) source.setData(data);
       else map.addSource(IGNITION_SOURCE_ID, { type: "geojson", data });
@@ -144,7 +190,7 @@ export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run }
         removeLayer(attachedMap);
       }
     };
-  }, [mapControllerRef, run]);
+  }, [liveRun, mapControllerRef]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -156,12 +202,12 @@ export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run }
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="truncate font-mono text-xl font-semibold tracking-tight text-foreground">
-                {run.id}
+                {liveRun.id}
               </h1>
-              <RunStatusBadge status={run.status} />
+              <RunStatusBadge status={liveRun.status} />
             </div>
             <p className="mt-1 truncate text-sm text-muted-foreground">
-              {run.scenarioId ?? `${run.triggerKind} trigger`} · {run.regionName}
+              {liveRun.scenarioName ?? `${liveRun.triggerKind} trigger`} · {liveRun.regionName}
             </p>
           </div>
         </div>
@@ -169,22 +215,27 @@ export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run }
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-5 p-5 lg:p-7">
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Run summary">
-            <SummaryCard icon={MapPin} label="Region" value={run.regionName} />
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Run summary">
+            <SummaryCard icon={MapPin} label="Region" value={liveRun.regionName} />
             <SummaryCard
               icon={Timer}
               label="Simulation horizon"
-              value={run.durationHours === null ? "Not reported" : `${run.durationHours} h`}
+              value={liveRun.durationHours === null ? "Not reported" : `${liveRun.durationHours} h`}
             />
             <SummaryCard
               icon={Flame}
               label="Ignition points"
-              value={String(run.ignitionPoints.length)}
+              value={String(liveRun.ignitionPoints.length)}
+            />
+            <SummaryCard
+              icon={ChartNoAxesColumnIncreasing}
+              label="Area consumed"
+              value={formatBurnedArea(liveRun.burnedAreaHectares)}
             />
             <SummaryCard
               icon={Waypoints}
               label="Completed snapshots"
-              value={`${run.completedTicks}${run.expectedTicks === null ? "" : ` / ${run.expectedTicks}`}`}
+              value={`${liveRun.completedTicks}${liveRun.expectedTicks === null ? "" : ` / ${liveRun.expectedTicks}`}`}
             />
           </section>
 
@@ -192,10 +243,15 @@ export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run }
             apiUrl={apiUrl}
             mapControllerRef={mapControllerRef}
             mapSlot={mapSlot}
-            run={run}
+            run={liveRun}
           />
 
-          <RunDetailTabs apiUrl={apiUrl} key={`${apiUrl}:${run.id}`} runId={run.id} />
+          <RunDetailTabs
+            apiUrl={apiUrl}
+            key={`${apiUrl}:${liveRun.id}`}
+            refreshKey={`${liveRun.status}:${liveRun.completedTicks}:${liveRun.resultAvailable}`}
+            runId={liveRun.id}
+          />
         </div>
       </ScrollArea>
     </div>

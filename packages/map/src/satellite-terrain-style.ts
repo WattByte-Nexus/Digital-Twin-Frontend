@@ -44,7 +44,6 @@ type SatelliteVisibilityMap = Pick<
   MapLibreMap,
   "getLayer" | "setLayoutProperty"
 >;
-type TerrainMap = Pick<MapLibreMap, "setTerrain">;
 
 export function setSatelliteVisibility(
   map: SatelliteVisibilityMap,
@@ -57,14 +56,6 @@ export function setSatelliteVisibility(
       visible ? "visible" : "none"
     );
   }
-}
-
-export function setElevationEnabled(
-  map: TerrainMap,
-  enabled: boolean,
-  exaggeration = 1
-): void {
-  map.setTerrain(enabled ? { source: TERRAIN_SOURCE_ID, exaggeration } : null);
 }
 
 export function setTerrainGroundVisibility(
