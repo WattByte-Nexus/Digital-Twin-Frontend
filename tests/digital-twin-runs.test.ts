@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DEFAULT_DIGITAL_TWIN_RUN_FILTERS,
+  fetchDigitalTwinRegions,
   fetchDigitalTwinRunCatalog,
   filterDigitalTwinRuns,
+  selectAuthorizedDigitalTwinRegions,
   submitDigitalTwinScenarioRun,
 } from "../apps/geolibre-desktop/src/lib/digital-twin-runs";
 
@@ -163,6 +165,58 @@ test("fetchDigitalTwinRunCatalog loads every region and run page from the API", 
   assert.equal(catalog.runs[1].durationHours, 2);
   assert.equal(catalog.runs[1].completedTicks, 2);
   assert.equal(catalog.runs[1].burnedAreaHectares, 5.04);
+});
+
+test("fetchDigitalTwinRegions loads the canonical Engine region catalog without fetching runs", async () => {
+  const requestedUrls: string[] = [];
+  const fetchImpl: typeof fetch = async (input) => {
+    requestedUrls.push(String(input));
+    return jsonResponse({
+      items: [
+        {
+          region_id: "north-grid",
+          name: "Canonical North Grid",
+          bounds: { west: -106, south: 39, east: -105, north: 40 },
+          status: "published",
+        },
+      ],
+      next_cursor: null,
+    });
+  };
+
+  const regions = await fetchDigitalTwinRegions("https://engine.example.com", {
+    fetchImpl,
+  });
+
+  assert.deepEqual(
+    requestedUrls.map((url) => new URL(url).pathname),
+    ["/api/v1/regions"],
+  );
+  assert.equal(regions[0].name, "Canonical North Grid");
+});
+
+test("selectAuthorizedDigitalTwinRegions uses Engine metadata and excludes unauthorized regions", () => {
+  const regions = selectAuthorizedDigitalTwinRegions(
+    [
+      {
+        id: "north-grid",
+        name: "Canonical North Grid",
+        status: "published",
+        bounds: { west: -106, south: 39, east: -105, north: 40 },
+      },
+      {
+        id: "south-grid",
+        name: "South Grid",
+        status: "published",
+        bounds: { west: -105, south: 38, east: -104, north: 39 },
+      },
+    ],
+    ["north-grid"],
+  );
+
+  assert.deepEqual(regions.map(({ id, name }) => ({ id, name })), [
+    { id: "north-grid", name: "Canonical North Grid" },
+  ]);
 });
 
 test("filterDigitalTwinRuns filters authoritative API fields", () => {

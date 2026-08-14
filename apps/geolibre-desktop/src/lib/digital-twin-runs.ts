@@ -57,6 +57,14 @@ export interface DigitalTwinRunCatalog {
   runs: DigitalTwinRunRecord[];
 }
 
+export function selectAuthorizedDigitalTwinRegions(
+  engineRegions: readonly DigitalTwinRegionRecord[],
+  authorizedRegionIds: readonly string[],
+): DigitalTwinRegionRecord[] {
+  const authorizedRegionIdSet = new Set(authorizedRegionIds);
+  return engineRegions.filter((region) => authorizedRegionIdSet.has(region.id));
+}
+
 export interface DigitalTwinScenarioRunSubmission {
   scenarioName: string;
   regionId: string;
@@ -316,14 +324,29 @@ export async function fetchDigitalTwinRunCatalog(
   const apiUrl = normalizeDigitalTwinApiUrl(value);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
   if (!fetchImpl) throw new Error("This environment cannot connect to the Digital Twin API.");
-  const [regionValues, runValues] = await Promise.all([
-    requestAllPages(fetchImpl, apiUrl, "/api/v1/regions", options.signal),
+  const [regions, runValues] = await Promise.all([
+    fetchDigitalTwinRegions(apiUrl, { fetchImpl, signal: options.signal }),
     requestAllPages(fetchImpl, apiUrl, "/api/v1/simulation-runs", options.signal),
   ]);
-  const regions = regionValues.map(parseRegion);
   const regionNames = new Map(regions.map((region) => [region.id, region.name]));
   const runs = runValues.map((run) => parseDigitalTwinRun(run, regionNames));
   return { regions, runs };
+}
+
+export async function fetchDigitalTwinRegions(
+  value: string,
+  options: { fetchImpl?: FetchLike; signal?: AbortSignal } = {},
+): Promise<DigitalTwinRegionRecord[]> {
+  const apiUrl = normalizeDigitalTwinApiUrl(value);
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
+  if (!fetchImpl) throw new Error("This environment cannot connect to the Digital Twin API.");
+  const regionValues = await requestAllPages(
+    fetchImpl,
+    apiUrl,
+    "/api/v1/regions",
+    options.signal,
+  );
+  return regionValues.map(parseRegion);
 }
 
 export async function fetchDigitalTwinRun(

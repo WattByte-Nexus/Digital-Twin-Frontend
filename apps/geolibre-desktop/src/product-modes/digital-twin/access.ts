@@ -35,28 +35,23 @@ export interface DigitalTwinAccessContext {
 
 interface DevelopmentAccessOptions {
   regionId?: string;
-  regionName?: string;
 }
 
-const DEVELOPMENT_REGIONS: AuthorizedRegion[] = [
-  { id: "boulder-co", name: "Boulder" },
-  { id: "golden-co", name: "Golden" },
-];
-
 export function createDevelopmentAccess(
+  engineRegions: readonly AuthorizedRegion[],
   options: DevelopmentAccessOptions = {},
 ): DigitalTwinAccessContext {
   const regionId = options.regionId?.trim();
-  const regionName = options.regionName?.trim();
-  const regions =
-    regionId || regionName
-      ? [
-          {
-            id: regionId || DEVELOPMENT_REGIONS[0].id,
-            name: regionName || DEVELOPMENT_REGIONS[0].name,
-          },
-        ]
-      : DEVELOPMENT_REGIONS;
+  const regions = regionId
+    ? engineRegions.filter((region) => region.id === regionId)
+    : [...engineRegions];
+  if (regions.length === 0) {
+    throw new Error(
+      regionId
+        ? `The Digital Twin Engine does not expose region ${regionId}.`
+        : "The Digital Twin Engine does not expose any regions.",
+    );
+  }
 
   return {
     subjectId: "local-pilot-developer",
@@ -65,7 +60,7 @@ export function createDevelopmentAccess(
     roles: ["engineer"],
     capabilities: ["digital-twin", "expert-gis", "administration"],
     regions,
-    mostRecentlyUsedRegionId: regions[0].id,
+    mostRecentlyUsedRegionId: regions[0]?.id ?? null,
     savedStartLocation: "digital-twin",
   };
 }

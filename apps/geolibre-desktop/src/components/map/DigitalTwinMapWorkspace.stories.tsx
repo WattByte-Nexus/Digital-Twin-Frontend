@@ -6,6 +6,7 @@ const meta = {
   title: "Digital Twin/Map Workspace",
   component: DigitalTwinMapWorkspace,
   args: {
+    authorizedRegionIds: ["boulder-co", "golden-co"],
     themeMode: "light",
     showLidar: true,
     showWeather: false,
@@ -81,17 +82,17 @@ export const RegionSelection: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(
       canvas.getByRole("button", {
-        name: /change assigned region.*colorado front range/i,
+        name: /change assigned region.*boulder/i,
       })
     );
     await userEvent.click(
       within(document.body).getByRole("menuitemradio", {
-        name: /denver metro/i,
+        name: /golden/i,
       })
     );
     await expect(
       canvas.getByRole("button", {
-        name: /change assigned region.*denver metro/i,
+        name: /change assigned region.*golden/i,
       })
     ).toBeVisible();
   },

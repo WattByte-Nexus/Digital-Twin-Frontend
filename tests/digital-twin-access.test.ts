@@ -31,14 +31,28 @@ function access(
 }
 
 describe("Digital Twin access resolution", () => {
-  it("grants local development access to every curated demo region", () => {
-    const developmentAccess = createDevelopmentAccess();
+  it("grants local development access only to regions supplied by the Engine", () => {
+    const developmentAccess = createDevelopmentAccess([
+      { id: "north-grid", name: "North Grid" },
+      { id: "south-grid", name: "South Grid" },
+    ]);
 
     assert.deepEqual(developmentAccess.regions, [
-      { id: "boulder-co", name: "Boulder" },
-      { id: "golden-co", name: "Golden" },
+      { id: "north-grid", name: "North Grid" },
+      { id: "south-grid", name: "South Grid" },
     ]);
-    assert.equal(developmentAccess.mostRecentlyUsedRegionId, "boulder-co");
+    assert.equal(developmentAccess.mostRecentlyUsedRegionId, "north-grid");
+  });
+
+  it("fails local development access when the requested region is absent from the Engine", () => {
+    assert.throws(
+      () =>
+        createDevelopmentAccess(
+          [{ id: "north-grid", name: "North Grid" }],
+          { regionId: "missing-grid" },
+        ),
+      /does not expose region missing-grid/,
+    );
   });
 
   it("resolves deployment endpoints from the app base instead of a deep-link route", () => {

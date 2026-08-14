@@ -38,7 +38,6 @@ import {
   type WeatherSettingsValue,
 } from "@geolibre/ui";
 import {
-  Bell,
   Check,
   CloudSun,
   Compass,
@@ -77,6 +76,7 @@ import {
   digitalTwinRunStatusLabel,
   fetchDigitalTwinRunCatalog,
   isDigitalTwinRunActive,
+  selectAuthorizedDigitalTwinRegions,
   submitDigitalTwinScenarioRun,
   type DigitalTwinRunCatalog,
 } from "../../../lib/digital-twin-runs";
@@ -358,11 +358,11 @@ function liveWeatherSourceText(
 export interface DigitalTwinMapWorkspaceProps {
   activeDestination?: DigitalTwinDestination;
   activeRegionId?: string;
+  authorizedRegionIds: string[];
   digitalTwinApiUrl?: string;
   location?: string;
   operator?: DigitalTwinOperator;
   organizationName?: string;
-  regions?: DigitalTwinRegion[];
   showLidar?: boolean;
   showWeather?: boolean;
   themeMode?: WorkspaceTheme;
@@ -377,44 +377,10 @@ export interface DigitalTwinMapWorkspaceProps {
   onToggleTheme?: () => void;
 }
 
-const WORKSPACE_REGIONS = [
-  {
-    id: "front-range",
-    name: "Colorado Front Range",
-    description: "Regional transmission and distribution overview",
-  },
-  {
-    id: "denver",
-    name: "Denver Metro",
-    description: "Urban distribution operations and alerts",
-  },
-  {
-    id: "boulder",
-    name: "Boulder County",
-    description: "Foothills assets and wildfire exposure",
-  },
-];
-
-const WORKSPACE_ALERTS = [
-  {
-    id: "alert-vegetation-clearance",
-    name: "Vegetation clearance risk",
-    description: "Boulder Creek Substation · 8 min ago",
-    regionId: "boulder",
-    severity: "high" as const,
-  },
-  {
-    id: "alert-transformer-loading",
-    name: "Transformer loading anomaly",
-    description: "Denver Feeder 12 · 21 min ago",
-    regionId: "denver",
-    severity: "medium" as const,
-  },
-];
-
 export function DigitalTwinMapWorkspace({
   activeDestination: controlledDestination,
   activeRegionId: controlledRegionId,
+  authorizedRegionIds,
   digitalTwinApiUrl = defaultDigitalTwinApiUrl(),
   location = "",
   operator = {
@@ -423,7 +389,6 @@ export function DigitalTwinMapWorkspace({
     initials: "MC",
   },
   organizationName = "WattByte Nexus",
-  regions = WORKSPACE_REGIONS,
   showLidar = true,
   showWeather = true,
   themeMode = "light",
@@ -490,7 +455,7 @@ export function DigitalTwinMapWorkspace({
   const [viewMode, setViewMode] = useState<"3d" | "plan">("3d");
   const [activeThemeMode, setActiveThemeMode] = useState(themeMode);
   const [localRegionId, setLocalRegionId] = useState(
-    controlledRegionId ?? regions[0]?.id ?? ""
+    controlledRegionId ?? authorizedRegionIds[0] ?? ""
   );
   const [localDestination, setLocalDestination] =
     useState<DigitalTwinDestination>("live");
@@ -535,7 +500,6 @@ export function DigitalTwinMapWorkspace({
     elevations: ReadonlyMap<string, number>;
   } | null>(null);
   const activeDestination = controlledDestination ?? localDestination;
-  const activeRegion = regions.find((region) => region.id === activeRegionId);
   const showLiveMapChrome =
     !settingsOpen &&
     (activeDestination === "live" ||
@@ -570,7 +534,31 @@ export function DigitalTwinMapWorkspace({
   const [runCatalogError, setRunCatalogError] = useState<Error | null>(null);
   const [runCatalogLoading, setRunCatalogLoading] = useState(true);
   const [runCatalogRequest, setRunCatalogRequest] = useState(0);
-  const activeCatalogRegion = runCatalog.regions.find(
+  const authorizedCatalogRegions = useMemo(
+    () => selectAuthorizedDigitalTwinRegions(runCatalog.regions, authorizedRegionIds),
+    [authorizedRegionIds, runCatalog.regions]
+  );
+  const authorizedCatalogRegionIds = useMemo(
+    () => new Set(authorizedCatalogRegions.map((region) => region.id)),
+    [authorizedCatalogRegions]
+  );
+  const regions = useMemo<DigitalTwinRegion[]>(
+    () =>
+      authorizedCatalogRegions.map((region) => ({
+        id: region.id,
+        name: region.name,
+        description: `${region.name} operational area`,
+      })),
+    [authorizedCatalogRegions]
+  );
+  const authorizedRuns = useMemo(
+    () =>
+      runCatalog.runs.filter((run) =>
+        authorizedCatalogRegionIds.has(run.regionId)
+      ),
+    [authorizedCatalogRegionIds, runCatalog.runs]
+  );
+  const activeCatalogRegion = authorizedCatalogRegions.find(
     (region) => region.id === activeRegionId
   );
 
@@ -1427,8 +1415,8 @@ export function DigitalTwinMapWorkspace({
           {mapStarted ? createPortal(mapSurface, mapContentEl) : null}
           {!settingsOpen ? (
             <DigitalTwinTopbar
-              alerts={WORKSPACE_ALERTS}
-              alertsCount={7}
+              alerts={[]}
+              alertsCount={0}
               alertsPanelContainer={mapPanelContainer}
               mapToolbar={
                 showLiveMapChrome ? (
@@ -1466,13 +1454,13 @@ export function DigitalTwinMapWorkspace({
             theme={activeThemeMode}
             title="Search Digital Twin"
           >
-            <CommandInput placeholder="Search regions, assets, alerts, and runs..." />
+            <CommandInput placeholder="Search regions, assets, and runs..." />
             <CommandList>
               <CommandEmpty>
-                No matching regions, assets, alerts, or runs.
+                No matching regions, assets, or runs.
               </CommandEmpty>
               <CommandGroup heading="Regions">
-                {runCatalog.regions.map((region) => (
+                {authorizedCatalogRegions.map((region) => (
                   <CommandItem
                     className="items-start py-2.5"
                     key={region.id}
@@ -1510,9 +1498,7 @@ export function DigitalTwinMapWorkspace({
                         })
                       }
                       value={`asset power line ${asset.assetId} ${
-                        activeCatalogRegion?.name ??
-                        activeRegion?.name ??
-                        activeRegionId
+                        activeCatalogRegion?.name ?? activeRegionId
                       }`}
                     >
                       <Zap aria-hidden="true" className="mt-0.5" />
@@ -1522,9 +1508,7 @@ export function DigitalTwinMapWorkspace({
                         </span>
                         <span className="block truncate text-xs text-muted-foreground">
                           Overhead power line ·{" "}
-                          {activeCatalogRegion?.name ??
-                            activeRegion?.name ??
-                            activeRegionId}
+                          {activeCatalogRegion?.name ?? activeRegionId}
                         </span>
                       </span>
                     </CommandItem>
@@ -1540,32 +1524,8 @@ export function DigitalTwinMapWorkspace({
                 )}
               </CommandGroup>
               <CommandSeparator />
-              <CommandGroup heading="Alerts">
-                {WORKSPACE_ALERTS.map((alert) => (
-                  <CommandItem
-                    className="items-start py-2.5"
-                    key={alert.id}
-                    onSelect={() =>
-                      openSearchResult(() => {
-                        navigateTo("live");
-                        selectRegion(alert.regionId);
-                      })
-                    }
-                    value={`alert ${alert.name} ${alert.description}`}
-                  >
-                    <Bell aria-hidden="true" className="mt-0.5" />
-                    <span className="min-w-0">
-                      <span className="block truncate">{alert.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {alert.description}
-                      </span>
-                    </span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-              <CommandSeparator />
               <CommandGroup heading="Runs">
-                {runCatalog.runs.map((run) => (
+                {authorizedRuns.map((run) => (
                   <CommandItem
                     className="items-start py-2.5"
                     key={run.id}
@@ -1776,8 +1736,8 @@ export function DigitalTwinMapWorkspace({
                 onOpenRun={(runId) => navigateTo("runs", runId)}
                 onRefresh={() => setRunCatalogRequest((request) => request + 1)}
                 onReturnToRuns={() => navigateTo("runs")}
-                regions={runCatalog.regions}
-                runs={runCatalog.runs}
+                regions={authorizedCatalogRegions}
+                runs={authorizedRuns}
                 theme={activeThemeMode}
               />
             </SectionErrorBoundary>

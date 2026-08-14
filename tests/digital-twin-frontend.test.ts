@@ -89,13 +89,17 @@ describe("Digital Twin frontend composition", () => {
     assert.doesNotMatch(storySource, /function DigitalTwinMapWorkspace/);
   });
 
-  it("keeps localhost access independent from Engine availability", () => {
+  it("loads localhost region access from the Engine catalog", () => {
     assert.match(accessBoundarySource, /createDevelopmentAccess/);
+    assert.match(accessBoundarySource, /fetchDigitalTwinRegions/);
     assert.match(accessBoundarySource, /VITE_DIGITAL_TWIN_DEV_REGION_ID/);
-    assert.doesNotMatch(
-      accessBoundarySource,
-      /loadPublishedDigitalTwinRegions/
-    );
+  });
+
+  it("does not define fallback region identities in the workspace", () => {
+    assert.doesNotMatch(workspaceSource, /const WORKSPACE_REGIONS/);
+    assert.doesNotMatch(workspaceSource, /"(?:front-range|denver|boulder)"/);
+    assert.doesNotMatch(workspaceSource, /id: "denver"/);
+    assert.doesNotMatch(workspaceSource, /id: "boulder"/);
   });
 
   it("places map controls in a dedicated subtoolbar below the application header", () => {
