@@ -46,8 +46,8 @@ export function createDigitalTwinPolePropertiesAsset({
   regionId: string;
 }): PolePropertiesAsset {
   const lineById = new Map(powerLines.map((line) => [line.assetId, line]));
-  const conductorById = new Map(
-    network.conductors.map((conductor) => [conductor.id, conductor])
+  const conductorByAssetId = new Map(
+    network.conductors.map((conductor) => [conductor.assetId, conductor])
   );
   const poleNumber = network.poles.findIndex((candidate) => candidate.id === pole.id) + 1;
 
@@ -55,7 +55,7 @@ export function createDigitalTwinPolePropertiesAsset({
     assetId: pole.id,
     connectedSpans: pole.assetIds.flatMap((assetId) => {
       const line = lineById.get(assetId);
-      const conductor = conductorById.get(assetId);
+      const conductor = conductorByAssetId.get(assetId);
       if (!line || !conductor) return [];
       return [
         {

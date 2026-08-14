@@ -39,29 +39,50 @@ const lines: DigitalTwinPowerLineAsset[] = [
 ];
 
 describe("Digital Twin power-line rendering", () => {
-  it("derives exact 3D conductors and one pole per shared support", () => {
+  it("derives two crossarm-aligned conductors and one pole per shared support", () => {
     const network = buildDigitalTwinPowerLineNetwork(lines);
 
-    assert.deepEqual(network.conductors, [
-      {
-        id: "line-1",
-        startPoleId: "pole--105.0000000,40.0000000",
-        endPoleId: "pole--105.0000000,40.0010000",
-        path: [
-          [-105, 40, 1_710],
-          [-105, 40.001, 1_711],
-        ],
-      },
-      {
-        id: "line-2",
-        startPoleId: "pole--105.0000000,40.0010000",
-        endPoleId: "pole--104.9990000,40.0010000",
-        path: [
-          [-105, 40.001, 1_711],
-          [-104.999, 40.001, 1_712],
-        ],
-      },
-    ]);
+    assert.deepEqual(
+      network.conductors.map(({ id, assetId, side }) => ({
+        id,
+        assetId,
+        side,
+      })),
+      [
+        { id: "line-1-left", assetId: "line-1", side: "left" },
+        { id: "line-1-right", assetId: "line-1", side: "right" },
+        { id: "line-2-left", assetId: "line-2", side: "left" },
+        { id: "line-2-right", assetId: "line-2", side: "right" },
+      ]
+    );
+    const [firstLeft, firstRight, secondLeft, secondRight] =
+      network.conductors;
+    assert.ok(firstLeft && firstRight && secondLeft && secondRight);
+    assert.deepEqual(firstLeft.path[1], secondLeft.path[0]);
+    assert.deepEqual(firstRight.path[1], secondRight.path[0]);
+    assert.equal(firstLeft.startPoleId, "pole--105.0000000,40.0000000");
+    assert.equal(firstLeft.endPoleId, "pole--105.0000000,40.0010000");
+    assert.notEqual(firstLeft.path[0][0], -105);
+    assert.notEqual(firstRight.path[0][0], -105);
+    const separationMeters =
+      Math.abs(firstLeft.path[0][0] - firstRight.path[0][0]) *
+      111_320 *
+      Math.cos((40 * Math.PI) / 180);
+    assert.ok(
+      Math.abs(separationMeters - 3) < 0.001,
+      `expected 3 m conductor separation, received ${separationMeters} m`
+    );
+    assert.deepEqual(
+      network.conductors.map((conductor) =>
+        conductor.path.map((coordinate) => coordinate[2])
+      ),
+      [
+        [1_710, 1_711],
+        [1_710, 1_711],
+        [1_711, 1_712],
+        [1_711, 1_712],
+      ]
+    );
     assert.equal(network.poles.length, 3);
     assert.deepEqual(network.poles[1]?.position, [
       -105,
@@ -82,10 +103,29 @@ describe("Digital Twin power-line rendering", () => {
       surfaceElevations,
     });
 
-    assert.deepEqual(network.conductors[0]?.path, [
-      [-105, 40, 1_642.25 + POWER_POLE_HEIGHT_AGL_METERS],
-      [-105, 40.001, 1_643.5 + POWER_POLE_HEIGHT_AGL_METERS],
-    ]);
+    assert.deepEqual(
+      network.conductors.map((conductor) =>
+        conductor.path.map((coordinate) => coordinate[2])
+      ),
+      [
+        [
+          1_642.25 + POWER_POLE_HEIGHT_AGL_METERS,
+          1_643.5 + POWER_POLE_HEIGHT_AGL_METERS,
+        ],
+        [
+          1_642.25 + POWER_POLE_HEIGHT_AGL_METERS,
+          1_643.5 + POWER_POLE_HEIGHT_AGL_METERS,
+        ],
+        [
+          1_643.5 + POWER_POLE_HEIGHT_AGL_METERS,
+          1_644.75 + POWER_POLE_HEIGHT_AGL_METERS,
+        ],
+        [
+          1_643.5 + POWER_POLE_HEIGHT_AGL_METERS,
+          1_644.75 + POWER_POLE_HEIGHT_AGL_METERS,
+        ],
+      ]
+    );
     assert.deepEqual(network.poles[0]?.position, [-105, 40, 1_642.25]);
     assert.deepEqual(network.poles[1]?.position, [-105, 40.001, 1_643.5]);
   });
@@ -114,17 +154,27 @@ describe("Digital Twin power-line rendering", () => {
     });
 
     assert.deepEqual(network.poles[1]?.position, movedPosition);
-    assert.deepEqual(network.conductors[0]?.path[0], [-105, 40, 1_710]);
-    assert.deepEqual(network.conductors[0]?.path[1], [
-      movedPosition[0],
-      movedPosition[1],
-      movedPosition[2] + POWER_POLE_HEIGHT_AGL_METERS,
-    ]);
-    assert.deepEqual(network.conductors[1]?.path[0], [
-      movedPosition[0],
-      movedPosition[1],
-      movedPosition[2] + POWER_POLE_HEIGHT_AGL_METERS,
-    ]);
+    const baseConductorById = new Map(
+      baseNetwork.conductors.map((conductor) => [conductor.id, conductor])
+    );
+    for (const conductor of network.conductors) {
+      const baseConductor = baseConductorById.get(conductor.id);
+      assert.ok(baseConductor);
+      const movedEndpointIndex =
+        conductor.startPoleId === movedPole.id ? 0 : 1;
+      const fixedEndpointIndex = movedEndpointIndex === 0 ? 1 : 0;
+      assert.deepEqual(
+        conductor.path[fixedEndpointIndex],
+        baseConductor.path[fixedEndpointIndex]
+      );
+      assert.deepEqual(conductor.path[movedEndpointIndex], [
+        movedPosition[0] +
+          (baseConductor.path[movedEndpointIndex][0] - movedPole.position[0]),
+        movedPosition[1] +
+          (baseConductor.path[movedEndpointIndex][1] - movedPole.position[1]),
+        movedPosition[2] + POWER_POLE_HEIGHT_AGL_METERS,
+      ]);
+    }
   });
 
   it("makes poles pickable and binds hover, click, and drag gestures", () => {
