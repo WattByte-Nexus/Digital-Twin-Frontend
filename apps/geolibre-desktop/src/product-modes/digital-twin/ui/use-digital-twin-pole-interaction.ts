@@ -31,6 +31,11 @@ export interface DigitalTwinPoleMapInteractionResult {
   network: DigitalTwinPowerLineNetwork | undefined;
   layerInteraction: DigitalTwinPowerPoleInteraction;
   onSurfaceClick: (event: Event) => void;
+  popoverSelection: {
+    poleId: string;
+    screenPosition: { x: number; y: number };
+  } | null;
+  clearSelection: () => void;
   stagedMoveCount: number;
 }
 
@@ -47,6 +52,15 @@ function geographicPointer(
 ): [longitude: number, latitude: number] {
   const coordinate = map.unproject([screen[0], screen[1]]);
   return [coordinate.lng, coordinate.lat];
+}
+
+function viewportScreenPosition(
+  map: MapLibreMap | null,
+  screen: readonly [x: number, y: number]
+): { x: number; y: number } {
+  if (!map) return { x: screen[0], y: screen[1] };
+  const bounds = map.getCanvas().getBoundingClientRect();
+  return { x: bounds.left + screen[0], y: bounds.top + screen[1] };
 }
 
 function terrainElevation(
@@ -90,6 +104,10 @@ export function useDigitalTwinPoleInteraction({
 }): DigitalTwinPoleMapInteractionResult {
   const [hoveredPoleId, setHoveredPoleId] = useState<string | null>(null);
   const [selectedPoleIds, setSelectedPoleIds] = useState<string[]>([]);
+  const [popoverSelection, setPopoverSelection] = useState<{
+    poleId: string;
+    screenPosition: { x: number; y: number };
+  } | null>(null);
   const [stagedPositions, setStagedPositions] = useState<
     ReadonlyMap<string, DigitalTwinPolePosition>
   >(() => new Map());
@@ -136,13 +154,18 @@ export function useDigitalTwinPoleInteraction({
     restoreNavigation();
   }, [cancelPreviewFrame, restoreNavigation]);
 
+  const clearSelection = useCallback(() => {
+    setSelectedPoleIds([]);
+    setPopoverSelection(null);
+    publishSelection([]);
+  }, [publishSelection]);
+
   useEffect(() => {
     cancelDrag();
     setHoveredPoleId(null);
-    setSelectedPoleIds([]);
+    clearSelection();
     setStagedPositions(new Map());
-    publishSelection([]);
-  }, [cancelDrag, networkKey, publishSelection]);
+  }, [cancelDrag, clearSelection, networkKey]);
 
   useEffect(
     () => () => {
@@ -181,9 +204,13 @@ export function useDigitalTwinPoleInteraction({
         gesture.additive ? "add" : "replace"
       );
       setSelectedPoleIds(selection);
+      setPopoverSelection({
+        poleId: pole.id,
+        screenPosition: viewportScreenPosition(map, gesture.screen),
+      });
       publishSelection(selection);
     },
-    [publishSelection, selectedPoleIds]
+    [map, publishSelection, selectedPoleIds]
   );
 
   const previewForGesture = useCallback(
@@ -227,6 +254,10 @@ export function useDigitalTwinPoleInteraction({
       map.dragRotate.disable();
       dragRef.current = result.drag;
       setSelectedPoleIds(result.selectedPoleIds);
+      setPopoverSelection({
+        poleId: pole.id,
+        screenPosition: viewportScreenPosition(map, gesture.screen),
+      });
       publishSelection(result.selectedPoleIds);
     },
     [map, publishSelection, renderNetwork, selectedPoleIds]
@@ -249,7 +280,7 @@ export function useDigitalTwinPoleInteraction({
   );
 
   const finishDrag = useCallback(
-    (_pole: DigitalTwinPowerPole, gesture: DigitalTwinPoleGesture) => {
+    (pole: DigitalTwinPowerPole, gesture: DigitalTwinPoleGesture) => {
       const drag = dragRef.current;
       if (!drag) return;
       cancelPreviewFrame();
@@ -278,6 +309,10 @@ export function useDigitalTwinPoleInteraction({
         for (const change of changes) next.set(change.poleId, change.to);
         return next;
       });
+      setPopoverSelection({
+        poleId: pole.id,
+        screenPosition: viewportScreenPosition(map, gesture.screen),
+      });
       window.dispatchEvent(
         new CustomEvent<DigitalTwinPoleMoveIntentDetail>(
           DIGITAL_TWIN_POLE_MOVE_INTENT_EVENT,
@@ -289,16 +324,15 @@ export function useDigitalTwinPoleInteraction({
         suppressClickRef.current = false;
       });
     },
-    [cancelPreviewFrame, previewForGesture, renderNetwork, restoreNavigation]
+    [cancelPreviewFrame, map, previewForGesture, renderNetwork, restoreNavigation]
   );
 
   const onSurfaceClick = useCallback(
     (event: Event) => {
       if (hasAdditiveModifier(event)) return;
-      setSelectedPoleIds([]);
-      publishSelection([]);
+      clearSelection();
     },
-    [publishSelection]
+    [clearSelection]
   );
 
   useEffect(() => {
@@ -310,13 +344,12 @@ export function useDigitalTwinPoleInteraction({
         return;
       }
       if (selectedPoleIds.length > 0) {
-        setSelectedPoleIds([]);
-        publishSelection([]);
+        clearSelection();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [cancelDrag, publishSelection, selectedPoleIds.length]);
+  }, [cancelDrag, clearSelection, selectedPoleIds.length]);
 
   const layerInteraction = useMemo<DigitalTwinPowerPoleInteraction>(
     () => ({
@@ -342,6 +375,8 @@ export function useDigitalTwinPoleInteraction({
     network: renderNetwork,
     layerInteraction,
     onSurfaceClick,
+    popoverSelection,
+    clearSelection,
     stagedMoveCount: stagedPositions.size,
   };
 }
