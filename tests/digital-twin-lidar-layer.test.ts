@@ -34,6 +34,7 @@ const DATASET: DigitalTwinReadyPointCloudDataset = {
 describe("Digital Twin LiDAR fusion layer", () => {
   it("shows point clouds by default so the toolbar can explicitly disable them", () => {
     assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.pointClouds, true);
+    assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.assetTrees, true);
   });
 
   it("renders compact opaque points while LOD controls visible density", (context) => {

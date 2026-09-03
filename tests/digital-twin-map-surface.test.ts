@@ -12,6 +12,29 @@ import {
 } from "../packages/map/src/digital-twin-surface-state";
 import { createDigitalTwinMapSurfaceLayers } from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-map-module";
 
+const TREE = {
+  kind: "tree" as const,
+  assetId: "GOLDEN-TREE-001",
+  regionId: "golden-co",
+  location: { lat: 39.7557, lon: -105.2208 },
+  species: "unclassified",
+  heightM: 8,
+  canopyRadiusM: 2.5,
+  sourceRef: "wildfire-rec:single-lane:tree-0",
+};
+
+test("the product map module includes segmented trees on the shared surface", () => {
+  const groups = createDigitalTwinMapSurfaceLayers({ trees: [TREE] });
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].id, "digital-twin-trees");
+  assert.equal(groups[0].surface, DIGITAL_TWIN_SHARED_SURFACE);
+  assert.deepEqual(
+    groups[0].layers.map((layer) => layer.id),
+    ["digital-twin-tree-trunks", "digital-twin-tree-crowns"]
+  );
+});
+
 test("the product map module places point clouds on the shared surface", () => {
   const groups = createDigitalTwinMapSurfaceLayers({
     powerLineNetwork: undefined,

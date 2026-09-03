@@ -31,6 +31,7 @@ export interface DigitalTwinMapDisplaySettings {
   satellite: boolean;
   elevation: boolean;
   pointClouds: boolean;
+  assetTrees: boolean;
   placeLabels: boolean;
   roads: boolean;
   roadLabels: boolean;
@@ -47,6 +48,7 @@ export const DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS: DigitalTwinMapDisplaySet
     satellite: true,
     elevation: true,
     pointClouds: true,
+    assetTrees: true,
     placeLabels: true,
     roads: true,
     roadLabels: true,
@@ -207,6 +209,14 @@ export function DigitalTwinMapToolbar({
           >
             <Building2 />
             Buildings
+          </MenubarCheckboxItem>
+          <MenubarCheckboxItem
+            checked={value.assetTrees}
+            className={itemClassName}
+            onCheckedChange={(checked) => set("assetTrees", checked === true)}
+          >
+            <TreePine />
+            Segmented trees
           </MenubarCheckboxItem>
           <MenubarCheckboxItem
             checked={value.parks}

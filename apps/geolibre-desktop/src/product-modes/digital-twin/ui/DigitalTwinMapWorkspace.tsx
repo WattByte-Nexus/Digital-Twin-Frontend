@@ -85,6 +85,7 @@ import {
   fetchDigitalTwinAssets,
   type DigitalTwinAsset,
   type DigitalTwinPowerLineAsset,
+  type DigitalTwinTreeAsset,
 } from "../../../lib/digital-twin-assets";
 import {
   fetchActiveDigitalTwinPointCloud,
@@ -440,6 +441,15 @@ export function DigitalTwinMapWorkspace({
         : [],
     [regionAssets]
   );
+  const regionalTrees = useMemo(
+    () =>
+      regionAssets.status === "ready"
+        ? regionAssets.assets.filter(
+            (asset): asset is DigitalTwinTreeAsset => asset.kind === "tree"
+          )
+        : [],
+    [regionAssets]
+  );
   const [weatherData, setWeatherData] = useState<WeatherDataLoadState>({
     status: showWeather ? "loading" : "disabled",
   });
@@ -473,7 +483,7 @@ export function DigitalTwinMapWorkspace({
     [mapboxUrls]
   );
   const activeRegionId = controlledRegionId ?? localRegionId;
-  const powerLineSurfaceCoordinates = useMemo(() => {
+  const assetSurfaceCoordinates = useMemo(() => {
     const coordinates = new Map<string, DigitalTwinSurfaceCoordinate>();
     for (const line of regionalPowerLines) {
       for (const coordinate of line.coordinates) {
@@ -484,18 +494,25 @@ export function DigitalTwinMapWorkspace({
         coordinates.set(key, [coordinate.lon, coordinate.lat]);
       }
     }
+    for (const tree of regionalTrees) {
+      const key = digitalTwinSurfaceCoordinateKey(
+        tree.location.lon,
+        tree.location.lat
+      );
+      coordinates.set(key, [tree.location.lon, tree.location.lat]);
+    }
     return [...coordinates.values()];
-  }, [regionalPowerLines]);
-  const powerLineSurfaceKey = useMemo(
+  }, [regionalPowerLines, regionalTrees]);
+  const assetSurfaceKey = useMemo(
     () =>
-      `${activeRegionId}:${powerLineSurfaceCoordinates
+      `${activeRegionId}:${assetSurfaceCoordinates
         .map(([longitude, latitude]) =>
           digitalTwinSurfaceCoordinateKey(longitude, latitude)
         )
         .join("|")}`,
-    [activeRegionId, powerLineSurfaceCoordinates]
+    [activeRegionId, assetSurfaceCoordinates]
   );
-  const [powerLineSurfaceState, setPowerLineSurfaceState] = useState<{
+  const [assetSurfaceState, setAssetSurfaceState] = useState<{
     networkKey: string;
     elevations: ReadonlyMap<string, number>;
   } | null>(null);
@@ -941,9 +958,9 @@ export function DigitalTwinMapWorkspace({
     if (
       !mapInstance ||
       !displaySettings.elevation ||
-      powerLineSurfaceCoordinates.length === 0
+      assetSurfaceCoordinates.length === 0
     ) {
-      setPowerLineSurfaceState(null);
+      setAssetSurfaceState(null);
       return;
     }
 
@@ -952,17 +969,17 @@ export function DigitalTwinMapWorkspace({
       frame = null;
       const elevations = sampleDigitalTwinSurfaceElevations(
         mapInstance,
-        powerLineSurfaceCoordinates
+        assetSurfaceCoordinates
       );
       if (!elevations) return;
       console.debug("DEBUG_RUNTIME_20260812_surface_alignment", {
         event: "power_line_surface_sample",
-        networkKey: powerLineSurfaceKey,
+        networkKey: assetSurfaceKey,
         samples: [...elevations],
       });
-      setPowerLineSurfaceState((current) => {
+      setAssetSurfaceState((current) => {
         if (
-          current?.networkKey === powerLineSurfaceKey &&
+          current?.networkKey === assetSurfaceKey &&
           current.elevations.size === elevations.size &&
           [...elevations].every(
             ([key, elevation]) => current.elevations.get(key) === elevation
@@ -970,7 +987,7 @@ export function DigitalTwinMapWorkspace({
         ) {
           return current;
         }
-        return { networkKey: powerLineSurfaceKey, elevations };
+        return { networkKey: assetSurfaceKey, elevations };
       });
     };
     const scheduleSample = () => {
@@ -980,8 +997,8 @@ export function DigitalTwinMapWorkspace({
       if (event.sourceId === TERRAIN_SOURCE_ID) scheduleSample();
     };
 
-    setPowerLineSurfaceState((current) =>
-      current?.networkKey === powerLineSurfaceKey ? current : null
+    setAssetSurfaceState((current) =>
+      current?.networkKey === assetSurfaceKey ? current : null
     );
     scheduleSample();
     mapInstance.on("sourcedata", handleSourceData);
@@ -999,30 +1016,30 @@ export function DigitalTwinMapWorkspace({
   }, [
     displaySettings.elevation,
     mapInstance,
-    powerLineSurfaceCoordinates,
-    powerLineSurfaceKey,
+    assetSurfaceCoordinates,
+    assetSurfaceKey,
   ]);
 
-  const powerLineSurfaceElevations =
-    powerLineSurfaceState?.networkKey === powerLineSurfaceKey
-      ? powerLineSurfaceState.elevations
+  const assetSurfaceElevations =
+    assetSurfaceState?.networkKey === assetSurfaceKey
+      ? assetSurfaceState.elevations
       : undefined;
-  const powerLinesReady =
-    !displaySettings.elevation || powerLineSurfaceElevations !== undefined;
+  const assetsSurfaceReady =
+    !displaySettings.elevation || assetSurfaceElevations !== undefined;
   const basePowerLineNetwork = useMemo(
     () =>
       regionAssets.status === "ready" &&
       regionAssets.regionId === activeRegionId &&
       regionalPowerLines.length > 0 &&
-      powerLinesReady
+      assetsSurfaceReady
         ? buildDigitalTwinPowerLineNetwork(regionalPowerLines, {
-            surfaceElevations: powerLineSurfaceElevations,
+            surfaceElevations: assetSurfaceElevations,
           })
         : undefined,
     [
       activeRegionId,
-      powerLineSurfaceElevations,
-      powerLinesReady,
+      assetSurfaceElevations,
+      assetsSurfaceReady,
       regionAssets,
       regionalPowerLines,
     ]
@@ -1066,6 +1083,11 @@ export function DigitalTwinMapWorkspace({
         : undefined;
 
     return createDigitalTwinMapSurfaceLayers({
+      trees:
+        displaySettings.assetTrees && assetsSurfaceReady
+          ? regionalTrees
+          : undefined,
+      treeSurfaceElevations: assetSurfaceElevations,
       powerLineNetwork: poleMapInteraction.network,
       poleInteraction: poleMapInteraction.layerInteraction,
       pointCloud: activePointCloud
@@ -1090,10 +1112,14 @@ export function DigitalTwinMapWorkspace({
     });
   }, [
     activeRegionId,
+    assetSurfaceElevations,
+    assetsSurfaceReady,
+    displaySettings.assetTrees,
     displaySettings.pointClouds,
     pointCloud,
     poleMapInteraction.layerInteraction,
     poleMapInteraction.network,
+    regionalTrees,
     showLidar,
   ]);
 
