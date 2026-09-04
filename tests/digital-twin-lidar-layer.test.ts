@@ -52,14 +52,14 @@ describe("Digital Twin LiDAR fusion layer", () => {
 
     assert.equal(layer.props.id, "digital-twin-point-cloud-golden-lidar");
     assert.equal(layer.props.data, DATASET.tilesetUrl);
-    assert.equal(layer.props.pointSize, 2);
+    assert.equal(layer.props.pointSize, 1);
     assert.equal(layer.props.opacity, 1);
     assert.equal(layer.props.pickable, false);
     assert.equal(layer.props.operation, "draw");
-    assert.equal(layer.props.loadOptions?.tileset?.maximumScreenSpaceError, 2);
-    assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 256);
-    assert.equal(layer.props.loadOptions?.tileset?.maxRequests, 6);
-    assert.equal(layer.props.loadOptions?.tileset?.debounceTime, 150);
+    assert.equal(layer.props.loadOptions?.tileset?.maximumScreenSpaceError, 8);
+    assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 64);
+    assert.equal(layer.props.loadOptions?.tileset?.maxRequests, 3);
+    assert.equal(layer.props.loadOptions?.tileset?.debounceTime, 250);
     assert.equal(layer.props.loadOptions?.tileset?.updateTransforms, false);
     assert.equal(
       layer.props.loadOptions?.tileset?.memoryAdjustedScreenSpaceError,

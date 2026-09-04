@@ -96,14 +96,14 @@ export const POINT_CLOUD_TILESET_LOAD_OPTIONS = {
   tileset: {
     // Let the hierarchy supply density without forcing native leaves for every
     // projected pixel. The memory budget may relax detail before frames stall.
-    maximumScreenSpaceError: 2,
-    maximumMemoryUsage: 256,
+    maximumScreenSpaceError: 8,
+    maximumMemoryUsage: 64,
     memoryAdjustedScreenSpaceError: true,
     throttleRequests: true,
     // Bound concurrent parsing and GPU uploads so refinement stays interactive.
-    maxRequests: 6,
+    maxRequests: 3,
     // Camera motion can otherwise trigger a traversal for every input event.
-    debounceTime: 150,
+    debounceTime: 250,
     // Engine tiles are georeferenced once and remain stationary.
     updateTransforms: false,
   },
@@ -209,7 +209,7 @@ export function createDigitalTwinPointCloudLayer(
     getTraversalElevationMeters: () => traversalElevationMeters,
     // LOD controls density; a stable pixel footprint keeps close views crisp
     // and prevents coarse preview points from becoming metre-wide bubbles.
-    pointSize: 2,
+    pointSize: 1,
     pickable: false,
     operation: "draw",
     beforeId,

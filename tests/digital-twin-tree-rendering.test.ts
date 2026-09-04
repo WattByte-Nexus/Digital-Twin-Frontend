@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SolidPolygonLayer } from "@deck.gl/layers";
+import { SimpleMeshLayer } from "@deck.gl/mesh-layers";
 import { digitalTwinSurfaceCoordinateKey } from "../packages/map/src/digital-twin-surface-state";
 import type { DigitalTwinTreeAsset } from "../apps/geolibre-desktop/src/lib/digital-twin-assets";
 import { createDigitalTwinTreeLayers } from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-tree-rendering";
@@ -27,13 +28,16 @@ describe("Digital Twin tree rendering", () => {
     });
 
     assert.ok(trunks instanceof SolidPolygonLayer);
-    assert.ok(crowns instanceof SolidPolygonLayer);
+    assert.ok(crowns instanceof SimpleMeshLayer);
     assert.equal(trunks.id, "digital-twin-tree-trunks");
     assert.equal(crowns.id, "digital-twin-tree-crowns");
     assert.equal(trunks.props.getPolygon(TREE)[0][2], 1_728.5);
-    assert.equal(crowns.props.getPolygon(TREE)[0][2], 1_732);
-    assert.equal(crowns.props.getPolygon(TREE).length, 14);
-    assert.equal(crowns.props.getElevation(TREE), 6.5);
+    assert.deepEqual(crowns.props.getPosition(TREE), [
+      TREE.location.lon,
+      TREE.location.lat,
+      1_735.5,
+    ]);
+    assert.deepEqual(crowns.props.getScale(TREE), [3, 3, 3]);
   });
 
   it("uses compact physical defaults for incomplete draft assets", () => {
@@ -41,6 +45,6 @@ describe("Digital Twin tree rendering", () => {
     const [trunks, crowns] = createDigitalTwinTreeLayers([draft]);
 
     assert.equal(trunks.props.getElevation(draft), 4.4);
-    assert.equal(crowns.props.getPolygon(draft).length, 14);
+    assert.deepEqual(crowns.props.getScale(draft), [2.5, 2.5, 2.4]);
   });
 });

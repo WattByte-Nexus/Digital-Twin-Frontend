@@ -279,15 +279,13 @@ describe("Digital Twin frontend composition", () => {
     );
   });
 
-  it("refines point clouds while keeping survey-spacing coverage bounded", () => {
-    assert.match(lidarSource, /maximumScreenSpaceError:\s*1/);
-    assert.match(lidarSource, /maximumMemoryUsage:\s*512/);
-    assert.match(lidarSource, /memoryAdjustedScreenSpaceError:\s*false/);
-    assert.match(lidarSource, /pointRadiusMetersForSpacing\(dataset\.minimumSpacingMeters\)/);
-    assert.match(lidarSource, /sizeUnits:\s*"meters"/);
-    assert.match(lidarSource, /softCapRadiusPixels:\s*2/);
-    assert.match(lidarSource, /closeRangeMaxRadiusPixels:\s*3/);
-    assert.match(lidarSource, /1\.0 - exp/);
+  it("refines point clouds within the interactive memory budget", () => {
+    assert.match(lidarSource, /maximumScreenSpaceError:\s*8/);
+    assert.match(lidarSource, /maximumMemoryUsage:\s*64/);
+    assert.match(lidarSource, /memoryAdjustedScreenSpaceError:\s*true/);
+    assert.match(lidarSource, /pointSize:\s*1/);
+    assert.match(lidarSource, /sizeUnits:\s*"pixels"/);
+    assert.match(lidarSource, /MISSING_POINT_RGB_VERTEX_INJECTION/);
     assert.match(workspaceSource, /missing RGB is shown in cyan/);
   });
 

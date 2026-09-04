@@ -1,12 +1,20 @@
 import { SolidPolygonLayer } from "@deck.gl/layers";
+import { SimpleMeshLayer } from "@deck.gl/mesh-layers";
 import { digitalTwinSurfaceCoordinateKey } from "@geolibre/map/digital-twin-surface-state";
+import { SphereGeometry } from "@luma.gl/engine";
 import type { DigitalTwinTreeAsset } from "../../lib/digital-twin-assets";
 
 const DEFAULT_TREE_HEIGHT_METERS = 8;
 const DEFAULT_CANOPY_RADIUS_METERS = 2.5;
 const TRUNK_HEIGHT_FRACTION = 0.55;
-const CANOPY_BASE_FRACTION = 0.35;
-const CANOPY_HEIGHT_FRACTION = 0.65;
+const CANOPY_CENTER_FRACTION = 0.7;
+const CANOPY_VERTICAL_RADIUS_FRACTION = 0.3;
+const TREE_CROWN_MESH = new SphereGeometry({
+  id: "digital-twin-tree-crown",
+  radius: 1,
+  nlat: 6,
+  nlong: 10,
+});
 
 export interface DigitalTwinTreeSurfaceOptions {
   surfaceElevations?: ReadonlyMap<string, number>;
@@ -57,7 +65,7 @@ export function createDigitalTwinTreeLayers(
   { surfaceElevations }: DigitalTwinTreeSurfaceOptions = {}
 ): [
   SolidPolygonLayer<DigitalTwinTreeAsset>,
-  SolidPolygonLayer<DigitalTwinTreeAsset>,
+  SimpleMeshLayer<DigitalTwinTreeAsset>,
 ] {
   return [
     new SolidPolygonLayer<DigitalTwinTreeAsset>({
@@ -76,21 +84,24 @@ export function createDigitalTwinTreeLayers(
       extruded: true,
       pickable: false,
     }),
-    new SolidPolygonLayer<DigitalTwinTreeAsset>({
+    new SimpleMeshLayer<DigitalTwinTreeAsset>({
       id: "digital-twin-tree-crowns",
       data: trees,
-      positionFormat: "XYZ",
-      getPolygon: (tree) =>
-        circlePolygon(
-          tree,
-          canopyRadius(tree),
-          surfaceElevation(tree, surfaceElevations) +
-            treeHeight(tree) * CANOPY_BASE_FRACTION,
-          14
-        ),
-      getElevation: (tree) => treeHeight(tree) * CANOPY_HEIGHT_FRACTION,
-      getFillColor: [38, 132, 78, 218],
-      extruded: true,
+      mesh: TREE_CROWN_MESH,
+      sizeScale: 1,
+      getPosition: (tree) => [
+        tree.location.lon,
+        tree.location.lat,
+        surfaceElevation(tree, surfaceElevations) +
+          treeHeight(tree) * CANOPY_CENTER_FRACTION,
+      ],
+      getScale: (tree) => [
+        canopyRadius(tree),
+        canopyRadius(tree),
+        treeHeight(tree) * CANOPY_VERTICAL_RADIUS_FRACTION,
+      ],
+      getColor: [38, 132, 78, 218],
+      material: true,
       pickable: false,
     }),
   ];
