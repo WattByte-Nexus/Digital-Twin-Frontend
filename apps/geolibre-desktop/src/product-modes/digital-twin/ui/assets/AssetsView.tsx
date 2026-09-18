@@ -118,6 +118,7 @@ function assetIdFromLocation(location: string): string | null {
 }
 
 function assetName(asset: DigitalTwinAsset): string {
+  if (asset.kind === "power_pole") return `Power pole ${asset.assetId}`;
   if (asset.kind === "power_line")
     return asset.name ?? `Power line ${asset.assetId}`;
   return asset.species
@@ -126,7 +127,7 @@ function assetName(asset: DigitalTwinAsset): string {
 }
 
 function kindLabel(kind: AssetKind): string {
-  return kind === "power_line" ? "Power line" : "Tree";
+  return kind === "power_line" ? "Power line" : kind === "power_pole" ? "Power pole" : "Tree";
 }
 
 function editorDraft(
@@ -720,7 +721,7 @@ function AssetProperties({
             <X aria-hidden="true" />
           </Button>
         </div>
-        <Button className="mt-4 min-h-11 w-full" onClick={onEdit}>
+        <Button className="mt-4 min-h-11 w-full" onClick={onEdit} disabled={asset.kind === "power_pole"}>
           Edit properties
         </Button>
       </header>
@@ -834,19 +835,23 @@ function AssetProperties({
                     rows={[
                       {
                         label: "Latitude",
-                        value: `${asset.location.lat.toFixed(6)}°`,
+                        value: `${(asset.kind === "power_pole" ? asset.base : asset.location).lat.toFixed(6)}°`,
                       },
                       {
                         label: "Longitude",
-                        value: `${asset.location.lon.toFixed(6)}°`,
+                        value: `${(asset.kind === "power_pole" ? asset.base : asset.location).lon.toFixed(6)}°`,
                       },
                     ]}
                   />
                 </section>
                 <section>
-                  <AssetSectionHeading>Vegetation</AssetSectionHeading>
+                  <AssetSectionHeading>{asset.kind === "power_pole" ? "Measured support" : "Vegetation"}</AssetSectionHeading>
                   <PropertyRows
-                    rows={[
+                    rows={asset.kind === "power_pole" ? [
+                      { label: "Height", value: `${(asset.top.elevationM - asset.base.elevationM).toFixed(2)} m` },
+                      { label: "Diameter", value: `${(asset.radiusM * 2).toFixed(2)} m` },
+                      { label: "Base elevation", value: `${asset.base.elevationM.toFixed(2)} m` },
+                    ] : [
                       {
                         label: "Species",
                         value: asset.species?.replaceAll("_", " ") ?? "Not supplied",

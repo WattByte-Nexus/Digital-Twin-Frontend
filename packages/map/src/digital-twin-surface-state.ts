@@ -1,6 +1,7 @@
 import { TERRAIN_SOURCE_ID } from "./satellite-terrain-style";
 
 export interface DigitalTwinSurfaceElevationMap {
+  getTerrain: () => { source: string; exaggeration?: number } | null;
   getCenterClampedToGround: () => boolean;
   setCenterClampedToGround: (value: boolean) => void;
   setTerrain: (
@@ -20,6 +21,8 @@ export type DigitalTwinSurfaceCoordinate = [
 
 export interface DigitalTwinSurfaceElevationQuery {
   getTerrain: () => { exaggeration?: number } | null | undefined;
+  getSource: (sourceId: string) => unknown;
+  isSourceLoaded: (sourceId: string) => boolean;
   queryTerrainElevation: (
     coordinate: DigitalTwinSurfaceCoordinate
   ) => number | null;
@@ -34,18 +37,26 @@ export function digitalTwinSurfaceCoordinateKey(
 
 /**
  * Resolve an entire coordinate set against MapLibre's authoritative terrain.
- * A partial result is rejected so one network never mixes asset and terrain Z.
+ * Returns displayed ground meters, including exaggeration. A partial result
+ * or an unfinished terrain toggle is rejected so one network never mixes
+ * asset and terrain Z.
  */
 export function sampleDigitalTwinSurfaceElevations(
   map: DigitalTwinSurfaceElevationQuery,
-  coordinates: readonly DigitalTwinSurfaceCoordinate[]
+  coordinates: readonly DigitalTwinSurfaceCoordinate[],
+  elevationEnabled: boolean
 ): Map<string, number> | null {
   const terrain = map.getTerrain();
-  if (!terrain) return null;
-  const exaggeration =
-    typeof terrain.exaggeration === "number" && terrain.exaggeration > 0
-      ? terrain.exaggeration
-      : 1;
+  if (!terrain || ((terrain.exaggeration ?? 1) !== 0) !== elevationEnabled) return null;
+  if (!elevationEnabled) {
+    return new Map(coordinates.map(([longitude, latitude]) => [
+      digitalTwinSurfaceCoordinateKey(longitude, latitude),
+      0,
+    ]));
+  }
+  if (!map.getSource(TERRAIN_SOURCE_ID) || !map.isSourceLoaded(TERRAIN_SOURCE_ID)) {
+    return null;
+  }
   const elevations = new Map<string, number>();
 
   for (const [longitude, latitude] of coordinates) {
@@ -55,7 +66,7 @@ export function sampleDigitalTwinSurfaceElevations(
     }
     elevations.set(
       digitalTwinSurfaceCoordinateKey(longitude, latitude),
-      elevation / exaggeration
+      elevation
     );
   }
 
@@ -74,14 +85,18 @@ export function applyDigitalTwinSurfaceElevationState(
   state: DigitalTwinSurfaceElevationState
 ): void {
   claimTerrainCamera(map);
+  const current = map.getTerrain();
+  const exaggeration = state.enabled ? state.exaggeration : 0;
+  if (
+    current?.source === TERRAIN_SOURCE_ID &&
+    (current.exaggeration ?? 1) === exaggeration
+  ) return;
 
-  if (!state.enabled) {
-    map.setTerrain(null);
-    return;
-  }
-
+  // Keep one ground surface and its DEM tiles alive in flat mode. Removing
+  // terrain discards its tile coverage and can re-enable with a zero-height
+  // camera before ground data is available.
   map.setTerrain({
     source: TERRAIN_SOURCE_ID,
-    exaggeration: state.exaggeration,
+    exaggeration,
   });
 }

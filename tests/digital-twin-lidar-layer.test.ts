@@ -32,8 +32,8 @@ const DATASET: DigitalTwinReadyPointCloudDataset = {
 };
 
 describe("Digital Twin LiDAR fusion layer", () => {
-  it("shows point clouds by default so the toolbar can explicitly disable them", () => {
-    assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.pointClouds, true);
+  it("shows tree models by default and lets the toolbar enable point clouds", () => {
+    assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.pointClouds, false);
     assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.assetTrees, true);
   });
 
@@ -57,9 +57,9 @@ describe("Digital Twin LiDAR fusion layer", () => {
     assert.equal(layer.props.pickable, false);
     assert.equal(layer.props.operation, "draw");
     assert.equal(layer.props.loadOptions?.tileset?.maximumScreenSpaceError, 8);
-    assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 64);
-    assert.equal(layer.props.loadOptions?.tileset?.maxRequests, 3);
-    assert.equal(layer.props.loadOptions?.tileset?.debounceTime, 250);
+    assert.equal(layer.props.loadOptions?.tileset?.maximumMemoryUsage, 256);
+    assert.equal(layer.props.loadOptions?.tileset?.maxRequests, 8);
+    assert.equal(layer.props.loadOptions?.tileset?.debounceTime, 16);
     assert.equal(layer.props.loadOptions?.tileset?.updateTransforms, false);
     assert.equal(
       layer.props.loadOptions?.tileset?.memoryAdjustedScreenSpaceError,
@@ -83,6 +83,20 @@ describe("Digital Twin LiDAR fusion layer", () => {
     const shaders = new VisibleRgbPointCloudLayer({ id: "coverage-test", data: [] })
       .getShaders();
     assert.equal(shaders.inject?.["vs:DECKGL_FILTER_SIZE"], undefined);
+  });
+
+  it("releases retained parent tiles only after their point-cloud replacement draws", (context) => {
+    const tile = { tileDrawn: false };
+    context.mock.method(PointCloudLayer.prototype, "draw", () => {
+      assert.equal(tile.tileDrawn, false);
+    });
+    const layer = new VisibleRgbPointCloudLayer({ id: "first-draw", data: [], tile });
+    layer.state = {};
+    layer.draw({ uniforms: {} });
+    assert.equal(tile.tileDrawn, false);
+    layer.state = { model: {} as never };
+    layer.draw({ uniforms: {} });
+    assert.equal(tile.tileDrawn, true);
   });
 
   it("corrects LOD traversal without moving the interleaved render viewport", () => {

@@ -1,3 +1,4 @@
+import { SurveyNetworkLegend } from "./SurveyNetworkLegend";
 import {
   getMapboxGlyphsUrl,
   getMapboxSatelliteTileUrlTemplate,
@@ -25,6 +26,7 @@ import {
   DigitalTwinMapToolbar,
   DigitalTwinMonitoringStatus,
   PolePropertiesPopover,
+  TreePropertiesPopover,
   DigitalTwinSidebar,
   DigitalTwinTopbar,
   SidebarInset,
@@ -85,6 +87,7 @@ import {
   fetchDigitalTwinAssets,
   type DigitalTwinAsset,
   type DigitalTwinPowerLineAsset,
+  type DigitalTwinPowerPoleAsset,
   type DigitalTwinTreeAsset,
 } from "../../../lib/digital-twin-assets";
 import {
@@ -116,7 +119,7 @@ import { RunsView } from "./views/RunsView";
 import { ScenariosView } from "./views/ScenariosView";
 import type { ScenarioMapController } from "./views/ScenarioBuilder";
 import { SettingsView } from "./views/SettingsView";
-import { useDigitalTwinPoleInteraction } from "./use-digital-twin-pole-interaction";
+import { useDigitalTwinAssetInteraction } from "./use-digital-twin-asset-interaction";
 
 export type WorkspaceTheme = "light" | "dark";
 
@@ -428,6 +431,7 @@ export function DigitalTwinMapWorkspace({
   const [pointCloud, setPointCloud] = useState<PointCloudLoadState>({
     status: "none",
   });
+  const focusedPointCloudRef = useRef<string | null>(null);
   const [regionAssets, setRegionAssets] = useState<RegionAssetLoadState>({
     status: "none",
   });
@@ -449,6 +453,11 @@ export function DigitalTwinMapWorkspace({
           )
         : [],
     [regionAssets]
+  );
+  const regionalPoles = useMemo(
+    () => regionAssets.status === "ready" ? regionAssets.assets.filter(
+      (asset): asset is DigitalTwinPowerPoleAsset => asset.kind === "power_pole"
+    ) : [], [regionAssets]
   );
   const [weatherData, setWeatherData] = useState<WeatherDataLoadState>({
     status: showWeather ? "loading" : "disabled",
@@ -486,6 +495,7 @@ export function DigitalTwinMapWorkspace({
   const assetSurfaceCoordinates = useMemo(() => {
     const coordinates = new Map<string, DigitalTwinSurfaceCoordinate>();
     for (const line of regionalPowerLines) {
+      if (line.measuredPath) continue;
       for (const coordinate of line.coordinates) {
         const key = digitalTwinSurfaceCoordinateKey(
           coordinate.lon,
@@ -505,12 +515,12 @@ export function DigitalTwinMapWorkspace({
   }, [regionalPowerLines, regionalTrees]);
   const assetSurfaceKey = useMemo(
     () =>
-      `${activeRegionId}:${assetSurfaceCoordinates
+      `${activeRegionId}:${displaySettings.elevation}:${assetSurfaceCoordinates
         .map(([longitude, latitude]) =>
           digitalTwinSurfaceCoordinateKey(longitude, latitude)
         )
         .join("|")}`,
-    [activeRegionId, assetSurfaceCoordinates]
+    [activeRegionId, displaySettings.elevation, assetSurfaceCoordinates]
   );
   const [assetSurfaceState, setAssetSurfaceState] = useState<{
     networkKey: string;
@@ -927,9 +937,25 @@ export function DigitalTwinMapWorkspace({
   }, [engineHealth, regionAssets.status, weatherData]);
 
   useEffect(() => {
+    if (!showLiveMapChrome || !mapInstance) return;
+    if (showLidar && pointCloud.status === "loading") return;
     if (
-      !showLiveMapChrome ||
-      !mapInstance ||
+      showLidar &&
+      pointCloud.status === "ready" &&
+      pointCloud.dataset.regionId === activeRegionId
+    ) {
+      const key = pointCloudDatasetKey(pointCloud.dataset);
+      if (focusedPointCloudRef.current === key) return;
+      const [west, south, east, north] = pointCloud.dataset.bounds;
+      mapInstance.fitBounds(
+        [[west, south], [east, north]],
+        { padding: 96, maxZoom: 16.5, duration: 500 }
+      );
+      focusedPointCloudRef.current = key;
+      return;
+    }
+    focusedPointCloudRef.current = null;
+    if (
       regionAssets.status !== "ready" ||
       regionAssets.regionId !== activeRegionId ||
       regionalPowerLines.length === 0
@@ -952,12 +978,13 @@ export function DigitalTwinMapWorkspace({
     regionAssets,
     regionalPowerLines,
     showLiveMapChrome,
+    showLidar,
+    pointCloud,
   ]);
 
   useEffect(() => {
     if (
       !mapInstance ||
-      !displaySettings.elevation ||
       assetSurfaceCoordinates.length === 0
     ) {
       setAssetSurfaceState(null);
@@ -969,14 +996,10 @@ export function DigitalTwinMapWorkspace({
       frame = null;
       const elevations = sampleDigitalTwinSurfaceElevations(
         mapInstance,
-        assetSurfaceCoordinates
+        assetSurfaceCoordinates,
+        displaySettings.elevation
       );
       if (!elevations) return;
-      console.debug("DEBUG_RUNTIME_20260812_surface_alignment", {
-        event: "power_line_surface_sample",
-        networkKey: assetSurfaceKey,
-        samples: [...elevations],
-      });
       setAssetSurfaceState((current) => {
         if (
           current?.networkKey === assetSurfaceKey &&
@@ -1024,17 +1047,21 @@ export function DigitalTwinMapWorkspace({
     assetSurfaceState?.networkKey === assetSurfaceKey
       ? assetSurfaceState.elevations
       : undefined;
-  const assetsSurfaceReady =
-    !displaySettings.elevation || assetSurfaceElevations !== undefined;
+  const assetsSurfaceReady = assetSurfaceElevations !== undefined;
   const basePowerLineNetwork = useMemo(
     () =>
       regionAssets.status === "ready" &&
       regionAssets.regionId === activeRegionId &&
-      regionalPowerLines.length > 0 &&
-      assetsSurfaceReady
-        ? buildDigitalTwinPowerLineNetwork(regionalPowerLines, {
-            surfaceElevations: assetSurfaceElevations,
-          })
+      (regionalPowerLines.length > 0 || regionalPoles.length > 0)
+        ? buildDigitalTwinPowerLineNetwork(
+            regionalPowerLines.filter(
+              (line) => line.measuredPath || assetsSurfaceReady
+            ),
+            {
+              surfaceElevations: assetSurfaceElevations,
+              measuredPoles: regionalPoles,
+            }
+          )
         : undefined,
     [
       activeRegionId,
@@ -1042,19 +1069,20 @@ export function DigitalTwinMapWorkspace({
       assetsSurfaceReady,
       regionAssets,
       regionalPowerLines,
+      regionalPoles,
     ]
   );
-  const poleMapInteraction = useDigitalTwinPoleInteraction({
+  const assetMapInteraction = useDigitalTwinAssetInteraction({
     map: mapInstance,
-    network: basePowerLineNetwork,
-    networkKey: activeRegionId,
+    regionId: activeRegionId,
+    treesEnabled: displaySettings.assetTrees,
   });
   const selectedPoleProperties = useMemo(() => {
-    const selection = poleMapInteraction.popoverSelection;
-    const network = poleMapInteraction.network;
-    if (!selection || !network) return null;
+    const selection = assetMapInteraction.selection;
+    const network = basePowerLineNetwork;
+    if (selection.kind !== "pole" || !network) return null;
     const pole = network.poles.find(
-      (candidate) => candidate.id === selection.poleId
+      (candidate) => candidate.id === selection.primaryAssetId
     );
     if (!pole) return null;
     return {
@@ -1064,14 +1092,19 @@ export function DigitalTwinMapWorkspace({
         powerLines: regionalPowerLines,
         regionId: activeRegionId,
       }),
-      screenPosition: selection.screenPosition,
+      screenPosition: assetMapInteraction.screenPosition,
     };
   }, [
     activeRegionId,
-    poleMapInteraction.network,
-    poleMapInteraction.popoverSelection,
+    basePowerLineNetwork,
+    assetMapInteraction.selection,
+    assetMapInteraction.screenPosition,
     regionalPowerLines,
   ]);
+
+  const selectedTree = assetMapInteraction.selection.kind === "tree"
+    ? regionalTrees.find((tree) => tree.assetId === assetMapInteraction.selection.primaryAssetId)
+    : undefined;
 
   const surfaceLayers = useMemo(() => {
     const activePointCloud =
@@ -1088,8 +1121,9 @@ export function DigitalTwinMapWorkspace({
           ? regionalTrees
           : undefined,
       treeSurfaceElevations: assetSurfaceElevations,
-      powerLineNetwork: poleMapInteraction.network,
-      poleInteraction: poleMapInteraction.layerInteraction,
+      treeInteraction: assetMapInteraction.treeInteraction,
+      powerLineNetwork: basePowerLineNetwork,
+      poleInteraction: assetMapInteraction.poleInteraction,
       pointCloud: activePointCloud
         ? {
             dataset: activePointCloud,
@@ -1117,8 +1151,9 @@ export function DigitalTwinMapWorkspace({
     displaySettings.assetTrees,
     displaySettings.pointClouds,
     pointCloud,
-    poleMapInteraction.layerInteraction,
-    poleMapInteraction.network,
+    assetMapInteraction.poleInteraction,
+    assetMapInteraction.treeInteraction,
+    basePowerLineNetwork,
     regionalTrees,
     showLidar,
   ]);
@@ -1126,7 +1161,7 @@ export function DigitalTwinMapWorkspace({
   const activePointCloudStatus = pointCloudStatusText(
     pointCloud,
     readyPointCloudDatasetKey,
-    showLidar
+    showLidar && displaySettings.pointClouds
   );
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1250,7 +1285,7 @@ export function DigitalTwinMapWorkspace({
           elevationEnabled={displaySettings.elevation}
           themeMode={activeThemeMode}
           referenceOverlayVisibility={displaySettings}
-          onSurfaceClick={poleMapInteraction.onSurfaceClick}
+          onSurfaceClick={assetMapInteraction.onSurfaceClick}
           onMapReady={handleMapReady}
         />
       ) : (
@@ -1259,13 +1294,30 @@ export function DigitalTwinMapWorkspace({
 
       {selectedPoleProperties ? (
         <PolePropertiesPopover
+          align="start"
           asset={selectedPoleProperties.asset}
+          dock="right"
           onOpenChange={(open) => {
-            if (!open) poleMapInteraction.clearSelection();
+            if (!open) assetMapInteraction.clearSelection();
           }}
           open
           screenPosition={selectedPoleProperties.screenPosition}
-          side="right"
+          side="left"
+          theme={activeThemeMode}
+        />
+      ) : null}
+
+      {selectedTree && displaySettings.assetTrees ? (
+        <TreePropertiesPopover
+          align="start"
+          asset={selectedTree}
+          dock="right"
+          onOpenChange={(open) => {
+            if (!open) assetMapInteraction.clearSelection();
+          }}
+          open
+          screenPosition={assetMapInteraction.screenPosition}
+          side="left"
           theme={activeThemeMode}
         />
       ) : null}
@@ -1375,6 +1427,12 @@ export function DigitalTwinMapWorkspace({
         </>
       ) : null}
 
+      {regionalPoles.length > 0 && basePowerLineNetwork?.survey ? (
+        <div className="pointer-events-none absolute bottom-16 left-4 z-10">
+          <SurveyNetworkLegend network={basePowerLineNetwork.survey} poleCount={regionalPoles.length} />
+        </div>
+      ) : null}
+
       <output aria-live="polite" className="sr-only">
         {activePointCloudStatus}
       </output>
@@ -1389,13 +1447,6 @@ export function DigitalTwinMapWorkspace({
           : "No regional assets loaded."}
       </output>
 
-      <output aria-live="polite" className="sr-only">
-        {poleMapInteraction.stagedMoveCount > 0
-          ? `${poleMapInteraction.stagedMoveCount} pole move ${
-              poleMapInteraction.stagedMoveCount === 1 ? "is" : "are"
-            } staged as scenario intent.`
-          : "No pole moves are staged."}
-      </output>
     </div>
   );
   const mapHost = (

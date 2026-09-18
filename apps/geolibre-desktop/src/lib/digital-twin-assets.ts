@@ -18,6 +18,11 @@ export interface DigitalTwinPowerLineCoordinateInput
   elevation_m: number;
 }
 
+export interface DigitalTwinConductorOffset {
+  lateral: number;
+  vertical: number;
+}
+
 export interface DigitalTwinTreeAsset {
   kind: "tree";
   assetId: string;
@@ -27,6 +32,20 @@ export interface DigitalTwinTreeAsset {
   heightM: number | null;
   canopyRadiusM: number | null;
   sourceRef: string | null;
+  segmentation?: {
+    bounds: [number, number, number, number, number, number];
+    pointCount: number;
+  } | null;
+}
+
+export interface DigitalTwinPowerPoleAsset {
+  kind: "power_pole";
+  assetId: string;
+  regionId: string;
+  base: DigitalTwinPowerLineCoordinate;
+  top: DigitalTwinPowerLineCoordinate;
+  radiusM: number;
+  sourceRef: string;
 }
 
 export interface DigitalTwinPowerLineAsset {
@@ -38,9 +57,12 @@ export interface DigitalTwinPowerLineAsset {
     DigitalTwinPowerLineCoordinate,
   ];
   name: string | null;
+  conductorOffsetsM: DigitalTwinConductorOffset[];
   bounds: DigitalTwinPowerLineBounds | null;
   conductor: DigitalTwinPowerLineConductor | null;
   latestPhysics: DigitalTwinPowerLinePhysics | null;
+  measuredPath?: DigitalTwinPowerLineCoordinate[] | null;
+  sourceRef?: string | null;
 }
 
 export interface DigitalTwinPowerLineBounds {
@@ -103,7 +125,7 @@ export type DigitalTwinPowerLinePhysics =
   | DigitalTwinPowerLinePhysicsFailure
   | DigitalTwinPowerLinePhysicsResult;
 
-export type DigitalTwinAsset = DigitalTwinTreeAsset | DigitalTwinPowerLineAsset;
+export type DigitalTwinAsset = DigitalTwinTreeAsset | DigitalTwinPowerLineAsset | DigitalTwinPowerPoleAsset;
 
 export type DigitalTwinAssetPatch =
   | Partial<{
@@ -296,6 +318,30 @@ function parseConductor(value: unknown): DigitalTwinPowerLineConductor | null {
   };
 }
 
+function parseConductorOffsets(
+  value: unknown
+): DigitalTwinConductorOffset[] {
+  if (value === undefined) return [{ lateral: 0, vertical: 0 }];
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("Power line must declare at least one conductor offset.");
+  }
+  return value.map((offset, index) => {
+    if (!isRecord(offset)) {
+      throw new Error(`Conductor offset ${index + 1} must be an object.`);
+    }
+    return {
+      lateral: requiredNumber(
+        offset.lateral,
+        `Conductor offset ${index + 1} lateral position`
+      ),
+      vertical: requiredNumber(
+        offset.vertical,
+        `Conductor offset ${index + 1} vertical position`
+      ),
+    };
+  });
+}
+
 function parsePhysicsLineage(
   value: Record<string, unknown>
 ): DigitalTwinPowerLinePhysicsLineage {
@@ -429,10 +475,32 @@ function parsePowerLine(value: Record<string, unknown>): DigitalTwinPowerLineAss
     regionId,
     coordinates,
     name: optionalString(value.name, "Power-line name"),
+    ...(value.source_ref != null ? { sourceRef: optionalString(value.source_ref, "Power-line source") } : {}),
+    conductorOffsetsM: parseConductorOffsets(value.conductor_offsets_m),
     bounds,
     conductor: parseConductor(value.conductor),
     latestPhysics: parsePhysics(value.latest_physics),
+    measuredPath: value.measured_path == null ? null : parseMeasuredPath(value.measured_path),
   };
+}
+
+function parseMeasuredPath(value: unknown): DigitalTwinPowerLineCoordinate[] {
+  if (!Array.isArray(value) || value.length < 2) throw new Error("Measured wire path requires at least two points.");
+  return value.map((point, index) => powerLineCoordinate(point, `Measured wire point ${index + 1}`));
+}
+
+function parseTreeSegmentation(value: unknown): DigitalTwinTreeAsset["segmentation"] {
+  if (value == null) return null;
+  if (!isRecord(value) || !Array.isArray(value.bounds) || value.bounds.length !== 6) {
+    throw new Error("Tree segmentation requires six bounding coordinates.");
+  }
+  const bounds = value.bounds.map((v) => requiredNumber(v, "Tree bounding coordinate")) as [number, number, number, number, number, number];
+  if (!(bounds[0] < bounds[3] && bounds[1] < bounds[4] && bounds[2] < bounds[5]) || Math.abs(bounds[0]) > 180 || Math.abs(bounds[3]) > 180 || Math.abs(bounds[1]) > 90 || Math.abs(bounds[4]) > 90) {
+    throw new Error("Tree bounding coordinates must be ordered WGS84 and elevation metres.");
+  }
+  const pointCount = requiredInteger(value.point_count, "Tree point count");
+  if (pointCount < 1) throw new Error("Segmented trees require native points.");
+  return { bounds, pointCount };
 }
 
 function parseAsset(value: unknown): DigitalTwinAsset {
@@ -452,10 +520,19 @@ function parseAsset(value: unknown): DigitalTwinAsset {
         "Canopy radius"
       ),
       sourceRef: optionalString(value.source_ref, "Tree source reference"),
+      segmentation: parseTreeSegmentation(value.segmentation),
     };
   }
   if (value.kind === "power_line") {
     return parsePowerLine(value);
+  }
+  if (value.kind === "power_pole") {
+    const base = powerLineCoordinate(value.base, "Pole base");
+    const top = powerLineCoordinate(value.top, "Pole top");
+    if (top.elevationM <= base.elevationM) throw new Error("Pole top must be above its base.");
+    return { kind: "power_pole", assetId, regionId, base, top,
+      radiusM: requiredPositiveNumber(value.radius_m, "Pole radius"),
+      sourceRef: requiredString(value.source_ref, "Pole source reference") };
   }
   throw new Error("Asset response has an unsupported kind.");
 }

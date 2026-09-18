@@ -11,8 +11,7 @@ import {
   type DigitalTwinPowerLineNetwork,
   type DigitalTwinPowerPoleInteraction,
 } from "./digital-twin-power-line-rendering";
-import { createDigitalTwinTreeLayers } from "./digital-twin-tree-rendering";
-import { DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID } from "./digital-twin-map-ids";
+import { createDigitalTwinTreeLayers, type DigitalTwinTreeInteraction } from "./digital-twin-tree-rendering";
 
 export const DIGITAL_TWIN_POWER_LINE_SURFACE_GROUP_ID =
   "digital-twin-power-lines";
@@ -29,6 +28,7 @@ export interface DigitalTwinMapPointCloud {
 export interface DigitalTwinMapSurfaceLayerOptions {
   trees?: readonly DigitalTwinTreeAsset[];
   treeSurfaceElevations?: ReadonlyMap<string, number>;
+  treeInteraction?: DigitalTwinTreeInteraction;
   powerLineNetwork?: DigitalTwinPowerLineNetwork;
   poleInteraction?: DigitalTwinPowerPoleInteraction;
   pointCloud?: DigitalTwinMapPointCloud;
@@ -41,6 +41,7 @@ export interface DigitalTwinMapSurfaceLayerOptions {
 export function createDigitalTwinMapSurfaceLayers({
   trees,
   treeSurfaceElevations,
+  treeInteraction,
   powerLineNetwork,
   poleInteraction,
   pointCloud,
@@ -53,6 +54,7 @@ export function createDigitalTwinMapSurfaceLayers({
       surface: DIGITAL_TWIN_SHARED_SURFACE,
       layers: createDigitalTwinTreeLayers(trees, {
         surfaceElevations: treeSurfaceElevations,
+        interaction: treeInteraction,
       }),
     });
   }
@@ -71,13 +73,12 @@ export function createDigitalTwinMapSurfaceLayers({
     });
   }
 
-  if (pointCloud) {
+  if (pointCloud && pointCloud.dataset.pointCount > 0) {
     groups.push({
       id: DIGITAL_TWIN_POINT_CLOUD_SURFACE_GROUP_ID,
       surface: DIGITAL_TWIN_SHARED_SURFACE,
       layers: [
         createDigitalTwinPointCloudLayer(pointCloud.dataset, {
-          beforeId: DIGITAL_TWIN_REFERENCE_LABEL_ANCHOR_LAYER_ID,
           onError: pointCloud.onError,
           onReady: pointCloud.onReady,
         }),

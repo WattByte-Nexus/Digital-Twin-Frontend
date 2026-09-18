@@ -16,6 +16,7 @@ import type { MapThemeMode } from "./theme-basemap";
 export const SATELLITE_SOURCE_ID = "digital-twin-satellite";
 export const SATELLITE_LAYER_ID = "digital-twin-satellite";
 export const TERRAIN_SOURCE_ID = "digital-twin-terrain";
+export const TERRAIN_HILLSHADE_SOURCE_ID = "digital-twin-terrain-hillshade";
 export const TERRAIN_BACKGROUND_LAYER_ID = "digital-twin-terrain-background";
 export const TERRAIN_GROUND_LAYER_ID = "digital-twin-terrain-ground";
 
@@ -98,6 +99,10 @@ export function buildSatelliteTerrainStyle({
         ...terrainSource,
         type: "raster-dem",
       },
+      [TERRAIN_HILLSHADE_SOURCE_ID]: {
+        ...terrainSource,
+        type: "raster-dem",
+      },
       ...(referenceOverlay
         ? { [SATELLITE_REFERENCE_SOURCE_ID]: referenceOverlay.source }
         : {}),
@@ -122,7 +127,7 @@ export function buildSatelliteTerrainStyle({
       {
         id: TERRAIN_GROUND_LAYER_ID,
         type: "hillshade",
-        source: TERRAIN_SOURCE_ID,
+        source: TERRAIN_HILLSHADE_SOURCE_ID,
         layout: {
           visibility:
             !satelliteVisible && elevationEnabled ? "visible" : "none",
@@ -150,20 +155,16 @@ export function buildSatelliteTerrainStyle({
     ],
     sky: {
       "sky-color": dark ? "#07111f" : "#88c6fc",
-      "horizon-color": dark ? "#111827" : "#ffffff",
-      "fog-color": dark ? "#111827" : "#ffffff",
+      "horizon-color": dark ? "#111827" : "#dbeafe",
+      "fog-color": dark ? "#111827" : "#dbeafe",
       "fog-ground-blend": 0.9,
       "horizon-fog-blend": 0.8,
       "sky-horizon-blend": 0.8,
     },
     ...(referenceOverlay?.glyphs ? { glyphs: referenceOverlay.glyphs } : {}),
-    ...(elevationEnabled
-      ? {
-          terrain: {
-            source: TERRAIN_SOURCE_ID,
-            exaggeration: terrainExaggeration,
-          },
-        }
-      : {}),
+    terrain: {
+      source: TERRAIN_SOURCE_ID,
+      exaggeration: elevationEnabled ? terrainExaggeration : 0,
+    },
   };
 }

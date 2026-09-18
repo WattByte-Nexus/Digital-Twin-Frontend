@@ -1,4 +1,8 @@
-import { SolidPolygonLayer } from "@deck.gl/layers";
+import type { Layer } from "@deck.gl/core";
+import {
+  SolidPolygonLayer,
+  type SolidPolygonLayerProps,
+} from "@deck.gl/layers";
 import { SimpleMeshLayer } from "@deck.gl/mesh-layers";
 import { digitalTwinSurfaceCoordinateKey } from "@geolibre/map/digital-twin-surface-state";
 import { SphereGeometry } from "@luma.gl/engine";
@@ -18,6 +22,12 @@ const TREE_CROWN_MESH = new SphereGeometry({
 
 export interface DigitalTwinTreeSurfaceOptions {
   surfaceElevations?: ReadonlyMap<string, number>;
+  interaction?: DigitalTwinTreeInteraction;
+}
+
+export interface DigitalTwinTreeInteraction {
+  selectedTreeId: string | null;
+  onSelect: (tree: DigitalTwinTreeAsset, screen: [number, number]) => void;
 }
 
 function treeHeight(tree: DigitalTwinTreeAsset): number {
@@ -59,15 +69,19 @@ function circlePolygon(
   });
 }
 
-/** Render segmented trees as terrain-registered trunks and compact crowns. */
+/** Render all trees as opaque, pickable models rooted on the displayed terrain. */
 export function createDigitalTwinTreeLayers(
   trees: readonly DigitalTwinTreeAsset[],
-  { surfaceElevations }: DigitalTwinTreeSurfaceOptions = {}
-): [
-  SolidPolygonLayer<DigitalTwinTreeAsset>,
-  SimpleMeshLayer<DigitalTwinTreeAsset>,
-] {
-  return [
+  { surfaceElevations, interaction }: DigitalTwinTreeSurfaceOptions = {}
+): Layer[] {
+  const onClick: SolidPolygonLayerProps<DigitalTwinTreeAsset>["onClick"] = (
+    info
+  ) => {
+    if (!info.object || !interaction) return false;
+    interaction.onSelect(info.object, [info.x, info.y]);
+    return true;
+  };
+  const layers: Layer[] = [
     new SolidPolygonLayer<DigitalTwinTreeAsset>({
       id: "digital-twin-tree-trunks",
       data: trees,
@@ -80,9 +94,12 @@ export function createDigitalTwinTreeLayers(
           10
         ),
       getElevation: (tree) => treeHeight(tree) * TRUNK_HEIGHT_FRACTION,
+      updateTriggers: { getPolygon: surfaceElevations },
       getFillColor: [108, 78, 52, 255],
       extruded: true,
-      pickable: false,
+      pickable: true,
+      autoHighlight: true,
+      onClick,
     }),
     new SimpleMeshLayer<DigitalTwinTreeAsset>({
       id: "digital-twin-tree-crowns",
@@ -100,9 +117,19 @@ export function createDigitalTwinTreeLayers(
         canopyRadius(tree),
         treeHeight(tree) * CANOPY_VERTICAL_RADIUS_FRACTION,
       ],
-      getColor: [38, 132, 78, 218],
+      updateTriggers: {
+        getPosition: surfaceElevations,
+        getColor: interaction?.selectedTreeId,
+      },
+      getColor: (tree) =>
+        tree.assetId === interaction?.selectedTreeId
+          ? [245, 158, 11, 255]
+          : [38, 132, 78, 255],
       material: true,
-      pickable: false,
+      pickable: true,
+      autoHighlight: true,
+      onClick,
     }),
   ];
+  return layers;
 }

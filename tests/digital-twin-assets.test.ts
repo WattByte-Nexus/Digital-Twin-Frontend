@@ -28,6 +28,12 @@ const powerLine = {
     { lat: 40.02, lon: -105.26, elevation_m: 1_712.25 },
   ],
   name: "North feeder span",
+  conductor_offsets_m: [
+    { lateral: -1.5, vertical: 0 },
+    { lateral: -0.5, vertical: 0 },
+    { lateral: 0.5, vertical: 0 },
+    { lateral: 1.5, vertical: 0 },
+  ],
 };
 
 const powerLineDetail = {
@@ -48,6 +54,7 @@ const powerLineDetail = {
       north: 40.02,
     },
   },
+  conductor_offsets_m: powerLine.conductor_offsets_m,
   conductor: null,
   latest_physics: null,
 };
@@ -81,6 +88,12 @@ describe("Digital Twin asset API", () => {
         { lat: 40.02, lon: -105.26, elevationM: 1_712.25 },
       ],
       name: "North feeder span",
+      conductorOffsetsM: [
+        { lateral: -1.5, vertical: 0 },
+        { lateral: -0.5, vertical: 0 },
+        { lateral: 0.5, vertical: 0 },
+        { lateral: 1.5, vertical: 0 },
+      ],
       bounds: {
         west: -105.27,
         south: 40.01,
@@ -89,6 +102,7 @@ describe("Digital Twin asset API", () => {
       },
       conductor: null,
       latestPhysics: null,
+      measuredPath: null,
     });
     assert.deepEqual(urls, [
       "http://engine.test/api/v1/regions/region%2F1/assets",

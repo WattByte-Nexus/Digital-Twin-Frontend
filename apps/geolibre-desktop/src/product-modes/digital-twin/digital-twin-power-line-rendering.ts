@@ -1,28 +1,32 @@
+import { reconstructSurveyNetwork, type SurveyNetwork } from "./digital-twin-survey-network";
 import { PathLayer, ScatterplotLayer } from "@deck.gl/layers";
 import {
   ScenegraphLayer,
   type ScenegraphLayerProps,
 } from "@deck.gl/mesh-layers";
 import { digitalTwinSurfaceCoordinateKey } from "@geolibre/map/digital-twin-surface-state";
-import type { DigitalTwinPowerLineAsset } from "../../lib/digital-twin-assets";
+import type {
+  DigitalTwinPowerLineAsset,
+  DigitalTwinPowerPoleAsset,
+} from "../../lib/digital-twin-assets";
 
 export const POWER_POLE_MODEL_HEIGHT_METERS = 9.375;
 export const POWER_POLE_HEIGHT_AGL_METERS = 8.5;
 const POWER_POLE_MODEL_SCALE =
   POWER_POLE_HEIGHT_AGL_METERS / POWER_POLE_MODEL_HEIGHT_METERS;
 const POWER_POLE_MODEL_PATH = "/assets/digital-twin/13.8kv_power_pole.glb";
-const CONDUCTOR_SIDES = [
-  { offsetMeters: -1.5, side: "left" },
-  { offsetMeters: 1.5, side: "right" },
-] as const;
 
 export interface DigitalTwinConductorPath {
   id: string;
   assetId: string;
-  side: (typeof CONDUCTOR_SIDES)[number]["side"];
+  offsetMeters: number;
+  verticalOffsetMeters: number;
   startPoleId: string;
   endPoleId: string;
-  path: [[number, number, number], [number, number, number]];
+  path: [number, number, number][];
+  inferredConnection?: boolean;
+  evidenceAssetIds?: string[];
+  lengthM?: number;
 }
 
 export interface DigitalTwinPowerPole {
@@ -31,11 +35,13 @@ export interface DigitalTwinPowerPole {
   position: [number, number, number];
   modelYaw: number;
   scale: [number, number, number];
+  measured?: boolean;
 }
 
 export interface DigitalTwinPowerLineNetwork {
   conductors: DigitalTwinConductorPath[];
   poles: DigitalTwinPowerPole[];
+  survey?: SurveyNetwork;
 }
 
 interface PoleRecord {
@@ -52,14 +58,12 @@ interface PowerLineSpan {
   endPoleId: string;
   startKey: string;
   endKey: string;
+  conductorOffsetsM: DigitalTwinPowerLineAsset["conductorOffsetsM"];
 }
 
 export interface DigitalTwinPowerLineSurfaceOptions {
+  measuredPoles?: readonly DigitalTwinPowerPoleAsset[];
   surfaceElevations?: ReadonlyMap<string, number>;
-  polePositionOverrides?: ReadonlyMap<
-    string,
-    DigitalTwinPowerPole["position"]
-  >;
 }
 
 export interface DigitalTwinPoleGesture {
@@ -72,18 +76,6 @@ export interface DigitalTwinPowerPoleInteraction {
   selectedPoleIds: ReadonlySet<string>;
   onHover?: (pole: DigitalTwinPowerPole | null) => void;
   onSelect?: (
-    pole: DigitalTwinPowerPole,
-    gesture: DigitalTwinPoleGesture
-  ) => void;
-  onDragStart?: (
-    pole: DigitalTwinPowerPole,
-    gesture: DigitalTwinPoleGesture
-  ) => void;
-  onDrag?: (
-    pole: DigitalTwinPowerPole,
-    gesture: DigitalTwinPoleGesture
-  ) => void;
-  onDragEnd?: (
     pole: DigitalTwinPowerPole,
     gesture: DigitalTwinPoleGesture
   ) => void;
@@ -141,7 +133,8 @@ function averageConductorElevation(record: PoleRecord): number {
 function conductorAttachment(
   record: PoleRecord,
   bearing: number,
-  offsetMeters: number
+  offsetMeters: number,
+  verticalOffsetMeters: number
 ): [number, number, number] {
   const metersPerLongitude = Math.max(
     Math.abs(111_320 * Math.cos((record.latitude * Math.PI) / 180)),
@@ -149,11 +142,9 @@ function conductorAttachment(
   );
   const radians = (bearing * Math.PI) / 180;
   return [
-    record.longitude +
-      (-Math.cos(radians) * offsetMeters) / metersPerLongitude,
-    record.latitude +
-      (Math.sin(radians) * offsetMeters) / 110_540,
-    averageConductorElevation(record),
+    record.longitude + (-Math.cos(radians) * offsetMeters) / metersPerLongitude,
+    record.latitude + (Math.sin(radians) * offsetMeters) / 110_540,
+    averageConductorElevation(record) + verticalOffsetMeters,
   ];
 }
 
@@ -162,7 +153,7 @@ export function buildDigitalTwinPowerLineNetwork(
   lines: readonly DigitalTwinPowerLineAsset[],
   {
     surfaceElevations,
-    polePositionOverrides,
+    measuredPoles = [],
   }: DigitalTwinPowerLineSurfaceOptions = {}
 ): DigitalTwinPowerLineNetwork {
   const poleRecords = new Map<string, PoleRecord>();
@@ -188,48 +179,53 @@ export function buildDigitalTwinPowerLineNetwork(
     return record;
   };
 
-  const spans = lines.map((line) => {
-    const [start, end] = line.coordinates;
-    const bearing = bearingBetween(start, end);
-    const startElevation = conductorElevation(start, surfaceElevations);
-    const endElevation = conductorElevation(end, surfaceElevations);
-    const startKey = digitalTwinSurfaceCoordinateKey(start.lon, start.lat);
-    const endKey = digitalTwinSurfaceCoordinateKey(end.lon, end.lat);
-    recordFor(start, startElevation, line.assetId).bearings.push(bearing);
-    recordFor(end, endElevation, line.assetId).bearings.push(bearing);
-    const startPoleId = `pole-${startKey}`;
-    const endPoleId = `pole-${endKey}`;
-    return {
-      assetId: line.assetId,
-      startPoleId,
-      endPoleId,
-      startKey,
-      endKey,
-    } satisfies PowerLineSpan;
-  });
+  const spans = lines
+    .filter((line) => !line.measuredPath)
+    .map((line) => {
+      const [start, end] = line.coordinates;
+      const bearing = bearingBetween(start, end);
+      const startElevation = conductorElevation(start, surfaceElevations);
+      const endElevation = conductorElevation(end, surfaceElevations);
+      const startKey = digitalTwinSurfaceCoordinateKey(start.lon, start.lat);
+      const endKey = digitalTwinSurfaceCoordinateKey(end.lon, end.lat);
+      recordFor(start, startElevation, line.assetId).bearings.push(bearing);
+      recordFor(end, endElevation, line.assetId).bearings.push(bearing);
+      const startPoleId = `pole-${startKey}`;
+      const endPoleId = `pole-${endKey}`;
+      return {
+        assetId: line.assetId,
+        startPoleId,
+        endPoleId,
+        startKey,
+        endKey,
+        conductorOffsetsM: line.conductorOffsetsM,
+      } satisfies PowerLineSpan;
+    });
 
   const poleBearingByKey = new Map<string, number>();
-  const poles = [...poleRecords.entries()].map(([key, record]) => {
-    const bearing = sharedPoleBearing(record.bearings);
-    poleBearingByKey.set(key, bearing);
-    return {
-      id: `pole-${key}`,
-      assetIds: record.assetIds,
-      position: [
-        record.longitude,
-        record.latitude,
-        averageConductorElevation(record) - POWER_POLE_HEIGHT_AGL_METERS,
-      ],
-      modelYaw: (90 - bearing + 360) % 360,
-      scale: [
-        POWER_POLE_MODEL_SCALE,
-        POWER_POLE_MODEL_SCALE,
-        POWER_POLE_MODEL_SCALE,
-      ],
-    } satisfies DigitalTwinPowerPole;
-  });
+  const poles: DigitalTwinPowerPole[] = [...poleRecords.entries()].map(
+    ([key, record]) => {
+      const bearing = sharedPoleBearing(record.bearings);
+      poleBearingByKey.set(key, bearing);
+      return {
+        id: `pole-${key}`,
+        assetIds: record.assetIds,
+        position: [
+          record.longitude,
+          record.latitude,
+          averageConductorElevation(record) - POWER_POLE_HEIGHT_AGL_METERS,
+        ],
+        modelYaw: (90 - bearing + 360) % 360,
+        scale: [
+          POWER_POLE_MODEL_SCALE,
+          POWER_POLE_MODEL_SCALE,
+          POWER_POLE_MODEL_SCALE,
+        ],
+      } satisfies DigitalTwinPowerPole;
+    }
+  );
 
-  const conductors = spans.flatMap((span) => {
+  const conductors: DigitalTwinConductorPath[] = spans.flatMap((span) => {
     const startRecord = poleRecords.get(span.startKey);
     const endRecord = poleRecords.get(span.endKey);
     const startBearing = poleBearingByKey.get(span.startKey);
@@ -242,72 +238,79 @@ export function buildDigitalTwinPowerLineNetwork(
     ) {
       throw new Error(`Power-line span ${span.assetId} is missing a support.`);
     }
-    return CONDUCTOR_SIDES.map(
-      ({ offsetMeters, side }) =>
+    return span.conductorOffsetsM.map(
+      ({ lateral, vertical }, conductorIndex) =>
         ({
-          id: `${span.assetId}-${side}`,
+          id: `${span.assetId}-conductor-${conductorIndex + 1}`,
           assetId: span.assetId,
-          side,
+          offsetMeters: lateral,
+          verticalOffsetMeters: vertical,
           startPoleId: span.startPoleId,
           endPoleId: span.endPoleId,
           path: [
-            conductorAttachment(startRecord, startBearing, offsetMeters),
-            conductorAttachment(endRecord, endBearing, offsetMeters),
+            conductorAttachment(startRecord, startBearing, lateral, vertical),
+            conductorAttachment(endRecord, endBearing, lateral, vertical),
           ],
-        }) satisfies DigitalTwinConductorPath
+        } satisfies DigitalTwinConductorPath)
     );
   });
 
-  return applyDigitalTwinPolePositionOverrides(
-    { conductors, poles },
-    polePositionOverrides
-  );
-}
-
-/** Apply a scenario overlay without mutating canonical line or pole geometry. */
-export function applyDigitalTwinPolePositionOverrides(
-  network: DigitalTwinPowerLineNetwork,
-  polePositionOverrides?: ReadonlyMap<
-    string,
-    DigitalTwinPowerPole["position"]
-  >
-): DigitalTwinPowerLineNetwork {
-  if (!polePositionOverrides || polePositionOverrides.size === 0) return network;
-
-  const originalPoleById = new Map(network.poles.map((pole) => [pole.id, pole]));
-  const poles = network.poles.map((pole) => ({
-    ...pole,
-    position: polePositionOverrides.get(pole.id) ?? pole.position,
-  }));
-  const conductors = network.conductors.map((conductor) => {
-    const start = polePositionOverrides.get(conductor.startPoleId);
-    const end = polePositionOverrides.get(conductor.endPoleId);
-    if (!start && !end) return conductor;
-    const translateEndpoint = (
-      endpoint: [number, number, number],
-      poleId: string,
-      movedPosition: DigitalTwinPowerPole["position"] | undefined
-    ): [number, number, number] => {
-      if (!movedPosition) return endpoint;
-      const originalPole = originalPoleById.get(poleId);
-      if (!originalPole) {
-        throw new Error(`Conductor ${conductor.id} references unknown pole ${poleId}.`);
-      }
-      return [
-        movedPosition[0] + (endpoint[0] - originalPole.position[0]),
-        movedPosition[1] + (endpoint[1] - originalPole.position[1]),
-        movedPosition[2] + (endpoint[2] - originalPole.position[2]),
-      ];
-    };
-    return {
-      ...conductor,
+  for (const pole of measuredPoles) {
+    const height = pole.top.elevationM - pole.base.elevationM;
+    const scale = height / POWER_POLE_MODEL_HEIGHT_METERS;
+    poles.push({
+      id: pole.assetId,
+      measured: true,
+      assetIds: [],
+      position: [pole.base.lon, pole.base.lat, pole.base.elevationM],
+      modelYaw: 0,
+      scale: [scale, scale, scale],
+    });
+  }
+  const survey = reconstructSurveyNetwork(measuredPoles, lines);
+  const measuredPoleBearings = new Map<string, number[]>();
+  for (const connection of survey.connections) {
+    const { start, end } = connection;
+    const bearing = bearingBetween(start.top, end.top);
+    for (const support of [start, end]) {
+      const pole = poles.find(candidate => candidate.id === support.assetId)!;
+      pole.assetIds.push(connection.id);
+      const bearings = measuredPoleBearings.get(pole.id) ?? [];
+      bearings.push(bearing);
+      measuredPoleBearings.set(pole.id, bearings);
+      pole.modelYaw = (90 - sharedPoleBearing(bearings) + 360) % 360;
+    }
+    // Straight attachment guides do not invent a measured catenary/sag.
+    conductors.push({
+      id: connection.id,
+      assetId: connection.id,
+      startPoleId: start.assetId,
+      endPoleId: end.assetId,
+      offsetMeters: 0,
+      verticalOffsetMeters: 0,
+      inferredConnection: true,
+      evidenceAssetIds: connection.evidenceAssetIds,
+      lengthM: connection.lengthM,
       path: [
-        translateEndpoint(conductor.path[0], conductor.startPoleId, start),
-        translateEndpoint(conductor.path[1], conductor.endPoleId, end),
+        [start.top.lon, start.top.lat, start.top.elevationM],
+        [end.top.lon, end.top.lat, end.top.elevationM],
       ],
-    } satisfies DigitalTwinConductorPath;
-  });
-  return { conductors, poles };
+    });
+  }
+  // Keep every original measured fragment, including unresolved ones, intact.
+  for (const line of lines) {
+    if (!line.measuredPath) continue;
+    conductors.push({
+      id: line.assetId,
+      assetId: line.assetId,
+      offsetMeters: 0,
+      verticalOffsetMeters: 0,
+      startPoleId: "",
+      endPoleId: "",
+      path: line.measuredPath.map(point => [point.lon, point.lat, point.elevationM]),
+    });
+  }
+  return { conductors, poles, survey };
 }
 
 export function resolveDigitalTwinPowerPoleModelUrl(
@@ -316,7 +319,7 @@ export function resolveDigitalTwinPowerPoleModelUrl(
   return new URL(POWER_POLE_MODEL_PATH, baseUrl).href;
 }
 
-/** Render canonical conductor geometry and a pole model at every unique support. */
+/** Render canonical conductor geometry and measured or catalog pole models. */
 export function createDigitalTwinPowerLineLayers(
   network: DigitalTwinPowerLineNetwork,
   {
@@ -329,7 +332,7 @@ export function createDigitalTwinPowerLineLayers(
 ): [
   PathLayer<DigitalTwinConductorPath>,
   ScenegraphLayer<DigitalTwinPowerPole>,
-  ScatterplotLayer<DigitalTwinPowerPole>,
+  ScatterplotLayer<DigitalTwinPowerPole>
 ] {
   const gestureFor = (
     info: { x?: number; y?: number },
@@ -350,7 +353,7 @@ export function createDigitalTwinPowerLineLayers(
   });
   const poleEventHandlers: Pick<
     ScenegraphLayerProps<DigitalTwinPowerPole>,
-    "onHover" | "onClick" | "onDragStart" | "onDrag" | "onDragEnd"
+    "onHover" | "onClick"
   > = {
     onHover: (info) => {
       interaction?.onHover?.(info.picked ? info.object : null);
@@ -361,28 +364,13 @@ export function createDigitalTwinPowerLineLayers(
       interaction?.onSelect?.(info.object, gestureFor(info, event));
       return true;
     },
-    onDragStart: (info, event) => {
-      if (!info.object) return false;
-      interaction?.onDragStart?.(info.object, gestureFor(info, event));
-      return true;
-    },
-    onDrag: (info, event) => {
-      if (!info.object) return false;
-      interaction?.onDrag?.(info.object, gestureFor(info, event));
-      return true;
-    },
-    onDragEnd: (info, event) => {
-      if (!info.object) return false;
-      interaction?.onDragEnd?.(info.object, gestureFor(info, event));
-      return true;
-    },
   };
   const poleInteractionColor = (pole: DigitalTwinPowerPole) =>
     interaction?.selectedPoleIds.has(pole.id)
       ? ([245, 158, 11, 255] as const)
       : interaction?.hoveredPoleId === pole.id
-        ? ([96, 210, 255, 255] as const)
-        : ([255, 255, 255, 255] as const);
+      ? ([96, 210, 255, 255] as const)
+      : ([255, 255, 255, 255] as const);
   const interactionUpdateTrigger = [
     interaction?.hoveredPoleId,
     ...(interaction?.selectedPoleIds ?? []),
@@ -392,11 +380,12 @@ export function createDigitalTwinPowerLineLayers(
       id: "digital-twin-power-line-conductors",
       data: network.conductors,
       getPath: (conductor) => conductor.path,
-      getColor: [245, 158, 11, 255],
+      getColor: [96, 210, 255, 255],
       getWidth: 3,
       widthUnits: "pixels",
       widthMinPixels: 1,
-      capRounded: true,
+      billboard: true,
+      capRounded: false,
       jointRounded: true,
       pickable: false,
     }),
@@ -453,5 +442,6 @@ export function createDigitalTwinPowerLineLayers(
       pickable: true,
       ...poleEventHandlers,
     }),
+
   ];
 }

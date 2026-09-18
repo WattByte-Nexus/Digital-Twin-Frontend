@@ -77,8 +77,20 @@ export class DigitalTwinPointCloudTileLayer extends Tile3DLayer<
 }
 
 /** Preserve source RGB, but keep malformed/missing zero-RGB tiles visible. */
-export class VisibleRgbPointCloudLayer extends PointCloudLayer {
+export class VisibleRgbPointCloudLayer extends PointCloudLayer<
+  unknown,
+  { tile?: { tileDrawn: boolean } }
+> {
   static layerName = "VisibleRgbPointCloudLayer";
+
+  override draw(options: Parameters<PointCloudLayer["draw"]>[0]): void {
+    if (!this.state.model) return;
+    super.draw(options);
+    // Tile3DLayer marks PNTS tiles undrawn on load, but its standard point-cloud
+    // sublayer never acknowledges the first draw. Complete that handshake so
+    // loaders.gl releases replaced ancestors and stops its transition loop.
+    if (this.props.tile) this.props.tile.tileDrawn = true;
+  }
 
   override getShaders() {
     const shaders = super.getShaders();
@@ -94,16 +106,16 @@ export class VisibleRgbPointCloudLayer extends PointCloudLayer {
 
 export const POINT_CLOUD_TILESET_LOAD_OPTIONS = {
   tileset: {
-    // Let the hierarchy supply density without forcing native leaves for every
-    // projected pixel. The memory budget may relax detail before frames stall.
+    // Keep useful previews and replacement tiles resident together. The bounded
+    // cache can relax detail on larger datasets before frames stall.
     maximumScreenSpaceError: 8,
-    maximumMemoryUsage: 64,
+    maximumMemoryUsage: 256,
     memoryAdjustedScreenSpaceError: true,
     throttleRequests: true,
-    // Bound concurrent parsing and GPU uploads so refinement stays interactive.
-    maxRequests: 3,
-    // Camera motion can otherwise trigger a traversal for every input event.
-    debounceTime: 250,
+    // Fetch a complete octant together instead of serializing sibling refinement.
+    maxRequests: 8,
+    // Coalesce a frame of camera input without delaying every level by 250 ms.
+    debounceTime: 16,
     // Engine tiles are georeferenced once and remain stationary.
     updateTransforms: false,
   },

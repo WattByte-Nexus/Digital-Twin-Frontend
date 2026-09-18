@@ -10,6 +10,7 @@ const lines: DigitalTwinPowerLineAsset[] = [
     assetId: "span-west",
     regionId: "golden-co",
     name: "Canyon feeder · west span",
+    conductorOffsetsM: [{ lateral: 0, vertical: 0 }],
     coordinates: [
       { lat: 39.75, lon: -105.23, elevationM: 1_840 },
       { lat: 39.751, lon: -105.229, elevationM: 1_842 },
@@ -33,6 +34,7 @@ const lines: DigitalTwinPowerLineAsset[] = [
     assetId: "span-east",
     regionId: "golden-co",
     name: "Canyon feeder · east span",
+    conductorOffsetsM: [{ lateral: 0, vertical: 0 }],
     coordinates: [
       { lat: 39.751, lon: -105.229, elevationM: 1_842 },
       { lat: 39.752, lon: -105.228, elevationM: 1_841 },
@@ -85,6 +87,7 @@ describe("Digital Twin pole properties", () => {
         },
         name: "Pole 2",
         observation: null,
+      networkReview: undefined,
         poleType: "Distribution pole",
         regionId: "golden-co",
       }

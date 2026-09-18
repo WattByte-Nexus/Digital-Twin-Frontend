@@ -12,7 +12,6 @@ import {
 import {
   DEFAULT_SATELLITE_REFERENCE_VISIBILITY,
   setSatelliteReferenceVisibility,
-  type SatelliteReferenceLayer,
   type SatelliteReferenceOverlay,
   type SatelliteReferenceVisibility,
 } from "./satellite-reference-overlay";
@@ -74,20 +73,21 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   onMapReady,
 }: SatelliteTerrainMapProps) {
   const composedSurface = useMemo(
-    () => composeDigitalTwinSurfaceLayers(surfaceLayers),
-    [surfaceLayers]
+    () => composeDigitalTwinSurfaceLayers(
+      surfaceLayers,
+      referenceOverlay?.layers.find(({ layer }) => layer.type === "symbol")?.layer.id
+    ),
+    [surfaceLayers, referenceOverlay]
   );
   const deckLayers = composedSurface.layers;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const deckOverlayRef = useRef<MapboxOverlay | null>(null);
   const deckLayersRef = useRef(deckLayers);
-  const referenceLayersRef = useRef<SatelliteReferenceLayer[]>(
-    referenceOverlay?.layers ?? []
-  );
   const referenceOverlayVisibilityRef = useRef(referenceOverlayVisibility);
   const satelliteVisibleRef = useRef(satelliteVisible);
   const elevationEnabledRef = useRef(elevationEnabled);
+  const terrainExaggerationRef = useRef(terrainExaggeration);
   const themeModeRef = useRef(themeMode);
   const appliedThemeModeRef = useRef<MapThemeMode | null>(null);
   const onMapReadyRef = useRef(onMapReady);
@@ -95,6 +95,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   referenceOverlayVisibilityRef.current = referenceOverlayVisibility;
   satelliteVisibleRef.current = satelliteVisible;
   elevationEnabledRef.current = elevationEnabled;
+  terrainExaggerationRef.current = terrainExaggeration;
   themeModeRef.current = themeMode;
   onMapReadyRef.current = onMapReady;
   onSurfaceClickRef.current = onSurfaceClick;
@@ -107,7 +108,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     referenceOverlay,
     terrainSource,
     initialView,
-    terrainExaggeration,
   });
 
   useEffect(() => {
@@ -128,15 +128,15 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
         referenceOverlay: options.referenceOverlay,
         referenceOverlayVisibility: referenceOverlayVisibilityRef.current,
         terrainSource: options.terrainSource,
-        terrainExaggeration: options.terrainExaggeration,
+        terrainExaggeration: terrainExaggerationRef.current,
         satelliteVisible: initialSatelliteVisible,
         elevationEnabled: initialElevationEnabled,
         themeMode: initialThemeMode,
       }),
       center: options.initialView.center,
       zoom: options.initialView.zoom,
-      pitch: options.initialView.pitch ?? 0,
-      bearing: options.initialView.bearing ?? 0,
+      pitch: 0,
+      bearing: 0,
       maxPitch: 85,
       renderWorldCopies: false,
       // Prefer the broadly available adapter. A single interleaved MapLibre +
@@ -153,8 +153,19 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     appliedThemeModeRef.current = initialThemeMode;
     onMapReadyRef.current?.(map);
 
+    const applyInitialView = () => {
+      map.jumpTo({
+        // Preserve a product-owned dataset fit made while terrain was loading.
+        // The constructor already set the initial center and zoom.
+        pitch: options.initialView.pitch ?? 0,
+        bearing: options.initialView.bearing ?? 0,
+      });
+    };
+    map.once("idle", applyInitialView);
+
     const handleLoad = () => {
       const deckOverlay = new MapboxOverlay({
+        // Terrain and every 3D capability must share the same depth buffer.
         interleaved: true,
         layers: deckLayersRef.current,
         getCursor: ({ isDragging, isHovering }) =>
@@ -166,16 +177,12 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       deckOverlayRef.current = deckOverlay;
       setSatelliteReferenceVisibility(
         map,
-        referenceLayersRef.current,
+        options.referenceOverlay?.layers ?? [],
         referenceOverlayVisibilityRef.current
       );
       if (satelliteVisibleRef.current !== initialSatelliteVisible) {
         setSatelliteVisibility(map, satelliteVisibleRef.current);
       }
-      applyDigitalTwinSurfaceElevationState(map, {
-        enabled: elevationEnabledRef.current,
-        exaggeration: options.terrainExaggeration,
-      });
       setTerrainGroundVisibility(
         map,
         satelliteVisibleRef.current,
@@ -202,6 +209,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     return () => {
       resizeObserver?.disconnect();
       if (resizeTimer !== null) clearTimeout(resizeTimer);
+      map.off("idle", applyInitialView);
       onMapReadyRef.current?.(null);
       const deckOverlay = deckOverlayRef.current;
       if (deckOverlay && map.hasControl(deckOverlay)) {
@@ -211,7 +219,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
       mapRef.current?.remove();
       mapRef.current = null;
       appliedThemeModeRef.current = null;
-      referenceLayersRef.current = [];
     };
   }, []);
 
@@ -227,7 +234,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     const handleStyleLoad = () => {
       setSatelliteReferenceVisibility(
         map,
-        referenceLayersRef.current,
+        options.referenceOverlay?.layers ?? [],
         referenceOverlayVisibilityRef.current
       );
       setTerrainGroundVisibility(
@@ -235,10 +242,6 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
         satelliteVisibleRef.current,
         elevationEnabledRef.current
       );
-      applyDigitalTwinSurfaceElevationState(map, {
-        enabled: elevationEnabledRef.current,
-        exaggeration: options.terrainExaggeration,
-      });
     };
     map.once("style.load", handleStyleLoad);
     map.setStyle(
@@ -247,7 +250,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
         referenceOverlay: options.referenceOverlay,
         referenceOverlayVisibility: referenceOverlayVisibilityRef.current,
         terrainSource: options.terrainSource,
-        terrainExaggeration: options.terrainExaggeration,
+        terrainExaggeration: terrainExaggerationRef.current,
         satelliteVisible: satelliteVisibleRef.current,
         elevationEnabled: elevationEnabledRef.current,
         themeMode,
@@ -265,7 +268,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     if (!map) return;
     setSatelliteReferenceVisibility(
       map,
-      referenceLayersRef.current,
+      initialOptionsRef.current.referenceOverlay?.layers ?? [],
       referenceOverlayVisibility
     );
   }, [referenceOverlayVisibility]);
@@ -283,22 +286,37 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded()) return;
-    applyDigitalTwinSurfaceElevationState(map, {
-      enabled: elevationEnabled,
-      exaggeration: terrainExaggeration,
-    });
-    setTerrainGroundVisibility(
-      map,
-      satelliteVisibleRef.current,
-      elevationEnabled
-    );
+    if (!map) return;
+    const applyElevation = () => {
+      map.off("style.load", applyElevation);
+      map.off("idle", applyElevation);
+      applyDigitalTwinSurfaceElevationState(map, {
+        enabled: elevationEnabledRef.current,
+        exaggeration: terrainExaggerationRef.current,
+      });
+      setTerrainGroundVisibility(
+        map,
+        satelliteVisibleRef.current,
+        elevationEnabledRef.current
+      );
+    };
+    if (map.isStyleLoaded()) applyElevation();
+    else {
+      map.once("style.load", applyElevation);
+      // isStyleLoaded is also false while an existing style loads tiles. That
+      // case emits idle, without another style.load event.
+      map.once("idle", applyElevation);
+    }
+    return () => {
+      map.off("style.load", applyElevation);
+      map.off("idle", applyElevation);
+    };
   }, [elevationEnabled, terrainExaggeration]);
 
   return (
     <div
       ref={containerRef}
-      className={className}
+      className={["bg-muted", className].filter(Boolean).join(" ")}
       style={{ height: "100%", width: "100%" }}
       role="region"
       aria-label={ariaLabel}

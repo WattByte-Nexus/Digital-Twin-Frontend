@@ -94,22 +94,6 @@ const DIGITAL_TWIN_REFERENCE_LAYER_STACK = {
       },
     },
     {
-      category: "buildings",
-      layer: {
-        id: `${SATELLITE_REFERENCE_LAYER_PREFIX}buildings-3d`,
-        type: "fill-extrusion",
-        source: SATELLITE_REFERENCE_SOURCE_ID,
-        "source-layer": "building",
-        minzoom: 15,
-        paint: {
-          "fill-extrusion-color": "#f8fafc",
-          "fill-extrusion-height": ["coalesce", ["get", "height"], 3],
-          "fill-extrusion-base": ["coalesce", ["get", "min_height"], 0],
-          "fill-extrusion-opacity": 0.16,
-        },
-      },
-    },
-    {
       category: "roads",
       layer: {
         id: `${SATELLITE_REFERENCE_LAYER_PREFIX}road-major-casing`,
@@ -607,6 +591,9 @@ export function createDigitalTwinSatelliteTerrainConfig(
     referenceOverlayVisibility: DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS,
     terrainSource: {
       url: "https://tiles.mapterhorn.com/tilejson.json",
+      tileSize: 512,
+      maxzoom: 16,
+      encoding: "terrarium",
     },
     initialView: DIGITAL_TWIN_INITIAL_VIEW,
     terrainExaggeration: 1,

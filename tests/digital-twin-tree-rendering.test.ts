@@ -4,7 +4,9 @@ import { SolidPolygonLayer } from "@deck.gl/layers";
 import { SimpleMeshLayer } from "@deck.gl/mesh-layers";
 import { digitalTwinSurfaceCoordinateKey } from "../packages/map/src/digital-twin-surface-state";
 import type { DigitalTwinTreeAsset } from "../apps/geolibre-desktop/src/lib/digital-twin-assets";
-import { createDigitalTwinTreeLayers } from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-tree-rendering";
+import {
+  createDigitalTwinTreeLayers,
+} from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-tree-rendering";
 
 const TREE: DigitalTwinTreeAsset = {
   kind: "tree",
@@ -18,9 +20,32 @@ const TREE: DigitalTwinTreeAsset = {
 };
 
 describe("Digital Twin tree rendering", () => {
+  it("uses opaque terrain-anchored models for both survey and inventory trees", () => {
+    const survey = { ...TREE, assetId: "survey-tree", segmentation: { bounds: [-105.221, 39.755, 1732, -105.22, 39.756, 1745] as [number, number, number, number, number, number], pointCount: 5000 } };
+    const selected: unknown[] = [];
+    const elevation = 1720;
+    const layers = createDigitalTwinTreeLayers([TREE, survey], {
+      surfaceElevations: new Map([[digitalTwinSurfaceCoordinateKey(TREE.location.lon, TREE.location.lat), elevation]]),
+      interaction: { selectedTreeId: null, onSelect: asset => selected.push(asset) },
+    });
+    const [trunks, crowns] = layers;
+    assert.equal(layers.length, 2);
+    assert.deepEqual(crowns.props.data, [TREE, survey]);
+    assert.deepEqual(trunks.props.data, [TREE, survey]);
+    assert.equal(trunks.props.getPolygon(survey)[0][2], elevation);
+    assert.equal(crowns.props.getPosition(survey)[2], elevation + 7);
+    assert.equal(crowns.props.getPosition(survey)[2] - crowns.props.getScale(survey)[2], elevation + 4);
+    assert.equal(crowns.props.getColor(survey)[3], 255);
+    crowns.props.onClick?.({ object: survey, x: 10, y: 20 } as never, {} as never);
+    assert.deepEqual(selected, [survey]);
+    assert.equal(survey.segmentation.bounds[2], 1732);
+  });
   it("places segmented trunks and crowns on the sampled terrain surface", () => {
     const elevations = new Map([
-      [digitalTwinSurfaceCoordinateKey(TREE.location.lon, TREE.location.lat), 1_728.5],
+      [
+        digitalTwinSurfaceCoordinateKey(TREE.location.lon, TREE.location.lat),
+        1_728.5,
+      ],
     ]);
 
     const [trunks, crowns] = createDigitalTwinTreeLayers([TREE], {
@@ -38,6 +63,8 @@ describe("Digital Twin tree rendering", () => {
       1_735.5,
     ]);
     assert.deepEqual(crowns.props.getScale(TREE), [3, 3, 3]);
+    assert.equal(trunks.props.updateTriggers.getPolygon, elevations);
+    assert.equal(crowns.props.updateTriggers.getPosition, elevations);
   });
 
   it("uses compact physical defaults for incomplete draft assets", () => {
