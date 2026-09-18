@@ -69,3 +69,15 @@ python/examples/my-map.geolibre.json
 *storybook.log
 storybook-static
 .gstack/
+
+# Local survey captures and generated point-cloud tiles
+/Wildfire Rec/
+*.las
+*.laz
+*.ply
+*.pcd
+*.e57
+*.pnts
+
+# Generated map inspection output
+/artifacts/map-interaction/
