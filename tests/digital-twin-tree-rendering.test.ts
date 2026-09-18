@@ -20,6 +20,33 @@ const TREE: DigitalTwinTreeAsset = {
 };
 
 describe("Digital Twin tree rendering", () => {
+  it("connects captured canopies to terrain instead of drawing a second lower crown", () => {
+    const survey: DigitalTwinTreeAsset = {
+      ...TREE,
+      sourceRef: "point-cloud:golden-loop-route:version-1:tree:153",
+      heightM: 11.635,
+      segmentation: {
+        bounds: [-105.216, 39.751, 1740.638, -105.215, 39.752, 1752.273],
+        pointCount: 16734,
+      },
+    };
+    const elevations = new Map([[digitalTwinSurfaceCoordinateKey(TREE.location.lon, TREE.location.lat), 1738.614]]);
+    const [trunks, crowns] = createDigitalTwinTreeLayers([survey, TREE], {
+      surfaceElevations: elevations,
+      pointCloud: { datasetId: "golden-loop-route", version: "version-1" },
+    });
+    const ground = trunks.props.getPolygon(survey)[0][2];
+    assert.equal(ground, 1738.614);
+    assert.equal(ground + trunks.props.getElevation(survey), (1740.638 + 1752.273) / 2);
+    assert.deepEqual(crowns.props.data, [TREE]);
+    assert.equal(trunks.props.updateTriggers.getElevation[0], elevations);
+    const [, unmatchedCrowns] = createDigitalTwinTreeLayers([survey], {
+      surfaceElevations: elevations,
+      pointCloud: { datasetId: "golden-loop-route", version: "version-2" },
+    });
+    assert.deepEqual(unmatchedCrowns.props.data, [survey]);
+    assert.deepEqual(survey.segmentation?.bounds, [-105.216, 39.751, 1740.638, -105.215, 39.752, 1752.273]);
+  });
   it("uses opaque terrain-anchored models for both survey and inventory trees", () => {
     const survey = { ...TREE, assetId: "survey-tree", segmentation: { bounds: [-105.221, 39.755, 1732, -105.22, 39.756, 1745] as [number, number, number, number, number, number], pointCount: 5000 } };
     const selected: unknown[] = [];

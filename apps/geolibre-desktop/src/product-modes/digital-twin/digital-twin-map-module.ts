@@ -55,6 +55,9 @@ export function createDigitalTwinMapSurfaceLayers({
       layers: createDigitalTwinTreeLayers(trees, {
         surfaceElevations: treeSurfaceElevations,
         interaction: treeInteraction,
+        pointCloud: pointCloud && pointCloud.dataset.pointCount > 0
+          ? pointCloud.dataset
+          : undefined,
       }),
     });
   }

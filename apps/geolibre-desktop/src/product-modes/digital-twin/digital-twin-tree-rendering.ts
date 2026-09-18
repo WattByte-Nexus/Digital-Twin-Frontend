@@ -22,6 +22,7 @@ const TREE_CROWN_MESH = new SphereGeometry({
 
 export interface DigitalTwinTreeSurfaceOptions {
   surfaceElevations?: ReadonlyMap<string, number>;
+  pointCloud?: { datasetId: string; version: string };
   interaction?: DigitalTwinTreeInteraction;
 }
 
@@ -69,11 +70,20 @@ function circlePolygon(
   });
 }
 
-/** Render all trees as opaque, pickable models rooted on the displayed terrain. */
+/**
+ * Root tree models on terrain. When a matching scan supplies the crown, retain
+ * only an inferred trunk reaching its measured canopy; never move scan points
+ * or cover them with a second synthetic crown.
+ */
 export function createDigitalTwinTreeLayers(
   trees: readonly DigitalTwinTreeAsset[],
-  { surfaceElevations, interaction }: DigitalTwinTreeSurfaceOptions = {}
+  { surfaceElevations, interaction, pointCloud }: DigitalTwinTreeSurfaceOptions = {}
 ): Layer[] {
+  const sourcePrefix = pointCloud
+    ? `point-cloud:${pointCloud.datasetId}:${pointCloud.version}:tree:`
+    : null;
+  const hasCapturedCrown = (tree: DigitalTwinTreeAsset) =>
+    Boolean(tree.segmentation && sourcePrefix && tree.sourceRef?.startsWith(sourcePrefix));
   const onClick: SolidPolygonLayerProps<DigitalTwinTreeAsset>["onClick"] = (
     info
   ) => {
@@ -93,8 +103,17 @@ export function createDigitalTwinTreeLayers(
           surfaceElevation(tree, surfaceElevations),
           10
         ),
-      getElevation: (tree) => treeHeight(tree) * TRUNK_HEIGHT_FRACTION,
-      updateTriggers: { getPolygon: surfaceElevations },
+      getElevation: (tree) => {
+        if (hasCapturedCrown(tree) && tree.segmentation) {
+          const bounds = tree.segmentation.bounds;
+          return Math.max(0, (bounds[2] + bounds[5]) / 2 - surfaceElevation(tree, surfaceElevations));
+        }
+        return treeHeight(tree) * TRUNK_HEIGHT_FRACTION;
+      },
+      updateTriggers: {
+        getPolygon: surfaceElevations,
+        getElevation: [surfaceElevations, sourcePrefix],
+      },
       getFillColor: [108, 78, 52, 255],
       extruded: true,
       pickable: true,
@@ -103,7 +122,7 @@ export function createDigitalTwinTreeLayers(
     }),
     new SimpleMeshLayer<DigitalTwinTreeAsset>({
       id: "digital-twin-tree-crowns",
-      data: trees,
+      data: trees.filter((tree) => !hasCapturedCrown(tree)),
       mesh: TREE_CROWN_MESH,
       sizeScale: 1,
       getPosition: (tree) => [

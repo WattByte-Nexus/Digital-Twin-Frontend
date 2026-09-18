@@ -51,8 +51,18 @@ test("the product map module includes segmented trees on the shared surface", ()
   ]);
 });
 
-test("the product map module places point clouds on the shared surface", () => {
+test("the product map module combines captured crowns with grounded tree trunks", () => {
+  const survey = {
+    ...TREE,
+    sourceRef: "point-cloud:golden-lidar:sha256-a1:tree:1",
+    segmentation: {
+      bounds: [-105.221, 39.755, 1732, -105.22, 39.756, 1745] as [number, number, number, number, number, number],
+      pointCount: 1000,
+    },
+  };
   const groups = createDigitalTwinMapSurfaceLayers({
+    trees: [survey],
+    treeSurfaceElevations: new Map([[digitalTwinSurfaceCoordinateKey(TREE.location.lon, TREE.location.lat), 1720]]),
     powerLineNetwork: undefined,
     pointCloud: {
       dataset: {
@@ -77,9 +87,12 @@ test("the product map module places point clouds on the shared surface", () => {
     },
   });
 
-  assert.equal(groups.length, 1);
+  assert.equal(groups.length, 2);
   assert.equal(groups[0].surface, DIGITAL_TWIN_SHARED_SURFACE);
-  assert.equal(groups[0].layers[0].id, "digital-twin-point-cloud-golden-lidar");
+  assert.deepEqual(groups[0].layers[1].props.data, []);
+  assert.equal(groups[0].layers[0].props.getPolygon(survey)[0][2], 1720);
+  assert.equal(groups[0].layers[0].props.getElevation(survey), 18.5);
+  assert.equal(groups[1].layers[0].id, "digital-twin-point-cloud-golden-lidar");
 });
 
 test("surface layer composition preserves one declared world frame", () => {
