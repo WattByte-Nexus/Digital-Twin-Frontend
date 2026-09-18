@@ -236,6 +236,9 @@ export function createDigitalTwinPointCloudLayer(
       pointcloud: {
         type: VisibleRgbPointCloudLayer,
         sizeUnits: "pixels",
+        // Photographic RGB already contains lighting; PNTS has no measured
+        // normals. Relighting every point with an invented normal darkens it.
+        material: false,
       },
     },
     onTilesetLoad: (loadedTileset) => {

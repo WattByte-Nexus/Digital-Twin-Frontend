@@ -71,6 +71,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
       VisibleRgbPointCloudLayer
     );
     assert.equal(layer.props._subLayerProps?.pointcloud?.sizeUnits, "pixels");
+    assert.equal(layer.props._subLayerProps?.pointcloud?.material, false);
     assert.equal(layer.props.beforeId, "digital-twin-reference-road-labels");
     assert.match(
       MISSING_POINT_RGB_VERTEX_INJECTION,
