@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Private CloudFront connection to the existing Digital Twin Engine.
+Parameters:
+  EngineInstanceId:
+    Type: AWS::EC2::Instance::Id
+  EnginePrivateDns:
+    Type: String
+  EnableApi:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+Conditions:
+  ApiEnabled: !Equals [!Ref EnableApi, 'true']
+Resources:
+  Origin:
+    Type: AWS::CloudFront::VpcOrigin
+    Properties:
+      VpcOriginEndpointConfig:
+        Name: digital-twin-engine
+        Arn: !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${EngineInstanceId}
+        HTTPPort: 8000
+        HTTPSPort: 443
+        OriginProtocolPolicy: http-only
+        OriginSSLProtocols: [TLSv1.2]
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: Authenticated Digital Twin Engine API; private VPC origin
+        Enabled: !If [ApiEnabled, true, false]
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: engine
+            DomainName: !Ref EnginePrivateDns
+            VpcOriginConfig:
+              VpcOriginId: !GetAtt Origin.Id
+              OriginReadTimeout: 60
+              OriginKeepaliveTimeout: 5
+        DefaultCacheBehavior:
+          TargetOriginId: engine
+          ViewerProtocolPolicy: https-only
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # AWS managed CachingDisabled and AllViewerExceptHostHeader policies.
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+Outputs:
+  ApiOrigin:
+    Value: !Sub https://${Distribution.DomainName}
+  DistributionId:
+    Value: !Ref Distribution
+  VpcOriginId:
+    Value: !GetAtt Origin.Id

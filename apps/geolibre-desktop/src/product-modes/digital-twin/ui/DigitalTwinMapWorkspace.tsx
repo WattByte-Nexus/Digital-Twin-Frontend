@@ -68,7 +68,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { defaultDigitalTwinApiUrl } from "../../../lib/digital-twin-api";
+import { defaultDigitalTwinApiUrl, signOutDigitalTwin } from "../../../lib/digital-twin-api";
 import {
   checkDigitalTwinEngineHealth,
   digitalTwinWeatherFreshness,
@@ -1499,6 +1499,7 @@ export function DigitalTwinMapWorkspace({
               onOpenExpertWorkspace={onOpenExpertWorkspace ? () => requestWorkspaceChange(onOpenExpertWorkspace) : undefined}
                 onOpenSearch={() => setSearchOpen(true)}
               onToggleTheme={toggleTheme}
+              onSignOut={import.meta.env.DEV ? undefined : () => requestWorkspaceChange(signOutDigitalTwin)}
             />
           ) : null}
 

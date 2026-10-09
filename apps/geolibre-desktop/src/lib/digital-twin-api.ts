@@ -82,6 +82,15 @@ export function rememberDigitalTwinApiUrl(value: string): void {
   if (typeof window !== "undefined") window.localStorage.setItem(API_STORAGE_KEY, normalized);
 }
 
+/** Revoke the HttpOnly hosting session with a browser POST, then follow Cognito logout. */
+export function signOutDigitalTwin(): void {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "/api/digital-twin/sign-out";
+  document.body.append(form);
+  form.submit();
+}
+
 export function resolveDigitalTwinApiUrl(apiUrl: string, path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
   return new URL(path.replace(/^\/+/, ""), `${normalizeDigitalTwinApiUrl(apiUrl)}/`).href;
