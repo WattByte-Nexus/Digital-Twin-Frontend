@@ -17,8 +17,9 @@ have been removed; this is the frontend's deployment path.
   Engine startup and network configuration have been verified.
 - The sibling Infrastructure repository's Engine stack owns EC2 and its security
   group. Allow port 8000 from the load balancer security
-  group. Never open port 8000 to the Internet. The load balancer accepts HTTPS only
-  from the AWS-managed CloudFront origin-facing prefix list.
+  group. Never open port 8000 to the Internet. The load balancer accepts public
+  HTTPS; the Engine requires Cognito sessions for every non-health API route.
+  Amplify's managed reverse proxy must be able to reach this HTTPS endpoint.
 - The Engine repository owns Cognito session validation and authorization.
   Enable `application.api_access.mode: verified_host` and configure `cognito`
   using this stack's public output identifiers. AWS credentials retrieve secret
@@ -41,7 +42,7 @@ aws cloudformation deploy --stack-name digital-twin-api-load-balancer \
   --parameter-overrides EngineInstanceId=i-03c49c9209662ec1b \
     VpcId=vpc-05fee57a83f4119ca EngineSecurityGroupId=sg-0d0cf13de742ded3a \
     EngineSubnetId=subnet-004a52aa9c89f52ce PublicRouteTableId=rtb-08a0ad21251c4f05e \
-    CloudFrontPrefixListId=pl-3b927c52 HostedZoneId=Z02611002UN2XT68XWGT0 \
+    HostedZoneId=Z02611002UN2XT68XWGT0 \
     ApiDomain=api.nexus.ipss.ai EnableApi=false \
   --region us-east-1 --disable-rollback
 

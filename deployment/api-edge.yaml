@@ -11,8 +11,6 @@ Parameters:
     Type: AWS::EC2::Subnet::Id
   PublicRouteTableId:
     Type: String
-  CloudFrontPrefixListId:
-    Type: String
   HostedZoneId:
     Type: AWS::Route53::HostedZone::Id
   ApiDomain:
@@ -49,7 +47,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          SourcePrefixListId: !Ref CloudFrontPrefixListId
+          CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 8000
