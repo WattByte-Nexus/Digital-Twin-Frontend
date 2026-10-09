@@ -19,6 +19,7 @@ export interface WeatherSettingsValue {
   hour: number;
   minute: number;
   season: string;
+  /** Air temperature in Celsius; controls display and accept Fahrenheit. */
   temperature: number;
   events: Record<WeatherEventKey, number>;
 }
@@ -82,4 +83,12 @@ export function clampWeatherValue(
 
 export function padWeatherTime(value: number) {
   return String(value).padStart(2, "0");
+}
+
+export function celsiusToFahrenheit(value: number) {
+  return value * 9 / 5 + 32;
+}
+
+export function fahrenheitToCelsius(value: number) {
+  return (value - 32) * 5 / 9;
 }
