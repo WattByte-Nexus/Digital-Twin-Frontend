@@ -166,7 +166,9 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: [amplify:CreateDeployment, amplify:StartDeployment]
-                Resource: !Sub ${App.Arn}/branches/main
+                Resource:
+                  - !Sub ${App.Arn}/branches/main
+                  - !Sub ${App.Arn}/branches/main/deployments/*
               - Effect: Allow
                 Action: [amplify:GetJob, amplify:StopJob]
                 Resource: !Sub ${App.Arn}/branches/main/jobs/*
