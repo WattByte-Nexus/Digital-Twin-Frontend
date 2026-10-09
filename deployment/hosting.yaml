@@ -4,7 +4,7 @@ Parameters:
   ApiOrigin:
     Type: String
     Default: ''
-    AllowedPattern: '(^$|https://[a-z0-9]+\.cloudfront\.net)'
+    AllowedPattern: '(^$|https://[a-z0-9.-]+)'
   EngineRoleName:
     Type: String
     Default: digital-twin-golden-engine-host

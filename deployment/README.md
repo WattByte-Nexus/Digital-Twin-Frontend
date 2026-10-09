@@ -12,20 +12,20 @@ have been removed; this is the frontend's deployment path.
 - `hosting.yaml`: Amplify application and main branch, invitation-only Cognito
   pool/client/group, Secrets Manager session signing key, exact-resource Engine
   authentication permissions, and the narrow GitHub deployment role.
-- `api-edge.yaml`: CloudFront HTTPS API endpoint and private EC2 VPC origin.
-  The API distribution starts disabled and is enabled only after protected
+- `api-edge.yaml`: HTTPS Application Load Balancer, ACM certificate, DNS and a second subnet.
+  The listener starts with a fixed 503 response and is enabled only after protected
   Engine startup and network configuration have been verified.
 - The sibling Infrastructure repository's Engine stack owns EC2 and its security
-  group. Allow port 8000 from the AWS-managed CloudFront VPC-origin security
-  group. Never open it to the Internet or all CloudFront public address ranges.
+  group. Allow port 8000 from the load balancer security
+  group. Never open port 8000 to the Internet. The load balancer accepts HTTPS only
+  from the AWS-managed CloudFront origin-facing prefix list.
 - The Engine repository owns Cognito session validation and authorization.
   Enable `application.api_access.mode: verified_host` and configure `cognito`
   using this stack's public output identifiers. AWS credentials retrieve secret
   values inside the Engine. The frontend never receives OAuth tokens or secrets.
 
-Amplify proxies `/api/*` to the HTTPS API origin. The private connection uses
-the instance's private DNS and survives public-IP changes. CloudFront API
-caching is disabled, all cookies and query strings are forwarded, and protected
+Amplify proxies `/api/*` to the HTTPS API origin. The load balancer forwards to the instance's private IP and survives public-IP
+changes. API cookies and query strings are forwarded, and protected
 responses specify `private, no-store`. The service worker excludes `/api/*`
 navigation so OAuth callbacks reach the server. SPA deep links serve index.html.
 
@@ -36,10 +36,13 @@ changes before updating an existing deployment. Neither ordinary GitHub release
 job has permission to create or change infrastructure.
 
 ```sh
-aws cloudformation deploy --stack-name digital-twin-api-edge \
+aws cloudformation deploy --stack-name digital-twin-api-load-balancer \
   --template-file deployment/api-edge.yaml \
   --parameter-overrides EngineInstanceId=i-03c49c9209662ec1b \
-    EnginePrivateDns=ip-10-82-1-93.ec2.internal EnableApi=false \
+    VpcId=vpc-05fee57a83f4119ca EngineSecurityGroupId=sg-0d0cf13de742ded3a \
+    EngineSubnetId=subnet-004a52aa9c89f52ce PublicRouteTableId=rtb-08a0ad21251c4f05e \
+    CloudFrontPrefixListId=pl-3b927c52 HostedZoneId=Z02611002UN2XT68XWGT0 \
+    ApiDomain=api.nexus.ipss.ai EnableApi=false \
   --region us-east-1 --disable-rollback
 
 aws cloudformation deploy --stack-name digital-twin-frontend \

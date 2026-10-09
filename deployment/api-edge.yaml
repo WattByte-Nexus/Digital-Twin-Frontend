@@ -1,10 +1,23 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Private CloudFront connection to the existing Digital Twin Engine.
+Description: HTTPS load balancer connecting Amplify to the existing Digital Twin Engine.
 Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
   EngineInstanceId:
     Type: AWS::EC2::Instance::Id
-  EnginePrivateDns:
+  EngineSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  EngineSubnetId:
+    Type: AWS::EC2::Subnet::Id
+  PublicRouteTableId:
     Type: String
+  CloudFrontPrefixListId:
+    Type: String
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+  ApiDomain:
+    Type: String
+    Default: api.nexus.ipss.ai
   EnableApi:
     Type: String
     AllowedValues: ['true', 'false']
@@ -12,47 +25,107 @@ Parameters:
 Conditions:
   ApiEnabled: !Equals [!Ref EnableApi, 'true']
 Resources:
-  Origin:
-    Type: AWS::CloudFront::VpcOrigin
+  SecondSubnet:
+    Type: AWS::EC2::Subnet
     Properties:
-      VpcOriginEndpointConfig:
-        Name: digital-twin-engine
-        Arn: !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${EngineInstanceId}
-        HTTPPort: 8000
-        HTTPSPort: 443
-        OriginProtocolPolicy: http-only
-        OriginSSLProtocols: [TLSv1.2]
-  Distribution:
-    Type: AWS::CloudFront::Distribution
+      VpcId: !Ref VpcId
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: 10.82.2.0/24
+      Tags:
+        - Key: Name
+          Value: digital-twin-frontend-alb
+  RouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      DistributionConfig:
-        Comment: Authenticated Digital Twin Engine API; private VPC origin
-        Enabled: !If [ApiEnabled, true, false]
-        HttpVersion: http2and3
-        IPV6Enabled: true
-        PriceClass: PriceClass_100
-        Origins:
-          - Id: engine
-            DomainName: !Ref EnginePrivateDns
-            VpcOriginConfig:
-              VpcOriginId: !GetAtt Origin.Id
-              OriginReadTimeout: 60
-              OriginKeepaliveTimeout: 5
-        DefaultCacheBehavior:
-          TargetOriginId: engine
-          ViewerProtocolPolicy: https-only
-          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
-          CachedMethods: [GET, HEAD]
-          Compress: true
-          # AWS managed CachingDisabled and AllViewerExceptHostHeader policies.
-          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
-          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
-        ViewerCertificate:
-          CloudFrontDefaultCertificate: true
+      SubnetId: !Ref SecondSubnet
+      RouteTableId: !Ref PublicRouteTableId
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: digital-twin-frontend-api-alb
+      GroupDescription: HTTPS from Amplify/CloudFront; private forwarding to the Engine
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourcePrefixListId: !Ref CloudFrontPrefixListId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          DestinationSecurityGroupId: !Ref EngineSecurityGroupId
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref ApiDomain
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref ApiDomain
+          HostedZoneId: !Ref HostedZoneId
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: RouteAssociation
+    Properties:
+      Name: digital-twin-frontend-api
+      Type: application
+      Scheme: internet-facing
+      SecurityGroups: [!Ref SecurityGroup]
+      Subnets: [!Ref EngineSubnetId, !Ref SecondSubnet]
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '120'
+        - Key: routing.http.drop_invalid_header_fields.enabled
+          Value: 'true'
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: digital-twin-frontend-api
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: 8000
+      TargetType: instance
+      Targets:
+        - Id: !Ref EngineInstanceId
+      HealthCheckPath: /api/v1/health/ready
+      HealthCheckIntervalSeconds: 15
+      HealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200'
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates:
+        - CertificateArn: !Ref Certificate
+      DefaultActions:
+        - !If
+          - ApiEnabled
+          - Type: forward
+            TargetGroupArn: !Ref TargetGroup
+          - Type: fixed-response
+            FixedResponseConfig:
+              StatusCode: '503'
+              ContentType: text/plain
+              MessageBody: Authenticated API deployment is being configured.
+  Dns:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ApiDomain
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
 Outputs:
   ApiOrigin:
-    Value: !Sub https://${Distribution.DomainName}
-  DistributionId:
-    Value: !Ref Distribution
-  VpcOriginId:
-    Value: !GetAtt Origin.Id
+    Value: !Sub https://${ApiDomain}
+  SecurityGroupId:
+    Value: !Ref SecurityGroup
+  TargetGroupArn:
+    Value: !Ref TargetGroup
+  LoadBalancerArn:
+    Value: !Ref LoadBalancer
