@@ -6,9 +6,9 @@
  * Preset schemes have their token values baked into `packages/ui/src/globals.css`
  * under `[data-theme="<id>"]` selectors and are selected via a `data-theme`
  * attribute on <html>. The "custom" scheme instead derives its tokens from a
- * user-picked hex color at runtime and injects them as inline styles on <html>
- * (which override the stylesheet in both light and dark mode). This module is the
- * single source of truth for the valid scheme ids and the picker UI.
+ * user-picked hex color at runtime and sets shared custom tokens on <html>.
+ * Explicitly themed surfaces inherit them in both light and dark mode. This
+ * module is the single source of truth for the valid scheme ids and the picker UI.
  */
 /**
  * Preset scheme ids, the single source of truth. Each one has a matching
@@ -178,15 +178,15 @@ export function foregroundForHex(hex: string): string {
 }
 
 /** Accent tokens the custom scheme overrides inline (cleared on other schemes). */
-const CUSTOM_TOKEN_PROPERTIES = ["--primary", "--primary-foreground", "--ring"] as const;
+const CUSTOM_TOKEN_PROPERTIES = ["--custom-primary", "--custom-primary-foreground"] as const;
 
 /**
  * Apply (or clear) the active accent scheme on the document root.
  *
  * - Presets set a `data-theme` attribute (the default scheme sets none, matching
  *   the base `:root` / `.dark` tokens).
- * - The custom scheme injects accent tokens derived from `customColor` as inline
- *   styles, which override the stylesheet in both light and dark mode.
+ * - The custom scheme sets shared tokens derived from `customColor`; the theme
+ *   stylesheet applies them to the document and explicitly themed surfaces.
  *
  * @param scheme - The accent scheme to activate.
  * @param customColor - The hex color backing the "custom" scheme.
@@ -207,9 +207,9 @@ export function applyThemeScheme(scheme: ThemeScheme, customColor?: string): voi
     // it is a string when computing the foreground, no cast needed.
     const channels = customColor ? hexToHslChannels(customColor) : null;
     if (customColor && channels) {
-      root.style.setProperty("--primary", channels);
-      root.style.setProperty("--primary-foreground", foregroundForHex(customColor));
-      root.style.setProperty("--ring", channels);
+      root.setAttribute("data-theme", "custom");
+      root.style.setProperty("--custom-primary", channels);
+      root.style.setProperty("--custom-primary-foreground", foregroundForHex(customColor));
     }
     // An invalid/empty custom color leaves the base tokens in place.
     return;

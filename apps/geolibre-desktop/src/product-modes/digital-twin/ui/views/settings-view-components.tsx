@@ -1,77 +1,8 @@
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Label,
-  cn,
-} from "@geolibre/ui";
+import { cn } from "@geolibre/ui";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
 } from "react";
-
-export function SettingsCard({
-  action,
-  children,
-  description,
-  title,
-}: {
-  action?: ReactNode;
-  children: ReactNode;
-  description?: string;
-  title: string;
-}) {
-  return (
-    <Card className="gap-0 overflow-hidden rounded-xl border border-border bg-card py-0 shadow-sm">
-      <CardHeader className="gap-1.5 px-5 py-4">
-        <CardTitle className="text-sm">{title}</CardTitle>
-        {description ? <CardDescription>{description}</CardDescription> : null}
-        {action ? <CardAction>{action}</CardAction> : null}
-      </CardHeader>
-      <CardContent className="overflow-x-auto px-5 pb-1">{children}</CardContent>
-    </Card>
-  );
-}
-
-export function SettingRow({
-  children,
-  description,
-  htmlFor,
-  label,
-}: {
-  children: ReactNode;
-  description?: string;
-  htmlFor?: string;
-  label: string;
-}) {
-  const copy = (
-    <div className="min-w-0 space-y-1">
-      <span className="text-sm font-medium text-foreground">{label}</span>
-      {description ? (
-        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-          {description}
-        </p>
-      ) : null}
-    </div>
-  );
-
-  return (
-    <div className="grid min-h-16 gap-4 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(13rem,38%)] sm:items-center">
-      {htmlFor ? (
-        <Label className="block cursor-pointer" htmlFor={htmlFor}>
-          {copy}
-        </Label>
-      ) : (
-        copy
-      )}
-      <div className="flex min-w-0 items-center justify-start sm:justify-end">{children}</div>
-    </div>
-  );
-}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -150,11 +81,7 @@ export function ResizeSeparator({
     event.preventDefault();
     const physicalDelta = event.key === "ArrowRight" ? RESIZE_STEP : -RESIZE_STEP;
     onChange(
-      clamp(
-        value + widthDeltaForPhysicalDelta(event.currentTarget, physicalDelta),
-        min,
-        max,
-      ),
+      clamp(value + widthDeltaForPhysicalDelta(event.currentTarget, physicalDelta), min, max),
     );
   }
 
