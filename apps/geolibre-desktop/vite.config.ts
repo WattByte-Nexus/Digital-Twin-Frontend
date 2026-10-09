@@ -746,14 +746,8 @@ function pwaPlugin(): Plugin[] {
 
   return VitePWA({
     disable: PWA_DISABLED,
-    // autoUpdate installs the new SW and lets it take control on the next
-    // deploy (skipWaiting + clientsClaim below), so its fresh precache serves
-    // subsequent requests. We deliberately suppress workbox's default
-    // force-reload-on-activate via `onNeedReload` in main.tsx — that reload
-    // fired spuriously on the relative-base `/demo/` subpath and discarded map
-    // state. Page refreshes are left to installStaleChunkReload
-    // (src/lib/stale-chunk-reload.ts), which reloads on-demand only when a now
-    // orphaned lazy chunk actually 404s; precached chunks never 404.
+    // Activate fresh caches, then offer an explicit Reload action in app-updates.ts.
+    // Open tabs keep their map state until the user chooses to load the new shell.
     registerType: "autoUpdate",
     // We register the SW by hand in main.tsx so registration lives next to the
     // stale-chunk reload it coordinates with; no auto-injected snippet.
@@ -908,8 +902,7 @@ export default defineConfig({
       [DIGITAL_TWIN_API_PROXY_PATH]: {
         target: DIGITAL_TWIN_API_PROXY_TARGET,
         changeOrigin: true,
-        rewrite: (requestPath) =>
-          requestPath.slice(DIGITAL_TWIN_API_PROXY_PATH.length) || "/",
+        rewrite: (requestPath) => requestPath.slice(DIGITAL_TWIN_API_PROXY_PATH.length) || "/",
       },
     },
   },
