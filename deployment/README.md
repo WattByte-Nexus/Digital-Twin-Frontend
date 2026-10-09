@@ -104,3 +104,24 @@ Infrastructure checks:
 cfn-lint deployment/api-edge.yaml deployment/hosting.yaml
 bash -n scripts/deploy-amplify.sh
 ```
+
+## Deployed instance
+
+The frontend is hosted at https://main.dbv0kjyl8w1at.amplifyapp.com, with
+same-origin API requests forwarded to `https://api.nexus.ipss.ai`. The API
+load balancer accepts public HTTPS; only its security group and the existing
+operator network can reach the Engine's port 8000. Keep `EnableApi=true` for
+the active `digital-twin-api-load-balancer` stack when updating it.
+
+Backend release [37963539199](https://github.com/WattByte-Nexus/Digital-Twin-Engine/actions/runs/37963539199)
+deployed source `855db229410d3f95384d882eb918aa3517216698` through GitHub OIDC
+and SSM. On 2026-10-09, live checks verified Cognito login, the Golden workspace,
+current weather and assets, and private point-cloud metadata. A separate
+unauthenticated client received HTTP 401 after those authenticated reads.
+Session cookies are Secure/HttpOnly and API responses remain `private, no-store`.
+
+The API's runtime authentication configuration is installed in
+`/opt/digital-twin/config/app.yaml`; an operator backup is retained at
+`/opt/digital-twin/app.before-hosting-20261009.yaml`. Infrastructure's ignored
+`engine/frontend.auto.tfvars.json` preserves the enabled load-balancer ingress
+on future Terraform plans. Never commit initial user passwords or session keys.
