@@ -1,5 +1,9 @@
 import { Button } from "@geolibre/ui";
 import { Activity, Map, Wrench } from "lucide-react";
+import { useState } from "react";
+import { useThemeMode } from "../../hooks/useThemeMode";
+import { defaultDigitalTwinApiUrl } from "../../lib/digital-twin-api";
+import { NativeDataAdministration } from "./ui/data/NativeDataAdministration";
 import type { DigitalTwinAccessContext } from "./access";
 
 interface AdministrationLandingProps {
@@ -19,6 +23,24 @@ export function AdministrationLanding({
   onOpenExpertWorkspace,
 }: AdministrationLandingProps) {
   const diagnostics = screen === "diagnostics";
+  const [dataOpen, setDataOpen] = useState(false);
+  const { themeMode } = useThemeMode();
+  if (dataOpen) return <main className="h-screen bg-background">
+    <NativeDataAdministration
+      apiUrl={defaultDigitalTwinApiUrl()}
+      activeRegionId={access.regions[0]?.id ?? ""}
+      activeRasterIds={[]}
+      regions={access.regions.map((region) => ({ ...region, description: region.name }))}
+      canManage={access.capabilities.includes("administration")}
+      canPreviewMap={false}
+      theme={themeMode}
+      onClose={() => setDataOpen(false)}
+      onRegionsChanged={() => {}}
+      onAssetsChanged={() => {}}
+      onPointCloudSelected={() => {}}
+      onRasterPrepared={() => {}}
+    />
+  </main>;
   return (
     <main className="min-h-screen bg-background p-6 text-foreground">
       <header className="mx-auto flex max-w-5xl items-center gap-3 pb-4">
@@ -43,9 +65,10 @@ export function AdministrationLanding({
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           {diagnostics
             ? "Protected operational content remains unloaded while system readiness is inspected."
-            : "This account has administrative access without operational region scope. No simulated map, asset, alert, or run data has been loaded."}
+            : "Manage regional data and inspect deployment readiness. Operational maps remain limited to your assigned region access."}
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
+          {access.capabilities.includes("administration") ? <Button onClick={() => setDataOpen(true)}>Manage regional data</Button> : null}
           {diagnostics ? (
             onOpenAdministration ? (
               <Button onClick={onOpenAdministration} variant="outline">

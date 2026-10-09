@@ -1,4 +1,4 @@
-import { reconstructSurveyNetwork, type SurveyNetwork } from "./digital-twin-survey-network";
+import { readSurveyNetwork, type SurveyNetwork } from "./digital-twin-survey-network";
 import { PathLayer, ScatterplotLayer } from "@deck.gl/layers";
 import {
   ScenegraphLayer,
@@ -24,9 +24,6 @@ export interface DigitalTwinConductorPath {
   startPoleId: string;
   endPoleId: string;
   path: [number, number, number][];
-  inferredConnection?: boolean;
-  evidenceAssetIds?: string[];
-  lengthM?: number;
 }
 
 export interface DigitalTwinPowerPole {
@@ -148,7 +145,7 @@ function conductorAttachment(
   ];
 }
 
-/** Build visible conductor and support geometry from canonical line assets. */
+/** Build conductor geometry and uniformly sized pole models without changing survey measurements. */
 export function buildDigitalTwinPowerLineNetwork(
   lines: readonly DigitalTwinPowerLineAsset[],
   {
@@ -180,7 +177,7 @@ export function buildDigitalTwinPowerLineNetwork(
   };
 
   const spans = lines
-    .filter((line) => !line.measuredPath)
+    .filter((line) => !line.measuredPath && !line.supportIds)
     .map((line) => {
       const [start, end] = line.coordinates;
       const bearing = bearingBetween(start, end);
@@ -256,18 +253,20 @@ export function buildDigitalTwinPowerLineNetwork(
   });
 
   for (const pole of measuredPoles) {
-    const height = pole.top.elevationM - pole.base.elevationM;
-    const scale = height / POWER_POLE_MODEL_HEIGHT_METERS;
     poles.push({
       id: pole.assetId,
       measured: true,
       assetIds: [],
       position: [pole.base.lon, pole.base.lat, pole.base.elevationM],
       modelYaw: 0,
-      scale: [scale, scale, scale],
+      scale: [
+        POWER_POLE_MODEL_SCALE,
+        POWER_POLE_MODEL_SCALE,
+        POWER_POLE_MODEL_SCALE,
+      ],
     });
   }
-  const survey = reconstructSurveyNetwork(measuredPoles, lines);
+  const survey = readSurveyNetwork(measuredPoles, lines);
   const measuredPoleBearings = new Map<string, number[]>();
   for (const connection of survey.connections) {
     const { start, end } = connection;
@@ -280,7 +279,7 @@ export function buildDigitalTwinPowerLineNetwork(
       measuredPoleBearings.set(pole.id, bearings);
       pole.modelYaw = (90 - sharedPoleBearing(bearings) + 360) % 360;
     }
-    // Straight attachment guides do not invent a measured catenary/sag.
+    // Render the exact canonical endpoints used by physics and collision.
     conductors.push({
       id: connection.id,
       assetId: connection.id,
@@ -288,18 +287,12 @@ export function buildDigitalTwinPowerLineNetwork(
       endPoleId: end.assetId,
       offsetMeters: 0,
       verticalOffsetMeters: 0,
-      inferredConnection: true,
-      evidenceAssetIds: connection.evidenceAssetIds,
-      lengthM: connection.lengthM,
-      path: [
-        [start.top.lon, start.top.lat, start.top.elevationM],
-        [end.top.lon, end.top.lat, end.top.elevationM],
-      ],
+      path: connection.line.coordinates.map(point => [point.lon, point.lat, point.elevationM]),
     });
   }
   // Keep every original measured fragment, including unresolved ones, intact.
   for (const line of lines) {
-    if (!line.measuredPath) continue;
+    if (!line.measuredPath || line.supportIds) continue;
     conductors.push({
       id: line.assetId,
       assetId: line.assetId,

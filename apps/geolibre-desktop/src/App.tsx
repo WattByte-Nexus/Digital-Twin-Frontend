@@ -84,11 +84,7 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
             }`,
           )
         }
-        onOpenAdministration={
-          access.capabilities.includes("administration")
-            ? () => navigate("/admin")
-            : undefined
-        }
+        canManageData={access.capabilities.includes("administration")}
         onOpenDiagnostics={() => navigate("/diagnostics")}
         onOpenExpertWorkspace={
           access.capabilities.includes("expert-gis")

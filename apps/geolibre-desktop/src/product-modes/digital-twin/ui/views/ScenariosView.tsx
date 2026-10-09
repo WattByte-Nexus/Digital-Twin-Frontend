@@ -1,543 +1,104 @@
 import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  DEFAULT_WEATHER_SETTINGS,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  FilterButton,
-  FilterChip,
-  FilterSearch,
-  FilterSelectTrigger,
-  FilterToolbar,
-  FilterToolbarRow,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  ScrollArea,
-  SelectMenu,
-  SelectMenuContent,
-  SelectMenuItem,
-  SelectMenuValue,
-  SortableTableHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  surfaceThemeClassName,
-  type DigitalTwinRegion,
-  type SurfaceTheme,
+  Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DEFAULT_WEATHER_SETTINGS,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, FilterSearch,
+  FilterToolbar, FilterToolbarRow, ScrollArea, SelectMenu, SelectMenuContent, SelectMenuItem,
+  SelectMenuTrigger, SelectMenuValue, Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  surfaceThemeClassName, type DigitalTwinRegion, type SurfaceTheme,
 } from "@geolibre/ui";
+import { Copy, Flame, MoreHorizontal, Pencil, Plus, RefreshCw } from "lucide-react";
+import { type ReactNode, type RefObject, useEffect, useState } from "react";
 import {
-  Check,
-  CloudSun,
-  Copy,
-  MapPinned,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Search,
-  SlidersHorizontal,
-} from "lucide-react";
-import {
-  type ReactNode,
-  type RefObject,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import {
-  DEFAULT_FIRE_MODEL_SETTINGS,
-  type ScenarioRunRequest,
-} from "../simulation-flow";
+  createDigitalTwinScenario, fetchDigitalTwinScenario, fetchDigitalTwinScenarios,
+  scenarioSubmission, type DigitalTwinScenario,
+} from "../../../../lib/digital-twin-scenarios";
+import { type ScenarioRunRequest } from "../simulation-flow";
 import { ScenarioBuilder, type ScenarioMapController } from "./ScenarioBuilder";
 
-type ScenarioStatus = "Ready" | "Draft" | "Completed" | "Review";
-type ScenarioSortKey =
-  | "name"
-  | "location"
-  | "conditions"
-  | "ignitionSources"
-  | "updated"
-  | "status";
-type SortDirection = "asc" | "desc";
-
-interface Scenario {
-  id: string;
-  name: string;
-  location: string;
-  conditions: string;
-  ignitionSources: number;
-  owner: string;
-  updated: string;
-  status: ScenarioStatus;
-}
-
-const SCENARIOS: Scenario[] = [
-  {
-    id: "scenario-1",
-    name: "Boulder Foothills — Wind East",
-    location: "Boulder Foothills",
-    conditions: "18 mph E · 4 hours",
-    ignitionSources: 3,
-    owner: "A. Chen",
-    updated: "12 min ago",
-    status: "Ready",
-  },
-  {
-    id: "scenario-2",
-    name: "Louisville Interface",
-    location: "East County",
-    conditions: "16 mph NE · 4 hours",
-    ignitionSources: 2,
-    owner: "A. Chen",
-    updated: "38 min ago",
-    status: "Completed",
-  },
-  {
-    id: "scenario-3",
-    name: "North Ridge — Dry Fuels",
-    location: "Boulder North",
-    conditions: "12 mph S · 8 hours",
-    ignitionSources: 1,
-    owner: "M. Rivera",
-    updated: "1 hour ago",
-    status: "Draft",
-  },
-  {
-    id: "scenario-4",
-    name: "Baseline Morning",
-    location: "Boulder Foothills",
-    conditions: "9 mph W · 4 hours",
-    ignitionSources: 1,
-    owner: "System",
-    updated: "Today, 8:31 AM",
-    status: "Completed",
-  },
-  {
-    id: "scenario-5",
-    name: "High Wind Watch",
-    location: "Front Range",
-    conditions: "31 mph W · 2 hours",
-    ignitionSources: 4,
-    owner: "J. Patel",
-    updated: "Yesterday",
-    status: "Review",
-  },
-];
-
-const STATUS_VARIANT: Record<
-  ScenarioStatus,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
-  Ready: "default",
-  Draft: "secondary",
-  Completed: "outline",
-  Review: "destructive",
-};
-
-const SCENARIO_CENTERS: Record<string, [longitude: number, latitude: number]> = {
-  "Boulder Foothills": [-105.275, 40.018],
-  "East County": [-105.102, 39.978],
-  "Boulder North": [-105.267, 40.075],
-  "Front Range": [-105.214, 39.858],
-};
-
-const WIND_DIRECTIONS: Record<string, number> = {
-  N: 0,
-  NE: 45,
-  E: 90,
-  SE: 135,
-  S: 180,
-  SW: 225,
-  W: 270,
-  NW: 315,
-};
-
-function requestForScenario(
-  scenario: Scenario,
-  regionId: string,
-): ScenarioRunRequest {
-  const center = SCENARIO_CENTERS[scenario.location] ?? [-105.24, 40.01];
-  const windSpeed = Number(scenario.conditions.match(/^(\d+)/)?.[1] ?? 0);
-  const windDirectionLabel = scenario.conditions.match(/mph ([A-Z]+)/)?.[1] ?? "N";
-  const durationHours = Number(scenario.conditions.match(/(\d+) hours?/)?.[1] ?? 4);
+export function requestForSavedScenario(scenario: DigitalTwinScenario, regionName: string, asNew = false): Extract<ScenarioRunRequest, { mode: "synthetic" }> {
   return {
-    scenario: scenario.name,
-    regionId,
-    location: scenario.location,
-    durationHours,
-    ignitionPoints: Array.from({ length: scenario.ignitionSources }, (_, index) => ({
-      id: `${scenario.id}-ignition-${index + 1}`,
-      longitude: center[0] + index * 0.0025,
-      latitude: center[1] + index * 0.0015,
-    })),
-    weather: {
-      ...DEFAULT_WEATHER_SETTINGS,
-      events: {
-        ...DEFAULT_WEATHER_SETTINGS.events,
-        wind: windSpeed,
-        windDirection: WIND_DIRECTIONS[windDirectionLabel] ?? 0,
-      },
-    },
-    modelSettings: { ...DEFAULT_FIRE_MODEL_SETTINGS },
+    mode: "synthetic", scenario: asNew ? `${scenario.name} copy` : scenario.name,
+    scenarioId: asNew ? undefined : scenario.scenario_id,
+    regionId: scenario.region_id, location: regionName, durationHours: scenario.duration_hours,
+    bounds: { ...scenario.bounds }, baseWeatherVersion: scenario.base_weather_version,
+    windSpeedMph: scenario.wind_speed.submitted_unit === "mph" ? scenario.wind_speed.submitted_value : scenario.wind_speed.canonical_meters_per_second / 0.44704,
+    windDirectionDegrees: scenario.wind_direction.submitted_bearing_degrees,
+    ignitionPoints: [], weather: DEFAULT_WEATHER_SETTINGS,
   };
 }
 
 interface ScenariosViewProps {
+  apiUrl: string;
   activeRegionId: string;
   creationRequest: number;
   mapControllerRef: RefObject<ScenarioMapController | null>;
   mapSlot: ReactNode;
   onBuilderOpenChange: (open: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onRun: (request: ScenarioRunRequest, idempotencyKey: string) => Promise<void>;
   regions: readonly DigitalTwinRegion[];
   theme: SurfaceTheme;
 }
 
-export function ScenariosView({
-  activeRegionId,
-  creationRequest,
-  mapControllerRef,
-  mapSlot,
-  onBuilderOpenChange,
-  onRun,
-  regions,
-  theme,
-}: ScenariosViewProps) {
+export function ScenariosView({ apiUrl, activeRegionId, creationRequest, mapControllerRef, mapSlot, onBuilderOpenChange, onDirtyChange, onRun, regions, theme }: ScenariosViewProps) {
   const [builderOpen, setBuilderOpen] = useState(false);
-  const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
+  const [initialRequest, setInitialRequest] = useState<ScenarioRunRequest | undefined>();
+  const [scenarios, setScenarios] = useState<DigitalTwinScenario[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [location, setLocation] = useState("all");
-  const [status, setStatus] = useState<ScenarioStatus | "All">("All");
-  const [sortKey, setSortKey] = useState<ScenarioSortKey>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const activeFilterCount = [location !== "all", status !== "All"].filter(Boolean).length;
+  const [regionId, setRegionId] = useState(activeRegionId);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [lastSuccess, setLastSuccess] = useState<Date | null>(null);
 
+  useEffect(() => { onBuilderOpenChange(builderOpen); }, [builderOpen, onBuilderOpenChange]);
+  useEffect(() => { if (creationRequest > 0) { setInitialRequest(undefined); setBuilderOpen(true); } }, [creationRequest]);
+  useEffect(() => { setRegionId(activeRegionId); }, [activeRegionId]);
   useEffect(() => {
-    onBuilderOpenChange(builderOpen);
-  }, [builderOpen, onBuilderOpenChange]);
+    const controller = new AbortController();
+    setLoading(true); setError(null); setScenarios([]); setCursor(null);
+    void fetchDigitalTwinScenarios(apiUrl, regionId, null, { signal: controller.signal }).then((page) => {
+      if (controller.signal.aborted) return;
+      setScenarios(page.items); setCursor(page.next_cursor); setLastSuccess(new Date());
+    }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Scenarios could not be loaded."); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [apiUrl, regionId, revision]);
 
-  useEffect(() => {
-    if (creationRequest > 0) {
-      setSelectedScenario(null);
+  const openScenario = async (scenarioId: string, asNew: boolean) => {
+    setLoading(true); setError(null);
+    try {
+      const scenario = await fetchDigitalTwinScenario(apiUrl, scenarioId);
+      setInitialRequest(requestForSavedScenario(scenario, regions.find((region) => region.id === scenario.region_id)?.name ?? scenario.region_id, asNew));
       setBuilderOpen(true);
-    }
-  }, [creationRequest]);
-
-  const filteredScenarios = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase();
-    const filtered = SCENARIOS.filter(
-      (scenario) =>
-        (status === "All" || scenario.status === status) &&
-        (location === "all" || scenario.location === location) &&
-        (!normalizedQuery ||
-          `${scenario.name} ${scenario.location} ${scenario.conditions} ${scenario.owner}`
-            .toLocaleLowerCase()
-            .includes(normalizedQuery)),
-    );
-    return [...filtered].sort((left, right) => {
-      const a = left[sortKey];
-      const b = right[sortKey];
-      const comparison =
-        typeof a === "number" && typeof b === "number"
-          ? a - b
-          : String(a).localeCompare(String(b), undefined, { numeric: true });
-      return comparison * (sortDirection === "asc" ? 1 : -1);
-    });
-  }, [location, query, sortDirection, sortKey, status]);
-
-  const sort = (key: ScenarioSortKey) => {
-    if (sortKey === key) {
-      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDirection("asc");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Scenario could not be retrieved."); }
+    finally { setLoading(false); }
   };
+  const loadMore = async () => {
+    if (!cursor) return;
+    setLoading(true); setError(null);
+    try {
+      const page = await fetchDigitalTwinScenarios(apiUrl, regionId, cursor);
+      setScenarios((current) => [...current, ...page.items]); setCursor(page.next_cursor); setLastSuccess(new Date());
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "More scenarios could not be loaded."); }
+    finally { setLoading(false); }
+  };
+  const saveScenario = async (request: Extract<ScenarioRunRequest, { mode: "synthetic" }>, idempotencyKey: string) => {
+    const saved = await createDigitalTwinScenario(apiUrl, scenarioSubmission(request), { idempotencyKey: `scenario-${idempotencyKey}` });
+    setRevision((current) => current + 1);
+    return saved;
+  };
+  if (builderOpen) return <ScenarioBuilder apiUrl={apiUrl} activeRegionId={activeRegionId} initialRequest={initialRequest} mapControllerRef={mapControllerRef} mapSlot={mapSlot} onClose={() => setBuilderOpen(false)} onDirtyChange={onDirtyChange} onRun={onRun} onSave={saveScenario} regions={regions} theme={theme} />;
 
-  if (builderOpen) {
-    return (
-      <ScenarioBuilder
-        activeRegionId={activeRegionId}
-        initialRequest={selectedScenario ? requestForScenario(selectedScenario, activeRegionId) : undefined}
-        mapControllerRef={mapControllerRef}
-        mapSlot={mapSlot}
-        onClose={() => setBuilderOpen(false)}
-        onRun={onRun}
-        regions={regions}
-        theme={theme}
-      />
-    );
-  }
-
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex flex-wrap items-center justify-between gap-4 px-5 pb-2 pt-5 lg:px-7">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Scenarios</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Define repeatable conditions before starting a simulation.
-          </p>
-        </div>
-        <Button
-          onClick={() => {
-            setSelectedScenario(null);
-            setBuilderOpen(true);
-          }}
-        >
-          <Plus aria-hidden="true" />
-          New scenario
-        </Button>
-      </header>
-
-      <div className="px-5 pb-5 pt-2 lg:px-7">
-        <FilterToolbar>
-          <FilterToolbarRow>
-            <FilterSearch
-              aria-label="Search scenarios"
-              onValueChange={setQuery}
-              placeholder="Search scenarios…"
-              value={query}
-            />
-          <SelectMenu onValueChange={setLocation} value={location}>
-            <FilterSelectTrigger className="w-48">
-              <MapPinned aria-hidden="true" />
-              <SelectMenuValue placeholder="All locations" />
-            </FilterSelectTrigger>
-            <SelectMenuContent
-              className={`${surfaceThemeClassName(theme)} surface-glass-overlay min-w-[var(--radix-select-trigger-width)]`}
-              position="popper"
-            >
-              <SelectMenuItem value="all">All locations</SelectMenuItem>
-              {[...new Set(SCENARIOS.map((scenario) => scenario.location))].map(
-                (scenarioLocation) => (
-                  <SelectMenuItem key={scenarioLocation} value={scenarioLocation}>
-                    {scenarioLocation}
-                  </SelectMenuItem>
-                ),
-              )}
-            </SelectMenuContent>
-          </SelectMenu>
-            <Popover>
-              <PopoverTrigger asChild>
-                <FilterButton aria-label="Open scenario filters">
-                  <SlidersHorizontal aria-hidden="true" className="size-3.5" />
-                  Filters
-                  {status !== "All" ? (
-                    <Badge className="ml-0.5 h-4 min-w-4 px-1 text-[10px]" variant="secondary">1</Badge>
-                  ) : null}
-                </FilterButton>
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                className={`${surfaceThemeClassName(theme)} surface-glass-overlay w-64 p-0`}
-              >
-                <div className="flex items-center justify-between px-3 py-2.5">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Filter scenarios</p>
-                    <p className="text-xs text-muted-foreground">Choose a workflow status.</p>
-                  </div>
-                  {status !== "All" ? (
-                    <Button
-                      className="h-7 px-2 text-xs"
-                      onClick={() => setStatus("All")}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      Clear
-                    </Button>
-                  ) : null}
-                </div>
-                <div className="bg-surface-subtle p-1.5">
-                  {(["All", "Ready", "Draft", "Completed", "Review"] as const).map(
-                    (scenarioStatus) => (
-                      <Button
-                        aria-pressed={status === scenarioStatus}
-                        className="h-8 w-full justify-between px-2 text-xs font-normal data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
-                        data-active={status === scenarioStatus}
-                        key={scenarioStatus}
-                        onClick={() => setStatus(scenarioStatus)}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Check
-                            aria-hidden="true"
-                            className={status === scenarioStatus ? "size-3.5" : "size-3.5 opacity-0"}
-                          />
-                          {scenarioStatus === "All" ? "Any status" : scenarioStatus}
-                        </span>
-                        <span className="tabular-nums text-muted-foreground">
-                          {scenarioStatus === "All"
-                            ? SCENARIOS.length
-                            : SCENARIOS.filter((scenario) => scenario.status === scenarioStatus).length}
-                        </span>
-                      </Button>
-                    ),
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
-          </FilterToolbarRow>
-
-          {activeFilterCount > 0 ? (
-            <FilterToolbarRow aria-label="Active scenario filters">
-              {location !== "all" ? (
-                <FilterChip label={`Location: ${location}`} onRemove={() => setLocation("all")} />
-              ) : null}
-              {status !== "All" ? (
-                <FilterChip label={`Status: ${status}`} onRemove={() => setStatus("All")} />
-              ) : null}
-              <Button
-                className="h-7 px-2 text-[11px] text-muted-foreground"
-                onClick={() => {
-                  setLocation("all");
-                  setStatus("All");
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                Clear all
-              </Button>
-            </FilterToolbarRow>
-          ) : null}
-        </FilterToolbar>
-      </div>
-
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="px-5 pb-5 lg:px-7 lg:pb-7">
-          <Card className="gap-0 overflow-hidden py-0">
-            <CardHeader className="px-5 py-4">
-              <CardTitle className="text-base">Scenario library</CardTitle>
-              <CardDescription>
-                {filteredScenarios.length} of {SCENARIOS.length} scenarios
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      <SortableTableHeader active={sortKey === "name"} direction={sortDirection} onClick={() => sort("name")}>
-                        Scenario
-                      </SortableTableHeader>
-                    </TableHead>
-                    <TableHead>
-                      <SortableTableHeader active={sortKey === "location"} direction={sortDirection} onClick={() => sort("location")}>
-                        Location
-                      </SortableTableHeader>
-                    </TableHead>
-                    <TableHead>
-                      <SortableTableHeader active={sortKey === "conditions"} direction={sortDirection} onClick={() => sort("conditions")}>
-                        Conditions
-                      </SortableTableHeader>
-                    </TableHead>
-                    <TableHead>
-                      <SortableTableHeader active={sortKey === "ignitionSources"} direction={sortDirection} onClick={() => sort("ignitionSources")}>
-                        Ignitions
-                      </SortableTableHeader>
-                    </TableHead>
-                    <TableHead>
-                      <SortableTableHeader active={sortKey === "updated"} direction={sortDirection} onClick={() => sort("updated")}>
-                        Updated
-                      </SortableTableHeader>
-                    </TableHead>
-                    <TableHead>
-                      <SortableTableHeader active={sortKey === "status"} direction={sortDirection} onClick={() => sort("status")}>
-                        Status
-                      </SortableTableHeader>
-                    </TableHead>
-                    <TableHead className="w-12"><span className="sr-only">Actions</span></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredScenarios.map((scenario) => (
-                    <TableRow key={scenario.id}>
-                      <TableCell>
-                        <div className="min-w-[220px]">
-                          <Button
-                            className="h-auto justify-start p-0 text-left font-semibold"
-                            onClick={() => {
-                              setSelectedScenario(scenario);
-                              setBuilderOpen(true);
-                            }}
-                            variant="link"
-                          >
-                            {scenario.name}
-                          </Button>
-                          <p className="mt-1 text-xs text-muted-foreground">{scenario.owner}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>{scenario.location}</TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                          <CloudSun aria-hidden="true" className="size-4 text-muted-foreground" />
-                          {scenario.conditions}
-                        </span>
-                      </TableCell>
-                      <TableCell className="tabular-nums">{scenario.ignitionSources}</TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {scenario.updated}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_VARIANT[scenario.status]}>
-                          {scenario.status === "Completed" ? <Check aria-hidden="true" /> : null}
-                          {scenario.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button aria-label={`Actions for ${scenario.name}`} size="icon" variant="ghost">
-                              <MoreHorizontal aria-hidden="true" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className={theme === "dark" ? "dark" : undefined}
-                          >
-                            <DropdownMenuItem
-                              onSelect={() => {
-                                setSelectedScenario(scenario);
-                                setBuilderOpen(true);
-                              }}
-                            >
-                              <Pencil aria-hidden="true" /> Edit setup
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Copy aria-hidden="true" /> Duplicate
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {filteredScenarios.length === 0 ? (
-                <div className="grid min-h-56 place-items-center p-6 text-center">
-                  <div>
-                    <Search aria-hidden="true" className="mx-auto size-6 text-muted-foreground" />
-                    <p className="mt-3 font-medium text-foreground">No matching scenarios</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Adjust the search, status, or location filter.
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-        </div>
-      </ScrollArea>
-    </div>
-  );
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visible = scenarios.filter((scenario) => `${scenario.name} ${scenario.scenario_id} ${scenario.region_id} ${scenario.base_weather_version}`.toLocaleLowerCase().includes(normalizedQuery));
+  const portalClass = `${surfaceThemeClassName(theme)} surface-glass-overlay min-w-[var(--radix-select-trigger-width)]`;
+  return <div className="flex h-full min-h-0 flex-col bg-background">
+    <header className="flex flex-wrap items-center justify-between gap-4 px-5 pb-2 pt-5 lg:px-7"><div><h1 className="text-2xl font-semibold tracking-tight">Scenarios</h1><p className="mt-1 max-w-prose text-sm text-muted-foreground">Immutable Engine scenarios store environmental intent. Choose ignitions when running.</p></div><div className="flex gap-2"><Button disabled={loading} onClick={() => setRevision((current) => current + 1)} variant="outline"><RefreshCw aria-hidden="true" />Refresh</Button><Button onClick={() => { setInitialRequest(undefined); setBuilderOpen(true); }}><Plus aria-hidden="true" />New setup</Button></div></header>
+    <div className="px-5 py-3 lg:px-7"><FilterToolbar><FilterToolbarRow><FilterSearch aria-label="Search scenarios" placeholder="Search scenarios…" value={query} onValueChange={setQuery} /><SelectMenu value={regionId} onValueChange={setRegionId}><SelectMenuTrigger className="w-52" aria-label="Scenario region"><SelectMenuValue /></SelectMenuTrigger><SelectMenuContent className={portalClass}>{regions.map((region) => <SelectMenuItem key={region.id} value={region.id}>{region.name}</SelectMenuItem>)}</SelectMenuContent></SelectMenu></FilterToolbarRow></FilterToolbar></div>
+    <ScrollArea className="min-h-0 flex-1"><div className="space-y-4 px-5 pb-5 lg:px-7">
+      {error ? <Card><CardContent className="space-y-2 pt-4"><p role="alert" className="text-sm text-destructive">{error}</p><p className="text-xs text-muted-foreground">{lastSuccess ? `Last successful update: ${lastSuccess.toLocaleTimeString()}. Displayed records may be stale.` : "The scenario library is unavailable."}</p><Button onClick={() => setRevision((current) => current + 1)} variant="outline">Retry</Button></CardContent></Card> : null}
+      <Card className="gap-0 overflow-hidden py-0"><CardHeader className="px-5 py-4"><CardTitle>Scenario library</CardTitle><CardDescription>{loading ? "Loading Engine records…" : `${visible.length} loaded records${cursor ? " · more available" : ""}`}</CardDescription></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Scenario</TableHead><TableHead>Region</TableHead><TableHead>Wind</TableHead><TableHead>Duration</TableHead><TableHead>Exact base weather</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>{visible.map((scenario) => <TableRow key={scenario.scenario_id}><TableCell><Button className="h-auto p-0 text-left font-semibold" variant="link" disabled={loading} onClick={() => { void openScenario(scenario.scenario_id, false); }}>{scenario.name}</Button><p className="mt-1 font-mono text-xs text-muted-foreground">{scenario.scenario_id}</p></TableCell><TableCell>{regions.find((region) => region.id === scenario.region_id)?.name ?? scenario.region_id}</TableCell><TableCell className="whitespace-nowrap tabular-nums">{scenario.wind_speed.submitted_value} {scenario.wind_speed.submitted_unit} towards {scenario.wind_direction.submitted_bearing_degrees}°</TableCell><TableCell className="tabular-nums">{scenario.duration_hours} h</TableCell><TableCell className="text-xs">{scenario.base_weather_version}</TableCell><TableCell><DropdownMenu><DropdownMenuTrigger asChild><Button size="icon" variant="ghost" aria-label={`Actions for ${scenario.name}`} disabled={loading}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className={portalClass}><DropdownMenuItem onSelect={() => { void openScenario(scenario.scenario_id, false); }}><Flame aria-hidden="true" />Run saved scenario</DropdownMenuItem><DropdownMenuItem onSelect={() => { void openScenario(scenario.scenario_id, true); }}><Pencil aria-hidden="true" />Edit as new</DropdownMenuItem><DropdownMenuItem onSelect={() => { void openScenario(scenario.scenario_id, true); }}><Copy aria-hidden="true" />Duplicate as new</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell></TableRow>)}</TableBody></Table>{!loading && visible.length === 0 ? <div className="p-8 text-center"><p className="font-medium">{error ? "Scenario library unavailable" : "No saved scenarios"}</p><p className="mt-1 text-sm text-muted-foreground">{query ? "Adjust your search." : "Create a setup and save its reviewed environmental inputs."}</p></div> : null}</CardContent></Card>
+      {cursor ? <Button disabled={loading} onClick={() => { void loadMore(); }} variant="outline">{loading ? "Loading…" : "Load more scenarios"}</Button> : null}
+    </div></ScrollArea>
+  </div>;
 }

@@ -17,24 +17,20 @@ import {
 } from "@geolibre/ui";
 import {
   ArrowLeft,
-  BellRing,
   CircleUserRound,
   Map,
   Search,
   Server,
   Settings2,
   SlidersHorizontal,
-  UsersRound,
   Workflow,
 } from "lucide-react";
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { ResizeSeparator } from "./settings-view-components";
 import {
   AccountPreferencesPage,
-  AlertRoutingPage,
   EngineStatusPage,
-  MembersAccessPage,
-  SimulationPresetsPage,
+  SavedScenariosPage,
   WorkspaceMapPage,
 } from "./settings-view-pages";
 import {
@@ -44,6 +40,10 @@ import {
 import "./settings-view.css";
 
 export interface SettingsViewProps {
+  apiUrl: string;
+  theme: "light" | "dark";
+  onToggleTheme?: () => void;
+  onOpenScenarios: () => void;
   accountInitials?: string;
   accountName?: string;
   onClose: () => void;
@@ -71,7 +71,7 @@ const SETTINGS_GROUPS: ReadonlyArray<{
   {
     label: "Account",
     items: [
-      { id: "account-preferences", label: "Preferences", icon: CircleUserRound },
+      { id: "account-preferences", label: "Appearance", icon: CircleUserRound },
     ],
   },
   {
@@ -80,28 +80,8 @@ const SETTINGS_GROUPS: ReadonlyArray<{
       { id: "workspace-map", label: "Map & display", icon: Map },
       {
         id: "workspace-simulation",
-        label: "Simulation presets",
+        label: "Saved scenarios",
         icon: SlidersHorizontal,
-      },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
-      {
-        id: "operations-alert-routing",
-        label: "Alert routing",
-        icon: BellRing,
-      },
-    ],
-  },
-  {
-    label: "Organization",
-    items: [
-      {
-        id: "organization-members",
-        label: "Members & roles",
-        icon: UsersRound,
       },
     ],
   },
@@ -125,15 +105,19 @@ function settingsItemMatchesSearch(
 }
 
 export function SettingsView({
-  accountInitials = "LW",
-  accountName = "Luke Watt",
+  apiUrl,
+  theme,
+  onToggleTheme,
+  onOpenScenarios,
+  accountInitials = "",
+  accountName = "",
   onClose,
   onOpenRealSettings,
-  organizationName = "WattByte Nexus",
+  organizationName = "",
   realSettingsSlot,
 }: SettingsViewProps) {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(
-    "operations-alert-routing",
+    "engine-status",
   );
   const [navWidth, setNavWidth] = useState(DEFAULT_NAV_WIDTH);
   const [searchQuery, setSearchQuery] = useState("");
@@ -298,7 +282,7 @@ export function SettingsView({
               <div className="flex items-center">{realSettingsSlot}</div>
             ) : onOpenRealSettings ? (
               <Button
-                aria-label="Open general workspace settings; alert-routing preview changes will not be saved"
+                aria-label="Open device-local workspace settings"
                 onClick={onOpenRealSettings}
                 size="sm"
                 type="button"
@@ -319,7 +303,7 @@ export function SettingsView({
           <SelectMenuTrigger aria-label="Settings section" className="w-full">
             <SelectMenuValue />
           </SelectMenuTrigger>
-          <SelectMenuContent className="surface-glass-overlay min-w-[var(--radix-select-trigger-width)]">
+          <SelectMenuContent className={`${theme === "dark" ? "dark" : "theme-light"} surface-glass-overlay min-w-[var(--radix-select-trigger-width)]`}>
             {SETTINGS_GROUPS.map((group, index) => (
               <div key={group.label}>
                 {index > 0 ? <Separator className="my-1" /> : null}
@@ -340,22 +324,16 @@ export function SettingsView({
       <div className="dt-settings-content min-h-0 bg-background" aria-label={`${pageCopy.title} settings`}>
         <ScrollArea className="h-full">
           <section hidden={activeSection !== "account-preferences"}>
-            <AccountPreferencesPage />
+            <AccountPreferencesPage theme={theme} onToggleTheme={onToggleTheme} />
           </section>
           <section hidden={activeSection !== "workspace-map"}>
             <WorkspaceMapPage onOpenRealSettings={onOpenRealSettings} />
           </section>
           <section hidden={activeSection !== "workspace-simulation"}>
-            <SimulationPresetsPage />
-          </section>
-          <section hidden={activeSection !== "operations-alert-routing"}>
-            <AlertRoutingPage />
-          </section>
-          <section hidden={activeSection !== "organization-members"}>
-            <MembersAccessPage />
+            <SavedScenariosPage onOpenScenarios={onOpenScenarios} />
           </section>
           <section hidden={activeSection !== "engine-status"}>
-            <EngineStatusPage onOpenRealSettings={onOpenRealSettings} />
+            <EngineStatusPage apiUrl={apiUrl} />
           </section>
         </ScrollArea>
       </div>

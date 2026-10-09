@@ -56,21 +56,6 @@ export function createDigitalTwinPolePropertiesAsset({
     connectedSpans: pole.assetIds.flatMap<PolePropertiesAsset["connectedSpans"][number]>((assetId) => {
       const line = lineById.get(assetId);
       const conductor = conductorByAssetId.get(assetId);
-      if (conductor?.inferredConnection) {
-        const otherId = conductor.startPoleId === pole.id ? conductor.endPoleId : conductor.startPoleId;
-        const otherNumber = network.poles.findIndex(candidate => candidate.id === otherId) + 1;
-        return [{
-          assetId,
-          endpoint: conductor.startPoleId === pole.id ? "start" as const : "end" as const,
-          name: `To pole ${otherNumber}`,
-          spanLengthM: conductor.lengthM,
-          reviewStatus: (conductor.evidenceAssetIds?.length ?? 0) > 0
-            ? "Wire-aligned candidate · verify attachment"
-            : "Proximity candidate · no measured wire",
-          evidenceCount: conductor.evidenceAssetIds?.length ?? 0,
-          latestPhysics: null,
-        }];
-      }
       if (!line || !conductor) return [];
       return [
         {
@@ -91,11 +76,11 @@ export function createDigitalTwinPolePropertiesAsset({
     },
     name: `Pole ${poleNumber || pole.id}`,
     observation: null,
-    poleType: pole.measured ? "Survey pole · classification unverified" : "Distribution pole",
+    poleType: pole.measured ? "Survey pole" : "Distribution pole",
     networkReview: pole.measured
       ? pole.assetIds.length > 0
-        ? "These spans are reconstructed candidates. Attachments need review; candidates are excluded from simulation."
-        : "Unresolved: no candidate support within the 100 m survey search limit. This detection may be a standalone pole."
+        ? "Connected spans are included in physics and vegetation-contact checks."
+        : "No published conductor connects this pole."
       : undefined,
     regionId,
   };

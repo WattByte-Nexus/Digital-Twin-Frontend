@@ -1,9 +1,8 @@
-import { applyGroupEffects, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
 import {
   MapCanvas,
-  resolveThemeBasemapStyle,
   setExternalDeckLayerOrderHandler,
 } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
@@ -143,8 +142,6 @@ import { FileNamePromptDialog } from "./FileNamePromptDialog";
 import { ProjectPluginTrustDialog } from "./ProjectPluginTrustDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
-import { DigitalTwinHeader } from "./DigitalTwinHeader";
-import { openSettingsSection } from "./SettingsDialog";
 import { ExpertWorkspaceHeader } from "./ExpertWorkspaceHeader";
 import "./digital-twin-shell.css";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
@@ -154,12 +151,8 @@ import {
   resolveAuthorizedLocation,
   type AuthorizedLocationResolution,
   type DigitalTwinAccessContext,
-  type DigitalTwinView,
 } from "../../product-modes/digital-twin/access";
-import {
-  DigitalTwinWorkspace,
-  type DigitalTwinWorkspaceView,
-} from "../../product-modes/digital-twin/ui/DigitalTwinWorkspace";
+
 
 /**
  * Confirm loading a vector source whose feature count tripped the loader's
@@ -174,15 +167,6 @@ import {
  * roughly where the transient allocation starts to be felt.
  */
 const LARGE_RASTER_SAMPLE_LIMIT = 40_000_000;
-const DIGITAL_TWIN_IMAGERY_BASEMAP = "geolibre://basemap/earth-usgs-imagery";
-const MAP_ONLY_QUERY_VALUES = new Set(["", "true", "1", "yes", "on"]);
-
-function locationUsesMapOnly(location: string): boolean {
-  const params = new URL(location, "https://geolibre.invalid").searchParams;
-  const value = params.get("maponly")?.trim().toLowerCase() ?? "";
-  return params.has("maponly") && MAP_ONLY_QUERY_VALUES.has(value);
-}
-
 function confirmLargeVectorDataset({ name, featureCount }: LargeVectorDataset) {
   return window.confirm(
     i18n.t("toolbar.item.largeVectorDesc", {
@@ -498,14 +482,6 @@ type ImportedVectorLayer = Awaited<ReturnType<typeof loadDroppedVectorFiles>>[nu
 const DEFAULT_SIDE_PANEL_WIDTH = 320;
 const MIN_SIDE_PANEL_WIDTH = 180;
 const MAX_SIDE_PANEL_WIDTH = 560;
-const DIGITAL_TWIN_PANEL_ID = "digital-twin-demo-panel";
-
-function openDigitalTwinPanelIfAvailable(): void {
-  if (getRightPanel(DIGITAL_TWIN_PANEL_ID)) {
-    openRightPanel(DIGITAL_TWIN_PANEL_ID);
-  }
-}
-
 // The notebook panel hosts a full Jupyter UI, so it needs far more room than
 // the layer/style side panels.
 const DEFAULT_NOTEBOOK_PANEL_WIDTH = 480;
@@ -576,15 +552,6 @@ export function DesktopShell({
   const { t } = useTranslation();
   const shellRef = useRef<HTMLDivElement>(null);
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
-  const workspaceMode = route.mode;
-  const digitalTwinView = route.view;
-  const mapOnly = locationUsesMapOnly(route.location);
-  const [digitalTwinWorkspaceView, setDigitalTwinWorkspaceView] =
-    useState<DigitalTwinWorkspaceView>(digitalTwinView);
-
-  useEffect(() => {
-    setDigitalTwinWorkspaceView(digitalTwinView);
-  }, [digitalTwinView]);
   // Push the translated bookmark labels into the framework-agnostic plugins
   // package (which can't call t() itself). Done here rather than in TopToolbar
   // so it still applies when the toolbar is hidden (e.g. `?maponly`), where the
@@ -806,161 +773,7 @@ export function DesktopShell({
   const [dropError, setDropError] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
-  const projectBasemapStyleUrl = useAppStore((state) => state.basemapStyleUrl);
-  const projectDisplayBasemap = resolveThemeBasemapStyle(projectBasemapStyleUrl, themeMode);
-  const digitalTwinPresentationBasemap = resolveThemeBasemapStyle(
-    DIGITAL_TWIN_IMAGERY_BASEMAP,
-    themeMode,
-  );
-  const projectDisplayBasemapRef = useRef(projectDisplayBasemap);
-  projectDisplayBasemapRef.current = projectDisplayBasemap;
-  const presentationStyleRequestRef = useRef<{
-    controller: MapController;
-    projectDisplayBasemap: string;
-    presentationBasemap: string;
-  } | null>(null);
-  const presentationStyleLoadCleanupRef = useRef<(() => void) | null>(null);
-
-  const applyPresentationMapStyle = useCallback((styleUrl: string): boolean => {
-    const controller = mapControllerRef.current;
-    const map = controller?.getMap();
-    if (!controller || !map) return false;
-
-    presentationStyleLoadCleanupRef.current?.();
-    let listening = true;
-    const syncProjectLayers = () => {
-      if (!listening) return;
-      listening = false;
-      presentationStyleLoadCleanupRef.current = null;
-      if (mapControllerRef.current !== controller) return;
-
-      const state = useAppStore.getState();
-      controller.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
-      controller.setBasemapVisible(state.basemapVisible);
-      controller.setBasemapOpacity(state.basemapOpacity);
-      controller.highlightFeature(
-        state.layers.find((layer) => layer.id === state.selectedLayerId),
-        state.selectedFeatureIds.length > 0
-          ? state.selectedFeatureIds
-          : state.selectedFeatureId
-            ? [state.selectedFeatureId]
-            : [],
-      );
-      setMapReadyGeneration((generation) => generation + 1);
-    };
-
-    map.once("style.load", syncProjectLayers);
-    presentationStyleLoadCleanupRef.current = () => {
-      if (!listening) return;
-      listening = false;
-      map.off("style.load", syncProjectLayers);
-    };
-    controller.setStyle(styleUrl);
-    return true;
-  }, []);
-
-  // Entering Digital Twin mode changes only the displayed map style. The
-  // project's basemap remains untouched (and clean), and the current project
-  // style is restored when the user returns to Expert GIS.
-  useEffect(() => {
-    if (workspaceMode !== "digital-twin") return;
-    return () => {
-      const request = presentationStyleRequestRef.current;
-      presentationStyleRequestRef.current = null;
-      if (!request) return;
-      const restoreStyle = projectDisplayBasemapRef.current;
-      if (restoreStyle !== request.presentationBasemap) {
-        applyPresentationMapStyle(restoreStyle);
-      }
-    };
-  }, [applyPresentationMapStyle, workspaceMode]);
-
-  // Defer until after MapCanvas's own store/theme effects. If a project or
-  // theme change refreshes its saved basemap while Digital Twin is open, this
-  // presentation layer remains authoritative without racing that refresh.
-  useEffect(() => {
-    if (workspaceMode !== "digital-twin") return;
-    const frame = window.requestAnimationFrame(() => {
-      const controller = mapControllerRef.current;
-      if (!controller) return;
-      const previous = presentationStyleRequestRef.current;
-      if (
-        previous?.controller === controller &&
-        previous.projectDisplayBasemap === projectDisplayBasemap &&
-        previous.presentationBasemap === digitalTwinPresentationBasemap
-      ) {
-        return;
-      }
-
-      if (
-        projectDisplayBasemap === digitalTwinPresentationBasemap ||
-        applyPresentationMapStyle(digitalTwinPresentationBasemap)
-      ) {
-        presentationStyleRequestRef.current = {
-          controller,
-          projectDisplayBasemap,
-          presentationBasemap: digitalTwinPresentationBasemap,
-        };
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [
-    applyPresentationMapStyle,
-    digitalTwinPresentationBasemap,
-    mapReadyGeneration,
-    projectDisplayBasemap,
-    workspaceMode,
-  ]);
-
-  useEffect(
-    () => () => {
-      presentationStyleLoadCleanupRef.current?.();
-    },
-    [],
-  );
-
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
-  useEffect(() => {
-    if (workspaceMode === "digital-twin" && externalPluginsReady) {
-      openDigitalTwinPanelIfAvailable();
-    }
-  }, [externalPluginsReady, workspaceMode]);
-
-  const handleDigitalTwinNavigate = useCallback(
-    (view: DigitalTwinView, resourceId?: string) => {
-      setDigitalTwinWorkspaceView(view);
-      const regionId =
-        route.regionId ??
-        access.regions.find(
-          (region) => region.id === access.mostRecentlyUsedRegionId
-        )?.id ??
-        access.regions[0]?.id;
-      if (!regionId) return;
-      const resourcePath = resourceId ? `/${encodeURIComponent(resourceId)}` : "";
-      navigate(`/regions/${encodeURIComponent(regionId)}/${view}${resourcePath}`);
-      openDigitalTwinPanelIfAvailable();
-    },
-    [access.mostRecentlyUsedRegionId, access.regions, navigate, route.regionId]
-  );
-
-  const handleOpenDigitalTwinSettings = useCallback(() => {
-    setDigitalTwinWorkspaceView("settings");
-  }, []);
-
-  const handleDigitalTwinMapPresentation = useCallback((mode: "3d" | "plan") => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    map.easeTo({
-      bearing: mode === "3d" ? -24 : 0,
-      pitch: mode === "3d" ? 48 : 0,
-      duration: reducedMotion ? 0 : 500,
-    });
-  }, []);
-
-  const handleOpenExpertWorkspace = useCallback(() => {
-    navigate(`/workspace?returnTo=${encodeURIComponent(route.location)}`);
-  }, [navigate, route.location]);
 
   const handleReturnToDigitalTwin = useCallback(() => {
     const returnTo = new URLSearchParams(window.location.search).get(
@@ -970,8 +783,6 @@ export function DesktopShell({
       const resolution = resolveAuthorizedLocation(access, returnTo);
       if (resolution.kind === "allowed" && resolution.mode !== "expert-gis") {
         navigate(resolution.location);
-        if (resolution.mode === "digital-twin")
-          openDigitalTwinPanelIfAvailable();
         return;
       }
     }
@@ -981,19 +792,11 @@ export function DesktopShell({
       )?.id ?? access.regions[0]?.id;
     if (access.capabilities.includes("digital-twin") && regionId) {
       navigate(`/regions/${encodeURIComponent(regionId)}/live`);
-      openDigitalTwinPanelIfAvailable();
     } else if (access.capabilities.includes("administration")) {
       navigate("/admin");
     }
   }, [access, navigate]);
 
-  const handleRegionChange = useCallback(
-    (regionId: string) => {
-      if (!access.regions.some((region) => region.id === regionId)) return;
-      navigate(`/regions/${encodeURIComponent(regionId)}/${digitalTwinView}`);
-    },
-    [access.regions, digitalTwinView, navigate]
-  );
   // Gate plugin URLs carried inside an opened project behind an explicit trust
   // decision before any of their code is fetched or imported (#1062).
   const projectPluginTrust = useProjectPluginTrust();
@@ -2106,8 +1909,6 @@ export function DesktopShell({
     <div
       ref={shellRef}
       className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background"
-      data-digital-twin-shell={workspaceMode === "digital-twin" ? "" : undefined}
-      data-map-only={workspaceMode === "digital-twin" && mapOnly ? "" : undefined}
       style={shellStyle}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
@@ -2115,36 +1916,7 @@ export function DesktopShell({
       onDrop={handleDrop}
     >
       {createPortal(mapSurface, mapContentEl)}
-      {layoutOptions.toolbarVisible &&
-      !(workspaceMode === "digital-twin" && digitalTwinWorkspaceView === "settings") ? (
-        workspaceMode === "digital-twin" ? (
-          <SectionErrorBoundary label="Digital Twin header">
-            <DigitalTwinHeader
-              access={access}
-              activeView={digitalTwinView}
-              settingsActive={digitalTwinWorkspaceView === "settings"}
-              activeRegionId={route.regionId}
-              compact={layoutOptions.compact}
-              mapControllerRef={mapControllerRef}
-              themeMode={themeMode}
-              onNavigate={handleDigitalTwinNavigate}
-              onOpenSettingsView={handleOpenDigitalTwinSettings}
-              onOpenAdministration={
-                access.capabilities.includes("administration")
-                  ? () => navigate("/admin")
-                  : undefined
-              }
-              onOpenDiagnostics={() => setDiagnosticsOpen(true)}
-              onOpenExpertWorkspace={
-                access.capabilities.includes("expert-gis")
-                  ? handleOpenExpertWorkspace
-                  : undefined
-              }
-              onRegionChange={handleRegionChange}
-              onToggleThemeMode={onToggleThemeMode}
-            />
-          </SectionErrorBoundary>
-        ) : (
+      {layoutOptions.toolbarVisible ? (
           <>
             <SectionErrorBoundary label="Expert GIS workspace header">
               <ExpertWorkspaceHeader onReturnToDigitalTwin={handleReturnToDigitalTwin} />
@@ -2166,7 +1938,6 @@ export function DesktopShell({
               />
             </SectionErrorBoundary>
           </>
-        )
       ) : null}
       <div data-workspace-row="" className="relative flex min-h-0 flex-1 flex-col md:flex-row">
         {/* The Browser panel body is portaled into its dedicated content host
@@ -2182,28 +1953,6 @@ export function DesktopShell({
               browserContentEl,
             )
           : null}
-        {workspaceMode === "digital-twin" ? (
-          mapOnly ? (
-            mapHost
-          ) : (
-            <DigitalTwinWorkspace
-              activeRegionId={route.regionId ?? access.regions[0]?.id ?? ""}
-              activeView={digitalTwinWorkspaceView}
-              location={route.location}
-              mapControllerRef={mapControllerRef}
-              mapSlot={mapHost}
-              onMapPresentationChange={handleDigitalTwinMapPresentation}
-              onNavigate={handleDigitalTwinNavigate}
-              onOpenRealSettings={() => openSettingsSection("interface")}
-              pluginContentEl={dockContentEl}
-              regions={access.regions.map((region) => ({
-                ...region,
-                description: `${region.name} operational area`,
-              }))}
-              theme={themeMode}
-            />
-          )
-        ) : (
           <>
         {replaceLayersPanelId ? (
           // Shared-rail mode on the Layers (left) side: the plugin panel shares
@@ -2328,7 +2077,6 @@ export function DesktopShell({
           </SectionErrorBoundary>
         ) : null}
           </>
-        )}
       </div>
       {layoutOptions.attributePanelVisible ? (
         <SectionErrorBoundary label="Attribute table">

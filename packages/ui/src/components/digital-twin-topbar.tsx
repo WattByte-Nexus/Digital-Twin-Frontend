@@ -151,7 +151,7 @@ export function DigitalTwinTopbar({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                aria-label="Search regions, assets, alerts, and runs"
+                aria-label="Search regions, assets, and runs"
                 className="hidden h-10 gap-2 px-2.5 text-muted-foreground hover:text-foreground @sm/topbar:inline-flex"
                 onClick={onOpenSearch}
                 size="sm"
@@ -168,7 +168,7 @@ export function DigitalTwinTopbar({
               </Button>
             </TooltipTrigger>
             <TooltipContent className={overlayClassName}>
-              Search regions, assets, alerts, and runs
+              Search regions, assets, and runs
             </TooltipContent>
           </Tooltip>
 
@@ -186,13 +186,13 @@ export function DigitalTwinTopbar({
             overlayClassName={overlayClassName}
           />
 
-          <DigitalTwinAlertsDropdown
+          {onOpenAlerts || alerts.length > 0 || alertsCount > 0 ? <DigitalTwinAlertsDropdown
             alerts={alerts}
             alertsCount={alertsCount}
             inboxContainer={alertsPanelContainer}
             onOpenAlerts={onOpenAlerts}
             overlayClassName={overlayClassName}
-          />
+          /> : null}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

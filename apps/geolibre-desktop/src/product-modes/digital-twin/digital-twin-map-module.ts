@@ -4,6 +4,8 @@ import {
 } from "@geolibre/map/digital-twin-surface-layers";
 import type { DigitalTwinReadyPointCloudDataset } from "../../lib/digital-twin-point-cloud";
 import type { DigitalTwinTreeAsset } from "../../lib/digital-twin-assets";
+import type { DigitalTwinEarthEngineLayer } from "../../lib/digital-twin-earth-engine";
+import { createDigitalTwinRasterLayer } from "./digital-twin-raster";
 import { createDigitalTwinPointCloudLayer } from "./digital-twin-lidar";
 import {
   createDigitalTwinPowerLineLayers,
@@ -32,6 +34,7 @@ export interface DigitalTwinMapSurfaceLayerOptions {
   powerLineNetwork?: DigitalTwinPowerLineNetwork;
   poleInteraction?: DigitalTwinPowerPoleInteraction;
   pointCloud?: DigitalTwinMapPointCloud;
+  raster?: { descriptor: DigitalTwinEarthEngineLayer; onError: (error: Error) => void };
 }
 
 /**
@@ -45,8 +48,15 @@ export function createDigitalTwinMapSurfaceLayers({
   powerLineNetwork,
   poleInteraction,
   pointCloud,
+  raster,
 }: DigitalTwinMapSurfaceLayerOptions): DigitalTwinSurfaceLayerGroup[] {
   const groups: DigitalTwinSurfaceLayerGroup[] = [];
+
+  if (raster) groups.push({
+    id: "digital-twin-raster",
+    surface: DIGITAL_TWIN_SHARED_SURFACE,
+    layers: [createDigitalTwinRasterLayer(raster.descriptor, raster.onError)],
+  });
 
   if (trees && trees.length > 0) {
     groups.push({

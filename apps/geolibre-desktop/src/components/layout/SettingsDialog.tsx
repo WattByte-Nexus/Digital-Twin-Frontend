@@ -1,3 +1,5 @@
+import { defaultDigitalTwinApiUrl, normalizeDigitalTwinApiUrl, rememberDigitalTwinApiUrl } from "../../lib/digital-twin-api";
+import { checkDigitalTwinEngineHealth } from "../../lib/digital-twin-status";
 import {
   DEFAULT_PROJECT_PREFERENCES,
   ELLIPSOIDS,
@@ -136,19 +138,9 @@ export type SettingsFocusTarget = "shareToken" | "accentColor";
 /** Window event letting any panel open Settings at a given section (no prop-drilling). */
 export const OPEN_SETTINGS_EVENT = "geolibre:open-settings";
 
-const DIGITAL_TWIN_API_STORAGE_KEY = "geolibre.digital-twin-demo.api-url";
-const DIGITAL_TWIN_CONNECTION_EVENT = "geolibre:digital-twin-connection";
-const DIGITAL_TWIN_CONNECTION_STATUS_EVENT = "geolibre:digital-twin-connection-status";
-const DEFAULT_DIGITAL_TWIN_API_URL = "http://127.0.0.1:8000";
-
 interface DigitalTwinConnectionStatus {
   detail: string;
   status: "ready" | "error" | "muted";
-}
-
-function readDigitalTwinApiUrl(): string {
-  if (typeof window === "undefined") return DEFAULT_DIGITAL_TWIN_API_URL;
-  return window.localStorage.getItem(DIGITAL_TWIN_API_STORAGE_KEY) ?? DEFAULT_DIGITAL_TWIN_API_URL;
 }
 
 /**
@@ -403,7 +395,7 @@ export function SettingsDialog({
   const showSettingsItem = (id: string) => isMenuItemVisible(desktopSettings.uiProfile, id);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
-  const [digitalTwinApiUrl, setDigitalTwinApiUrl] = useState(readDigitalTwinApiUrl);
+  const [digitalTwinApiUrl, setDigitalTwinApiUrl] = useState(defaultDigitalTwinApiUrl);
   const [digitalTwinConnectionStatus, setDigitalTwinConnectionStatus] =
     useState<DigitalTwinConnectionStatus | null>(null);
   const [digitalTwinConnectionError, setDigitalTwinConnectionError] = useState<string | null>(
@@ -564,7 +556,7 @@ export function SettingsDialog({
       setCustomColorDraft(null);
       return;
     }
-    setDigitalTwinApiUrl(readDigitalTwinApiUrl());
+    setDigitalTwinApiUrl(defaultDigitalTwinApiUrl());
     setDigitalTwinConnectionError(null);
     const seededPreferences = clonePreferences(useAppStore.getState().preferences);
     setDraftPreferences(seededPreferences);
@@ -599,36 +591,21 @@ export function SettingsDialog({
     setLiveProjection(mapControllerRef.current?.readProjection() ?? null);
   }, [open, mapControllerRef]);
 
-  useEffect(() => {
-    const onConnectionStatus = (event: Event) => {
-      const detail = (event as CustomEvent<DigitalTwinConnectionStatus>).detail;
-      if (!detail || !["ready", "error", "muted"].includes(detail.status)) return;
-      setDigitalTwinConnectionStatus(detail);
-    };
-    window.addEventListener(DIGITAL_TWIN_CONNECTION_STATUS_EVENT, onConnectionStatus);
-    return () =>
-      window.removeEventListener(DIGITAL_TWIN_CONNECTION_STATUS_EVENT, onConnectionStatus);
-  }, []);
-
-  const reconnectDigitalTwin = () => {
-    let apiUrl: string;
+  const reconnectDigitalTwin = async () => {
     try {
-      const parsed = new URL(digitalTwinApiUrl.trim());
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        throw new Error("The API URL must use http or https.");
-      }
-      apiUrl = parsed.href.replace(/\/+$/, "");
-    } catch {
-      setDigitalTwinConnectionError("Enter a valid HTTP API URL.");
-      return;
+      const apiUrl = normalizeDigitalTwinApiUrl(digitalTwinApiUrl);
+      setDigitalTwinConnectionError(null);
+      setDigitalTwinConnectionStatus({ status: "muted", detail: "Checking Engine…" });
+      const health = await checkDigitalTwinEngineHealth(apiUrl);
+      if (health === "offline") throw new Error("The Engine is unavailable.");
+      rememberDigitalTwinApiUrl(apiUrl);
+      setDigitalTwinApiUrl(apiUrl);
+      setDigitalTwinConnectionStatus({ status: "ready", detail: "Engine reachable. Connection saved on this device; reopen the native workspace to apply." });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Connection failed.";
+      setDigitalTwinConnectionError(message);
+      setDigitalTwinConnectionStatus({ status: "error", detail: message });
     }
-    window.localStorage.setItem(DIGITAL_TWIN_API_STORAGE_KEY, apiUrl);
-    setDigitalTwinApiUrl(apiUrl);
-    setDigitalTwinConnectionError(null);
-    setDigitalTwinConnectionStatus({ status: "muted", detail: "Connecting…" });
-    window.dispatchEvent(
-      new CustomEvent(DIGITAL_TWIN_CONNECTION_EVENT, { detail: { apiUrl } }),
-    );
   };
 
   // Let other panels deep-link into a specific Settings section (e.g. the AI

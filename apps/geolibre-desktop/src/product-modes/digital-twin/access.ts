@@ -45,7 +45,7 @@ export function createDevelopmentAccess(
   const regions = regionId
     ? engineRegions.filter((region) => region.id === regionId)
     : [...engineRegions];
-  if (regions.length === 0) {
+  if (regions.length === 0 && regionId) {
     throw new Error(
       regionId
         ? `The Digital Twin Engine does not expose region ${regionId}.`

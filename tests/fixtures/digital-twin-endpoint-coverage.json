@@ -1,0 +1,343 @@
+{
+  "description": "Declared native operation ownership; CI guards schema coverage, while runtime tests verify behavior. This manifest is not evidence of live-service validation.",
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/",
+      "disposition": "infrastructure",
+      "reason": "Root readiness alias; native UI uses explicit health/live and health/ready."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data-sources",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-sources.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/SourceInventory.tsx",
+      "test": "tests/digital-twin-earth-engine.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/live",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-status.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/SettingsView.tsx",
+      "test": "tests/digital-twin-status.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/ready",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-status.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/SettingsView.tsx",
+      "test": "tests/digital-twin-status.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/map-layers/{layer_id}/data.json",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-live-weather.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/DigitalTwinMapWorkspace.tsx",
+      "test": "tests/digital-twin-live-weather.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/map-layers/{layer_id}/data.tif",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-earth-engine.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/SourceInventory.tsx",
+      "test": "tests/digital-twin-earth-engine.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/point-clouds/{region_id}/{dataset_id}/{version}/{object_path}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-point-cloud.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/SurveyAdministration.tsx",
+      "test": "tests/digital-twin-point-cloud.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-regions.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/RegionAdministration.tsx",
+      "test": "tests/digital-twin-data-administration.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/regions",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-regions.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/RegionAdministration.tsx",
+      "test": "tests/digital-twin-data-administration.test.ts"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/regions/{region_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-regions.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/RegionAdministration.tsx",
+      "test": "tests/digital-twin-data-administration.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-regions.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/RegionAdministration.tsx",
+      "test": "tests/digital-twin-data-administration.test.ts"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/regions/{region_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-regions.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/RegionAdministration.tsx",
+      "test": "tests/digital-twin-data-administration.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/assets",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/assets/AssetsView.tsx",
+      "test": "tests/digital-twin-assets.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/regions/{region_id}/assets",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/AssetIntake.tsx",
+      "test": "tests/digital-twin-assets.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/regions/{region_id}/assets:batch",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/AssetIntake.tsx",
+      "test": "tests/digital-twin-assets.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/regions/{region_id}/assets:csv",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/assets/AssetsView.tsx",
+      "test": "tests/digital-twin-assets.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/assets.geojson",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/assets/AssetsView.tsx",
+      "test": "tests/digital-twin-assets.test.ts"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/regions/{region_id}/assets/{asset_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/assets/AssetsView.tsx",
+      "test": "tests/digital-twin-assets.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/assets/{asset_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/assets/AssetsView.tsx",
+      "test": "tests/digital-twin-assets.test.ts"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/regions/{region_id}/assets/{asset_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/assets/AssetsView.tsx",
+      "test": "tests/digital-twin-assets.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/earth-engine",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-earth-engine.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/SourceInventory.tsx",
+      "test": "tests/digital-twin-earth-engine.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/earth-engine/map-layers",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-earth-engine.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/SourceInventory.tsx",
+      "test": "tests/digital-twin-earth-engine.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/point-cloud-datasets",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-point-cloud.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/SurveyAdministration.tsx",
+      "test": "tests/digital-twin-point-cloud.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/point-cloud-datasets/{dataset_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-point-cloud.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/SurveyAdministration.tsx",
+      "test": "tests/digital-twin-point-cloud.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/regions/{region_id}/point-cloud-datasets/{dataset_id}/surveys",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-point-cloud.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/SurveyAdministration.tsx",
+      "test": "tests/digital-twin-point-cloud.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/regions/{region_id}/publish",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-regions.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/RegionAdministration.tsx",
+      "test": "tests/digital-twin-data-administration.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/readiness",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-regions.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/RegionAdministration.tsx",
+      "test": "tests/digital-twin-data-administration.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/weather-datasets",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-earth-engine.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/SourceInventory.tsx",
+      "test": "tests/digital-twin-earth-engine.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/weather-datasets/{dataset_id}/map-layers",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-earth-engine.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/SourceInventory.tsx",
+      "test": "tests/digital-twin-earth-engine.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/weather-datasets/{dataset_id}/station-observations",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-live-weather.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/DigitalTwinMapWorkspace.tsx",
+      "test": "tests/digital-twin-live-weather.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions/{region_id}/weather-forecasts/resolve",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-scenarios.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/ScenarioBuilder.tsx",
+      "test": "tests/digital-twin-scenarios.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scenarios",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-scenarios.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/ScenariosView.tsx",
+      "test": "tests/digital-twin-scenarios.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scenarios",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-scenarios.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/ScenariosView.tsx",
+      "test": "tests/digital-twin-scenarios.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scenarios/{scenario_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-scenarios.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/ScenariosView.tsx",
+      "test": "tests/digital-twin-scenarios.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/simulation-runs",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-runs.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/RunsView.tsx",
+      "test": "tests/digital-twin-runs.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/simulation-runs",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-runs.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/RunsView.tsx",
+      "test": "tests/digital-twin-runs.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/simulation-runs/{run_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-runs.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/RunsView.tsx",
+      "test": "tests/digital-twin-runs.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/simulation-runs/{run_id}/cancel",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-run-lifecycle.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/RunsView.tsx",
+      "test": "tests/digital-twin-run-lifecycle.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/simulation-runs/{run_id}/events",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-run-lifecycle.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/RunsView.tsx",
+      "test": "tests/digital-twin-run-lifecycle.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/simulation-runs/{run_id}/result.geojson",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-runs.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/RunsView.tsx",
+      "test": "tests/digital-twin-runs.test.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/simulation-runs/{run_id}/ticks/{tick}/result.geojson",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-runs.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/views/RunsView.tsx",
+      "test": "tests/digital-twin-runs.test.ts"
+    }
+  ],
+  "schemaHiddenOperations": [
+    {
+      "method": "HEAD",
+      "path": "/api/v1/map-layers/{layer_id}/data.tif",
+      "surface": "Native source raster preparation"
+    },
+    {
+      "method": "HEAD",
+      "path": "/api/v1/point-clouds/{region_id}/{dataset_id}/{version}/{object_path}",
+      "surface": "Point-cloud binary delivery protocol"
+    }
+  ]
+}

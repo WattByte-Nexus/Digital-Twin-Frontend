@@ -6,12 +6,6 @@ import {
   CardHeader,
   CardTitle,
   Label,
-  SelectMenu,
-  SelectMenuContent,
-  SelectMenuItem,
-  SelectMenuTrigger,
-  SelectMenuValue,
-  Switch,
   cn,
 } from "@geolibre/ui";
 import {
@@ -76,51 +70,6 @@ export function SettingRow({
       )}
       <div className="flex min-w-0 items-center justify-start sm:justify-end">{children}</div>
     </div>
-  );
-}
-
-export function SettingsRows({ children }: { children: ReactNode }) {
-  return <div className="divide-y divide-border/70">{children}</div>;
-}
-
-export function SettingsSwitch({
-  checked,
-  id,
-  onCheckedChange,
-}: {
-  checked: boolean;
-  id: string;
-  onCheckedChange: (checked: boolean) => void;
-}) {
-  return <Switch checked={checked} id={id} onCheckedChange={onCheckedChange} />;
-}
-
-export function SettingsSelect({
-  ariaLabel,
-  id,
-  onValueChange,
-  options,
-  value,
-}: {
-  ariaLabel: string;
-  id?: string;
-  onValueChange: (value: string) => void;
-  options: ReadonlyArray<{ label: string; value: string }>;
-  value: string;
-}) {
-  return (
-    <SelectMenu onValueChange={onValueChange} value={value}>
-      <SelectMenuTrigger aria-label={ariaLabel} className="w-full sm:max-w-64" id={id}>
-        <SelectMenuValue />
-      </SelectMenuTrigger>
-      <SelectMenuContent className="surface-glass-overlay min-w-[var(--radix-select-trigger-width)]">
-        {options.map((option) => (
-          <SelectMenuItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectMenuItem>
-        ))}
-      </SelectMenuContent>
-    </SelectMenu>
   );
 }
 

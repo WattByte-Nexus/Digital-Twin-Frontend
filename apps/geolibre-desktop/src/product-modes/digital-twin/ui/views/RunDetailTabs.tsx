@@ -35,6 +35,7 @@ import {
 
 interface RunDetailTabsProps {
   apiUrl: string;
+  completedTicks?: number;
   refreshKey: string;
   runId: string;
 }
@@ -118,10 +119,10 @@ function OverviewPanel({ data }: { data: Extract<RunTabData, { kind: "overview" 
         <CardContent className="px-5">
           <Table className="table-fixed">
             <TableBody>
-              <TableRow><TableCell className="w-2/5 text-muted-foreground">Trigger</TableCell><TableCell className="min-w-0 text-right">{titleCase(data.run.trigger.kind ?? "automatic")}</TableCell></TableRow>
-              <TableRow><TableCell className="w-2/5 text-muted-foreground">Scenario</TableCell><TableCell className="min-w-0 text-right break-all">{displayValue(data.run.trigger.scenario_id)}</TableCell></TableRow>
-              <TableRow><TableCell className="w-2/5 text-muted-foreground">Request</TableCell><TableCell className="min-w-0 text-right font-mono text-xs break-all">{displayValue(data.run.trigger.correlation_id)}</TableCell></TableRow>
-              <TableRow><TableCell className="w-2/5 text-muted-foreground">Failure</TableCell><TableCell className="min-w-0 text-right break-words">{data.run.failure ? displayValue(data.run.failure.message ?? data.run.failure.detail ?? data.run.failure.error_type) : "None"}</TableCell></TableRow>
+              <TableRow><TableCell className="w-2/5 text-muted-foreground">Trigger</TableCell><TableCell className="min-w-0 text-right">{titleCase("kind" in data.run.trigger ? data.run.trigger.kind ?? "automatic" : "automatic")}</TableCell></TableRow>
+              <TableRow><TableCell className="w-2/5 text-muted-foreground">Scenario</TableCell><TableCell className="min-w-0 text-right break-all">{displayValue("scenario_id" in data.run.trigger ? data.run.trigger.scenario_id : null)}</TableCell></TableRow>
+              <TableRow><TableCell className="w-2/5 text-muted-foreground">Request</TableCell><TableCell className="min-w-0 text-right font-mono text-xs break-all">{displayValue("correlation_id" in data.run.trigger ? data.run.trigger.correlation_id : null)}</TableCell></TableRow>
+              <TableRow><TableCell className="w-2/5 text-muted-foreground">Failure</TableCell><TableCell className="min-w-0 text-right break-words">{data.run.failure ? displayValue(data.run.failure.error_message) : "None"}</TableCell></TableRow>
               <TableRow><TableCell className="w-2/5 text-muted-foreground">Result artifact</TableCell><TableCell className="min-w-0 text-right font-mono text-xs break-all">{displayValue(data.run.final_result_ref)}</TableCell></TableRow>
             </TableBody>
           </Table>
@@ -258,9 +259,9 @@ function ActivityPanel({ data }: { data: Extract<RunTabData, { kind: "activity" 
       <CardContent className="px-5">
         <ScrollArea className="h-[min(32rem,50vh)] supports-[height:1dvh]:h-[min(32rem,50dvh)] [&_[data-radix-scroll-area-viewport]]:overscroll-contain">
           <div className="space-y-3 pe-4">
-            <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><CircleDot aria-hidden="true" className="mt-0.5 size-4 fill-muted-foreground text-primary-foreground" /><div><p className="text-sm font-medium text-foreground">Run accepted</p><p className="font-mono text-xs text-muted-foreground">{displayValue(data.run.trigger.correlation_id)}</p></div></div>
+            <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><CircleDot aria-hidden="true" className="mt-0.5 size-4 fill-muted-foreground text-primary-foreground" /><div><p className="text-sm font-medium text-foreground">Run accepted</p><p className="font-mono text-xs text-muted-foreground">{displayValue("correlation_id" in data.run.trigger ? data.run.trigger.correlation_id : null)}</p></div></div>
             {ticks.map(({ tick, world_state_ref: reference }) => <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3" key={tick}><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 fill-primary text-primary-foreground" /><div><p className="text-sm font-medium text-foreground">Tick {tick} completed</p><p className="font-mono text-xs text-muted-foreground break-all">{reference}</p></div></div>)}
-            <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><StatusIcon aria-hidden="true" className={`mt-0.5 size-4 ${statusIconColor}`} /><div><p className="text-sm font-medium text-foreground">Current status: {titleCase(data.run.status)}</p>{data.run.failure ? <p className="mt-1 text-xs text-foreground">{displayValue(data.run.failure.message ?? data.run.failure.detail ?? data.run.failure.error_type)}</p> : null}</div></div>
+            <div className="flex items-start gap-3 rounded-lg bg-surface-subtle p-3"><StatusIcon aria-hidden="true" className={`mt-0.5 size-4 ${statusIconColor}`} /><div><p className="text-sm font-medium text-foreground">Current status: {titleCase(data.run.status)}</p>{data.run.failure ? <p className="mt-1 text-xs text-foreground">{displayValue(data.run.failure.error_message)}</p> : null}</div></div>
           </div>
         </ScrollArea>
       </CardContent>
@@ -282,7 +283,7 @@ function TabPanel({ state, onRetry }: { state: TabLoadState | undefined; onRetry
   return <ActivityPanel data={state.data} />;
 }
 
-export function RunDetailTabs({ apiUrl, refreshKey, runId }: RunDetailTabsProps) {
+export function RunDetailTabs({ apiUrl, refreshKey, runId, completedTicks = 0 }: RunDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<RunDetailTab>("overview");
   const [states, setStates] = useState<Partial<Record<RunDetailTab, TabLoadState>>>({});
   const [reloadToken, setReloadToken] = useState(0);
@@ -290,8 +291,8 @@ export function RunDetailTabs({ apiUrl, refreshKey, runId }: RunDetailTabsProps)
   useEffect(() => {
     const controller = new AbortController();
     setStates((current) => ({ ...current, [activeTab]: { status: "loading" } }));
-    void loadRunTab(apiUrl, runId, activeTab, { signal: controller.signal }).then(
-      (data) => setStates((current) => ({ ...current, [activeTab]: { status: "ready", data } })),
+    void loadRunTab(apiUrl, runId, activeTab, { signal: controller.signal, completedTicks }).then(
+      (data) => { if (!controller.signal.aborted) setStates((current) => ({ ...current, [activeTab]: { status: "ready", data } })); },
       (cause: unknown) => {
         if (controller.signal.aborted) return;
         const message = cause instanceof Error ? cause.message : "Unexpected Digital Twin API error.";
@@ -299,7 +300,7 @@ export function RunDetailTabs({ apiUrl, refreshKey, runId }: RunDetailTabsProps)
       },
     );
     return () => controller.abort();
-  }, [activeTab, apiUrl, refreshKey, reloadToken, runId]);
+  }, [activeTab, apiUrl, completedTicks, refreshKey, reloadToken, runId]);
 
   return (
     <Tabs onValueChange={(value) => setActiveTab(value as RunDetailTab)} value={activeTab}>

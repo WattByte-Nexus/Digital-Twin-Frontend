@@ -1,7 +1,9 @@
 import {
+  fetchDigitalTwinPages,
+  requestDigitalTwinJson,
   normalizeDigitalTwinApiUrl,
   resolveDigitalTwinApiUrl,
-} from "./digital-twin-earth-engine";
+} from "./digital-twin-api";
 
 type FetchLike = typeof fetch;
 
@@ -10,6 +12,35 @@ export type DigitalTwinEngineHealth = "ready" | "degraded" | "offline";
 export interface DigitalTwinWeatherDataset {
   datasetId: string;
   ready: boolean;
+  observedAt: string;
+  freshUntil: string;
+  sourceKind: "observation" | "analysis" | "forecast";
+}
+
+export interface DigitalTwinWeatherFreshness {
+  status: "current" | "stale" | "missing";
+  observedAt: string | null;
+}
+
+/**
+ * Assess the newest available observation/analysis against the Engine's expiry.
+ * @param datasets Exact weather descriptors; forecasts never establish live freshness.
+ * @param nowMs Current UTC time in milliseconds, injectable for deterministic checks.
+ * @returns Missing for no usable observations, otherwise current or stale with its time.
+ */
+export function digitalTwinWeatherFreshness(
+  datasets: readonly DigitalTwinWeatherDataset[],
+  nowMs = Date.now(),
+): DigitalTwinWeatherFreshness {
+  const latest = datasets
+    .filter((dataset) => dataset.ready && dataset.sourceKind !== "forecast" &&
+      Date.parse(dataset.observedAt) <= nowMs)
+    .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
+  if (!latest) return { status: "missing", observedAt: null };
+  return {
+    status: nowMs <= Date.parse(latest.freshUntil) ? "current" : "stale",
+    observedAt: latest.observedAt,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -31,9 +62,7 @@ async function hasExpectedStatus(
   signal?: AbortSignal,
 ): Promise<boolean> {
   try {
-    const response = await fetchImpl(url, { signal, cache: "no-cache" });
-    if (!response.ok) return false;
-    const body = (await response.json()) as unknown;
+    const body = await requestDigitalTwinJson<unknown>(url, url, { fetchImpl, signal, cache: "no-cache" });
     return isRecord(body) && body.status === expectedStatus;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;
@@ -78,27 +107,29 @@ export async function fetchDigitalTwinWeatherDatasets(
   const apiUrl = normalizeDigitalTwinApiUrl(value);
   const normalizedRegionId = regionId.trim();
   if (!normalizedRegionId) throw new Error("A region ID is required.");
-  const response = await fetchFor(options)(
-    resolveDigitalTwinApiUrl(
-      apiUrl,
-      `/api/v1/regions/${encodeURIComponent(normalizedRegionId)}/weather-datasets?limit=20`,
-    ),
-    { signal: options.signal, cache: "no-cache" },
-  );
-  if (!response.ok) {
-    throw new Error(`Weather data request failed with HTTP ${response.status}.`);
-  }
-  const body = (await response.json()) as unknown;
-  if (!isRecord(body) || !Array.isArray(body.items)) {
-    throw new Error("Weather data response must contain a dataset list.");
-  }
-  return body.items.map((item, index) => {
+  const items = await fetchDigitalTwinPages<unknown>(apiUrl,
+    `/api/v1/regions/${encodeURIComponent(normalizedRegionId)}/weather-datasets`, options);
+  return items.map((item, index) => {
     if (!isRecord(item) || typeof item.dataset_id !== "string" || !item.dataset_id.trim()) {
       throw new Error(`Weather dataset ${index + 1} is invalid.`);
     }
     if (typeof item.ready !== "boolean") {
       throw new Error(`Weather dataset ${index + 1} is missing its ready state.`);
     }
-    return { datasetId: item.dataset_id, ready: item.ready };
+    if (
+      typeof item.version !== "string" || !Number.isFinite(Date.parse(item.version)) ||
+      typeof item.fresh_until !== "string" || !Number.isFinite(Date.parse(item.fresh_until)) ||
+      Date.parse(item.fresh_until) <= Date.parse(item.version) ||
+      !["observation", "analysis", "forecast"].includes(String(item.source_kind))
+    ) {
+      throw new Error(`Weather dataset ${index + 1} has invalid freshness metadata.`);
+    }
+    return {
+      datasetId: item.dataset_id,
+      ready: item.ready,
+      observedAt: item.version,
+      freshUntil: item.fresh_until,
+      sourceKind: item.source_kind as DigitalTwinWeatherDataset["sourceKind"],
+    };
   });
 }

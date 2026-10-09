@@ -55,6 +55,7 @@ import {
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -69,6 +70,8 @@ import {
   type DigitalTwinAssetPatch,
 } from "../../../../lib/digital-twin-assets";
 
+export type DigitalTwinAssetRegion = DigitalTwinRegion & { status: "draft" | "published" };
+
 type AssetKind = DigitalTwinAsset["kind"];
 type SortKey = "name" | "region" | "type";
 type SortDirection = "asc" | "desc";
@@ -80,10 +83,11 @@ interface CatalogAsset {
 }
 
 interface AssetsViewProps {
+  canManage: boolean;
   apiUrl: string;
   location: string;
   onOpenAsset: (assetId: string) => void;
-  regions: readonly DigitalTwinRegion[];
+  regions: readonly DigitalTwinAssetRegion[];
   theme: SurfaceTheme;
 }
 
@@ -316,24 +320,26 @@ function AssetEditor({
   mode: "add" | "edit";
   onCancel: () => void;
   onSaved: (assets: DigitalTwinAsset[]) => void;
-  regions: readonly DigitalTwinRegion[];
+  regions: readonly DigitalTwinAssetRegion[];
   theme: SurfaceTheme;
 }) {
   const [draft, setDraft] = useState(() =>
     editorDraft(asset, regions[0]?.id ?? "")
   );
   const [file, setFile] = useState<File | null>(null);
+  const savingLock = useRef(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const update = (key: keyof EditorDraft, value: string) =>
     setDraft((current) => ({ ...current, [key]: value }));
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (savingLock.current) return;
     if (mode === "add" && !file) {
       setError("Choose a CSV file to import.");
       return;
     }
-    setSaving(true);
+    savingLock.current = true; setSaving(true);
     setError(null);
     try {
       const saved =
@@ -357,7 +363,7 @@ function AssetEditor({
         cause instanceof Error ? cause.message : "Asset could not be saved."
       );
     } finally {
-      setSaving(false);
+      savingLock.current = false; setSaving(false);
     }
   };
   const overlay = `${surfaceThemeClassName(theme)} surface-glass-overlay`;
@@ -665,6 +671,7 @@ function AssetProperties({
   onDeleted,
   onEdit,
   regionName,
+  editable,
 }: {
   apiUrl: string;
   asset: DigitalTwinAsset;
@@ -672,11 +679,14 @@ function AssetProperties({
   onDeleted: () => void;
   onEdit: () => void;
   regionName: string;
+  editable: boolean;
 }) {
+  const deletionLock = useRef(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const remove = async () => {
-    setDeleting(true);
+    if (deletionLock.current || !editable || asset.kind === "power_pole") return;
+    deletionLock.current = true; setDeleting(true);
     setError(null);
     try {
       await deleteDigitalTwinAsset(apiUrl, asset.regionId, asset.assetId);
@@ -685,7 +695,7 @@ function AssetProperties({
       setError(
         cause instanceof Error ? cause.message : "Asset could not be deleted."
       );
-      setDeleting(false);
+      deletionLock.current = false; setDeleting(false);
     }
   };
   const Icon = asset.kind === "power_line" ? Cable : TreePine;
@@ -721,7 +731,7 @@ function AssetProperties({
             <X aria-hidden="true" />
           </Button>
         </div>
-        <Button className="mt-4 min-h-11 w-full" onClick={onEdit} disabled={asset.kind === "power_pole"}>
+        <Button className="mt-4 min-h-11 w-full" onClick={onEdit} disabled={!editable || asset.kind === "power_pole"}>
           Edit properties
         </Button>
       </header>
@@ -1058,7 +1068,7 @@ function AssetProperties({
         ) : null}
         <Button
           className="min-h-11 w-full text-destructive hover:text-destructive"
-          disabled={deleting}
+          disabled={deleting || !editable || asset.kind === "power_pole"}
           onClick={() => void remove()}
           variant="ghost"
         >
@@ -1071,6 +1081,7 @@ function AssetProperties({
 }
 
 export function AssetsView({
+  canManage,
   apiUrl,
   location,
   onOpenAsset,
@@ -1091,6 +1102,8 @@ export function AssetsView({
   const selected =
     assets.find((item) => item.asset.assetId === selectedId) ?? null;
   const selectedRegionId = selected?.asset.regionId ?? null;
+  const editableRegions = regions.filter((region) => canManage && region.status === "draft");
+  const selectedEditable = canManage && regions.some((region) => region.id === selectedRegionId && region.status === "draft");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1130,11 +1143,15 @@ export function AssetsView({
   useEffect(() => {
     if (!selectedId || !selectedRegionId) return;
     const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    setPanelMode("view");
+    const refresh = () => {
     void fetchDigitalTwinAsset(apiUrl, selectedRegionId, selectedId, {
       signal: controller.signal,
     }).then(
       (asset) => {
         if (controller.signal.aborted) return;
+        setError(null);
         setAssets((current) => {
           const existing = current.some(
             (item) => item.asset.assetId === asset.assetId
@@ -1154,7 +1171,6 @@ export function AssetsView({
             ...current,
           ];
         });
-        setPanelMode("view");
       },
       (cause) => {
         if (!controller.signal.aborted)
@@ -1164,8 +1180,12 @@ export function AssetsView({
               : new Error("Asset details could not be loaded.")
           );
       }
-    );
-    return () => controller.abort();
+    ).finally(() => {
+      if (!controller.signal.aborted) timer = setTimeout(refresh, 10_000);
+    });
+    };
+    refresh();
+    return () => { controller.abort(); clearTimeout(timer); };
   }, [apiUrl, regions, selectedId, selectedRegionId]);
 
   const visible = useMemo(() => {
@@ -1240,7 +1260,7 @@ export function AssetsView({
               <h1 className="text-2xl font-semibold tracking-tight">Assets</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 Manage the canonical network catalog through the Digital Twin
-                API.
+                API. Published geometry is read-only.
               </p>
             </div>
             <div className="flex gap-2">
@@ -1253,6 +1273,7 @@ export function AssetsView({
                 Refresh
               </Button>
               <Button
+                disabled={editableRegions.length === 0}
                 onClick={() => {
                   onOpenAsset("");
                   setPanelMode("add");
@@ -1453,9 +1474,10 @@ export function AssetsView({
             }}
             onEdit={() => setPanelMode("edit")}
             regionName={selected.regionName}
+            editable={selectedEditable}
           />
         ) : null}
-        {panelMode === "add" || (panelMode === "edit" && selected) ? (
+        {(panelMode === "add" && editableRegions.length > 0) || (panelMode === "edit" && selected && selectedEditable) ? (
           <AssetEditor
             apiUrl={apiUrl}
             asset={panelMode === "edit" ? selected?.asset ?? null : null}
@@ -1463,7 +1485,7 @@ export function AssetsView({
             mode={panelMode}
             onCancel={() => setPanelMode(panelMode === "edit" ? "view" : null)}
             onSaved={save}
-            regions={regions}
+            regions={panelMode === "add" ? editableRegions : regions}
             theme={theme}
           />
         ) : null}

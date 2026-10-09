@@ -8,6 +8,9 @@
 /** Persisted desktop settings blob (layout, language, plugin sources, …). */
 export const DESKTOP_SETTINGS_STORAGE_KEY = "geolibre.desktopSettings";
 
+/** Device-local light/dark choice, owned by useThemeMode independently of accent scheme. */
+export const THEME_MODE_STORAGE_KEY = "geolibre.themeMode";
+
 /**
  * Latest version the user dismissed via "Skip this version" in the automated
  * startup update prompt. Suppresses the prompt for that one version so it does

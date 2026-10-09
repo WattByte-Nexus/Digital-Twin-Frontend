@@ -13,13 +13,13 @@ import {
   Waypoints,
 } from "lucide-react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
-import { type ReactNode, type RefObject, useEffect, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useEffectEvent, useState } from "react";
 import {
   digitalTwinRunStatusLabel,
-  fetchDigitalTwinRun,
   isDigitalTwinRunActive,
   type DigitalTwinRunRecord,
 } from "../../../../lib/digital-twin-runs";
+import { cancelDigitalTwinRun, watchDigitalTwinRun, type DigitalTwinRunConnection } from "../../../../lib/digital-twin-run-lifecycle";
 import { focusMapOnIgnitions } from "../run-map-focus";
 import { RunDetailTabs } from "./RunDetailTabs";
 import { RunPlaybackWorkspace } from "./RunPlaybackWorkspace";
@@ -30,11 +30,11 @@ interface RunDetailViewProps {
   mapSlot: ReactNode;
   onBack: () => void;
   run: DigitalTwinRunRecord;
+  canCancel?: boolean;
 }
 
 const IGNITION_SOURCE_ID = "digital-twin-run-ignition-points";
 const IGNITION_LAYER_ID = "digital-twin-run-ignition-points-circle";
-const RUN_DETAIL_POLL_INTERVAL_MS = 2_000;
 
 function RunStatusBadge({ status }: Pick<DigitalTwinRunRecord, "status">) {
   const variant =
@@ -85,42 +85,36 @@ function formatBurnedArea(value: number | null): string {
     : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ha`;
 }
 
-export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run }: RunDetailViewProps) {
+export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run, canCancel = false }: RunDetailViewProps) {
   const [liveRun, setLiveRun] = useState(run);
 
+  const [connection, setConnection] = useState<DigitalTwinRunConnection>("connecting");
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [lastSuccess, setLastSuccess] = useState<Date | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const currentRun = useEffectEvent(() => liveRun);
   useEffect(() => {
     const controller = new AbortController();
-    let pollTimeout: number | undefined;
-    let pollingActiveRun = isDigitalTwinRunActive(run.status);
-
-    const loadRun = () => {
-      void fetchDigitalTwinRun(apiUrl, run.id, {
-        regionNames: new Map([[run.regionId, run.regionName]]),
-        signal: controller.signal,
-      }).then(
-        (updatedRun) => {
-          if (controller.signal.aborted) return;
-          setLiveRun(updatedRun);
-          pollingActiveRun = isDigitalTwinRunActive(updatedRun.status);
-          if (pollingActiveRun) {
-            pollTimeout = window.setTimeout(loadRun, RUN_DETAIL_POLL_INTERVAL_MS);
-          }
-        },
-        () => {
-          if (controller.signal.aborted) return;
-          if (pollingActiveRun) {
-            pollTimeout = window.setTimeout(loadRun, RUN_DETAIL_POLL_INTERVAL_MS);
-          }
-        },
-      );
-    };
-
-    loadRun();
-    return () => {
-      controller.abort();
-      if (pollTimeout !== undefined) window.clearTimeout(pollTimeout);
-    };
-  }, [apiUrl, run.id, run.regionId, run.regionName, run.status]);
+    void watchDigitalTwinRun(apiUrl, currentRun(), {
+      signal: controller.signal,
+      onRun: setLiveRun,
+      onConnection: (state, error) => { setConnection(state); setUpdateError(error?.message ?? null); },
+      onSuccess: setLastSuccess,
+    });
+    const recover = () => setRevision((current) => current + 1);
+    window.addEventListener("online", recover);
+    return () => { controller.abort(); window.removeEventListener("online", recover); };
+  }, [apiUrl, run.id, run.regionId, run.regionName, revision]);
+  const cancel = async () => {
+    setCancelling(true); setCancelError(null);
+    try {
+      const updated = await cancelDigitalTwinRun(apiUrl, liveRun.id, { regionNames: new Map([[liveRun.regionId, liveRun.regionName]]) });
+      setLiveRun((current) => isDigitalTwinRunActive(updated.status) ? { ...updated, completedTicks: Math.max(current.completedTicks, updated.completedTicks), expectedTicks: current.expectedTicks ?? updated.expectedTicks } : updated); setRevision((current) => current + 1);
+    } catch (cause) { setCancelError(cause instanceof Error ? cause.message : "Cancellation failed."); }
+    finally { setCancelling(false); }
+  };
 
   useEffect(() => {
     let frame = 0;
@@ -211,10 +205,21 @@ export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run }
             </p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setRevision((current) => current + 1)}>Refresh status</Button>
+          {isDigitalTwinRunActive(liveRun.status) ? <Button variant="destructive" disabled={!canCancel || cancelling || liveRun.status === "CANCEL_REQUESTED"} onClick={() => { void cancel(); }}>{cancelling ? "Requesting cancellation…" : liveRun.status === "CANCEL_REQUESTED" ? "Cancellation requested" : "Cancel run"}</Button> : null}
+        </div>
       </header>
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-5 p-5 lg:p-7">
+          <div className="space-y-1 rounded-md border p-3 text-sm" role="status">
+            <p>{connection === "live" ? "Receiving live Engine updates" : connection === "settled" ? "Terminal state verified" : connection === "disconnected" ? "Disconnected · displayed results may be stale" : "Connecting to Engine…"}</p>
+            <p className="text-xs text-muted-foreground">{lastSuccess ? `Last successful update: ${lastSuccess.toLocaleTimeString()}` : "No successful status update yet."}</p>
+            {updateError ? <p className="text-destructive">{updateError}</p> : null}
+            {cancelError ? <p role="alert" className="text-destructive">{cancelError}</p> : null}
+            {liveRun.failureMessage ? <p className="text-destructive">{liveRun.failureMessage}</p> : null}
+          </div>
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Run summary">
             <SummaryCard icon={MapPin} label="Region" value={liveRun.regionName} />
             <SummaryCard
@@ -234,7 +239,7 @@ export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run }
             />
             <SummaryCard
               icon={Waypoints}
-              label="Completed snapshots"
+              label="Completed compute ticks"
               value={`${liveRun.completedTicks}${liveRun.expectedTicks === null ? "" : ` / ${liveRun.expectedTicks}`}`}
             />
           </section>
@@ -247,6 +252,7 @@ export function RunDetailView({ apiUrl, mapControllerRef, mapSlot, onBack, run }
           />
 
           <RunDetailTabs
+            completedTicks={liveRun.completedTicks}
             apiUrl={apiUrl}
             key={`${apiUrl}:${liveRun.id}`}
             refreshKey={`${liveRun.status}:${liveRun.completedTicks}:${liveRun.resultAvailable}`}

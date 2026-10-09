@@ -1,0 +1,1131 @@
+{
+  "assets": [
+    {
+      "asset_id": "tree-contract",
+      "canopy_radius_m": 2.0,
+      "height_m": 10.0,
+      "kind": "tree",
+      "location": {
+        "lat": 39.75,
+        "lon": -105.25
+      },
+      "region_id": "golden-co",
+      "scene_scale": {
+        "linear_unit": "meter",
+        "meters_per_unit": 1.0
+      },
+      "segmentation": null,
+      "source_ref": "contract-survey",
+      "species": null
+    }
+  ],
+  "bounded_run_request": {
+    "delta_t_hours": 1.0,
+    "ignition_location": {
+      "lat": 39.75,
+      "lon": -105.25
+    },
+    "region_id": "golden-co",
+    "time": {
+      "end_at": "2026-10-09T14:00:00Z",
+      "mode": "bounded",
+      "start_at": "2026-10-09T12:00:00Z"
+    }
+  },
+  "health_live": {
+    "status": "live"
+  },
+  "health_ready": {
+    "status": "ready"
+  },
+  "map_layer_empty": {
+    "items": []
+  },
+  "point_cloud_empty": {
+    "active_dataset_id": null,
+    "items": []
+  },
+  "point_cloud_failed": {
+    "attributes": [
+      "position",
+      "rgb"
+    ],
+    "attribution": "USGS 3DEP",
+    "bounds": [
+      -105.25,
+      39.7,
+      -105.15,
+      39.8
+    ],
+    "bounds_crs": "EPSG:4326",
+    "dataset_id": "golden-lidar-failed",
+    "failure_code": "invalid_crs",
+    "format": "3d-tiles-point-cloud",
+    "latest_build": {
+      "failure_code": "invalid_crs",
+      "status": "failed",
+      "updated_at": "2026-08-11T16:00:00Z",
+      "version": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "minimum_spacing_m": null,
+    "name": "Golden LiDAR replacement",
+    "point_count": null,
+    "position_crs": "EPSG:4978",
+    "region_id": "colorado",
+    "scene_scale": {
+      "linear_unit": "meter",
+      "meters_per_unit": 1.0
+    },
+    "source_point_count": null,
+    "status": "failed",
+    "tileset_url": null,
+    "updated_at": "2026-08-11T16:00:00Z",
+    "version": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "point_cloud_queued": {
+    "attributes": [
+      "position",
+      "rgb"
+    ],
+    "attribution": "USGS 3DEP",
+    "bounds": [
+      -105.25,
+      39.7,
+      -105.15,
+      39.8
+    ],
+    "bounds_crs": "EPSG:4326",
+    "dataset_id": "golden-lidar-build",
+    "failure_code": null,
+    "format": "3d-tiles-point-cloud",
+    "latest_build": {
+      "failure_code": null,
+      "status": "queued",
+      "updated_at": "2026-08-11T15:00:00Z",
+      "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "minimum_spacing_m": null,
+    "name": "Golden LiDAR build",
+    "point_count": null,
+    "position_crs": "EPSG:4978",
+    "region_id": "colorado",
+    "scene_scale": {
+      "linear_unit": "meter",
+      "meters_per_unit": 1.0
+    },
+    "source_point_count": null,
+    "status": "queued",
+    "tileset_url": null,
+    "updated_at": "2026-08-11T15:00:00Z",
+    "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "point_cloud_ready": {
+    "attributes": [
+      "position",
+      "rgb"
+    ],
+    "attribution": "USGS 3DEP",
+    "bounds": [
+      -105.25,
+      39.7,
+      -105.15,
+      39.8
+    ],
+    "bounds_crs": "EPSG:4326",
+    "dataset_id": "golden-lidar",
+    "failure_code": null,
+    "format": "3d-tiles-point-cloud",
+    "latest_build": {
+      "failure_code": null,
+      "status": "ready",
+      "updated_at": "2026-08-11T15:30:00Z",
+      "version": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "minimum_spacing_m": 0.5,
+    "name": "Golden, Colorado LiDAR",
+    "point_count": 159000000,
+    "position_crs": "EPSG:4978",
+    "region_id": "colorado",
+    "scene_scale": {
+      "linear_unit": "meter",
+      "meters_per_unit": 1.0
+    },
+    "source_point_count": 167600000,
+    "status": "ready",
+    "tileset_url": "/point-clouds/colorado/golden-lidar/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/tileset.json",
+    "updated_at": "2026-08-11T15:30:00Z",
+    "version": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "region": {
+    "bounds": {
+      "east": -105.2,
+      "north": 39.8,
+      "south": 39.7,
+      "west": -105.3
+    },
+    "name": "Contract region",
+    "published_revision_id": "contract-revision-1",
+    "region_id": "golden-co",
+    "status": "published"
+  },
+  "region_page": {
+    "items": [
+      {
+        "bounds": {
+          "east": -105.2,
+          "north": 39.8,
+          "south": 39.7,
+          "west": -105.3
+        },
+        "name": "Contract region",
+        "published_revision_id": "contract-revision-1",
+        "region_id": "golden-co",
+        "status": "published"
+      }
+    ],
+    "next_cursor": null
+  },
+  "region_readiness": {
+    "configured": false,
+    "grid_hydrated": false,
+    "publication_status": "published",
+    "ready_to_simulate": false,
+    "reason_codes": [
+      "region_not_configured",
+      "grid_not_hydrated"
+    ],
+    "region_id": "new-region",
+    "runtime_ready": true,
+    "sources": []
+  },
+  "run_cancel_requested": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": null,
+    "final_result_ref": null,
+    "finished_at": null,
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": null,
+    "region_id": "golden-co",
+    "run_id": "run-contract-manual-cancel-requested",
+    "simulation_id": "simulation-contract",
+    "started_at": "2026-10-09T12:00:01Z",
+    "status": "CANCEL_REQUESTED",
+    "tick_refs": [],
+    "trigger": {
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "ignition_location": {
+        "lat": 39.75,
+        "lon": -105.25
+      },
+      "kind": "manual",
+      "time": {
+        "duration_hours": 2.0,
+        "mode": "present_forecast"
+      }
+    }
+  },
+  "run_cancelled": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": null,
+    "final_result_ref": null,
+    "finished_at": "2026-10-09T12:00:03Z",
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": null,
+    "region_id": "golden-co",
+    "run_id": "run-contract-manual-cancelled",
+    "simulation_id": "simulation-contract",
+    "started_at": "2026-10-09T12:00:01Z",
+    "status": "CANCELLED",
+    "tick_refs": [
+      {
+        "tick": 0,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-manual-cancelled/tick/0"
+      },
+      {
+        "tick": 1,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-manual-cancelled/tick/1"
+      },
+      {
+        "tick": 2,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-manual-cancelled/tick/2"
+      }
+    ],
+    "trigger": {
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "ignition_location": {
+        "lat": 39.75,
+        "lon": -105.25
+      },
+      "kind": "manual",
+      "time": {
+        "duration_hours": 2.0,
+        "mode": "present_forecast"
+      }
+    }
+  },
+  "run_completed": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": null,
+    "final_result_ref": "state://world/pytorchfire/simulation-contract/run-contract-manual-completed/tick/2",
+    "finished_at": "2026-10-09T12:00:03Z",
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": {
+      "burned_area_hectares": 2.0,
+      "final_burned_cells": 1,
+      "final_burning_cells": 1,
+      "land_cover_breakdown": [
+        {
+          "area_hectares": 2.0,
+          "class_id": 1,
+          "label": "Contract vegetation",
+          "percentage": 100.0
+        }
+      ],
+      "peak_spread_rate_hectares_per_hour": 1.0
+    },
+    "region_id": "golden-co",
+    "run_id": "run-contract-manual-completed",
+    "simulation_id": "simulation-contract",
+    "started_at": "2026-10-09T12:00:01Z",
+    "status": "COMPLETED",
+    "tick_refs": [
+      {
+        "tick": 0,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-manual-completed/tick/0"
+      },
+      {
+        "tick": 1,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-manual-completed/tick/1"
+      },
+      {
+        "tick": 2,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-manual-completed/tick/2"
+      }
+    ],
+    "trigger": {
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "ignition_location": {
+        "lat": 39.75,
+        "lon": -105.25
+      },
+      "kind": "manual",
+      "time": {
+        "duration_hours": 2.0,
+        "mode": "present_forecast"
+      }
+    }
+  },
+  "run_failed": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": {
+      "error_message": "Simulation execution failed.",
+      "error_type": "simulation_failed"
+    },
+    "final_result_ref": null,
+    "finished_at": "2026-10-09T12:00:03Z",
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": null,
+    "region_id": "golden-co",
+    "run_id": "run-contract-manual-failed",
+    "simulation_id": "simulation-contract",
+    "started_at": "2026-10-09T12:00:01Z",
+    "status": "FAILED",
+    "tick_refs": [],
+    "trigger": {
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "ignition_location": {
+        "lat": 39.75,
+        "lon": -105.25
+      },
+      "kind": "manual",
+      "time": {
+        "duration_hours": 2.0,
+        "mode": "present_forecast"
+      }
+    }
+  },
+  "run_page": {
+    "items": [
+      {
+        "created_at": "2026-10-09T12:00:00Z",
+        "failure": null,
+        "final_result_ref": null,
+        "finished_at": null,
+        "grid_geometry": {
+          "cols": 2,
+          "crs": "EPSG:5070",
+          "name": "contract-grid",
+          "projected_bounds": [
+            0.0,
+            0.0,
+            200.0,
+            200.0
+          ],
+          "resolution_m": 100.0,
+          "rows": 2,
+          "wgs84_bounds": {
+            "east": -105.2,
+            "north": 39.8,
+            "south": 39.7,
+            "west": -105.3
+          }
+        },
+        "metrics": null,
+        "region_id": "golden-co",
+        "run_id": "run-contract-manual-started",
+        "simulation_id": "simulation-contract",
+        "started_at": "2026-10-09T12:00:01Z",
+        "status": "STARTED",
+        "tick_refs": [],
+        "trigger": {
+          "correlation_id": "contract-request",
+          "delta_t_hours": 1.0,
+          "ignition_location": {
+            "lat": 39.75,
+            "lon": -105.25
+          },
+          "kind": "manual",
+          "time": {
+            "duration_hours": 2.0,
+            "mode": "present_forecast"
+          }
+        }
+      },
+      {
+        "created_at": "2026-10-09T12:00:00Z",
+        "failure": null,
+        "final_result_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-completed/tick/2",
+        "finished_at": "2026-10-09T12:00:03Z",
+        "grid_geometry": {
+          "cols": 2,
+          "crs": "EPSG:5070",
+          "name": "contract-grid",
+          "projected_bounds": [
+            0.0,
+            0.0,
+            200.0,
+            200.0
+          ],
+          "resolution_m": 100.0,
+          "rows": 2,
+          "wgs84_bounds": {
+            "east": -105.2,
+            "north": 39.8,
+            "south": 39.7,
+            "west": -105.3
+          }
+        },
+        "metrics": {
+          "burned_area_hectares": 2.0,
+          "final_burned_cells": 1,
+          "final_burning_cells": 1,
+          "land_cover_breakdown": [
+            {
+              "area_hectares": 2.0,
+              "class_id": 1,
+              "label": "Contract vegetation",
+              "percentage": 100.0
+            }
+          ],
+          "peak_spread_rate_hectares_per_hour": 1.0
+        },
+        "region_id": "golden-co",
+        "run_id": "run-contract-scenario-completed",
+        "simulation_id": "simulation-contract",
+        "started_at": "2026-10-09T12:00:01Z",
+        "status": "COMPLETED",
+        "tick_refs": [
+          {
+            "tick": 0,
+            "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-completed/tick/0"
+          },
+          {
+            "tick": 1,
+            "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-completed/tick/1"
+          },
+          {
+            "tick": 2,
+            "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-completed/tick/2"
+          }
+        ],
+        "trigger": {
+          "base_weather_version": "2026-10-09T12:00:00Z",
+          "correlation_id": "contract-request",
+          "delta_t_hours": 1.0,
+          "duration_hours": 2.0,
+          "ignition_points": [
+            {
+              "lat": 39.75,
+              "lon": -105.25
+            }
+          ],
+          "kind": "scenario",
+          "scenario_id": "scenario-contract",
+          "scenario_name": "Contract wind scenario"
+        }
+      }
+    ],
+    "next_cursor": null
+  },
+  "run_queued": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": null,
+    "final_result_ref": null,
+    "finished_at": null,
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": null,
+    "region_id": "golden-co",
+    "run_id": "run-contract-manual-queued",
+    "simulation_id": "simulation-contract",
+    "started_at": null,
+    "status": "QUEUED",
+    "tick_refs": [],
+    "trigger": {
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "ignition_location": {
+        "lat": 39.75,
+        "lon": -105.25
+      },
+      "kind": "manual",
+      "time": {
+        "duration_hours": 2.0,
+        "mode": "present_forecast"
+      }
+    }
+  },
+  "run_started": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": null,
+    "final_result_ref": null,
+    "finished_at": null,
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": null,
+    "region_id": "golden-co",
+    "run_id": "run-contract-manual-started",
+    "simulation_id": "simulation-contract",
+    "started_at": "2026-10-09T12:00:01Z",
+    "status": "STARTED",
+    "tick_refs": [],
+    "trigger": {
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "ignition_location": {
+        "lat": 39.75,
+        "lon": -105.25
+      },
+      "kind": "manual",
+      "time": {
+        "duration_hours": 2.0,
+        "mode": "present_forecast"
+      }
+    }
+  },
+  "scenario": {
+    "base_weather_version": "2026-10-09T12:00:00Z",
+    "bounds": {
+      "east": -105.2,
+      "north": 39.8,
+      "south": 39.7,
+      "west": -105.3
+    },
+    "duration_hours": 2.0,
+    "name": "Contract wind scenario",
+    "region_id": "golden-co",
+    "scenario_id": "scenario-contract",
+    "status": "ready",
+    "wind_direction": {
+      "canonical_engine_degrees": 0.0,
+      "reference": "towards",
+      "submitted_bearing_degrees": 90.0
+    },
+    "wind_speed": {
+      "canonical_meters_per_second": 10.0,
+      "submitted_unit": "m/s",
+      "submitted_value": 10.0
+    }
+  },
+  "scenario_cancel_requested": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": null,
+    "final_result_ref": null,
+    "finished_at": null,
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": null,
+    "region_id": "golden-co",
+    "run_id": "run-contract-scenario-cancel-requested",
+    "simulation_id": "simulation-contract",
+    "started_at": "2026-10-09T12:00:01Z",
+    "status": "CANCEL_REQUESTED",
+    "tick_refs": [],
+    "trigger": {
+      "base_weather_version": "2026-10-09T12:00:00Z",
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "duration_hours": 2.0,
+      "ignition_points": [
+        {
+          "lat": 39.75,
+          "lon": -105.25
+        }
+      ],
+      "kind": "scenario",
+      "scenario_id": "scenario-contract",
+      "scenario_name": "Contract wind scenario"
+    }
+  },
+  "scenario_cancelled": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": null,
+    "final_result_ref": null,
+    "finished_at": "2026-10-09T12:00:03Z",
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": null,
+    "region_id": "golden-co",
+    "run_id": "run-contract-scenario-cancelled",
+    "simulation_id": "simulation-contract",
+    "started_at": "2026-10-09T12:00:01Z",
+    "status": "CANCELLED",
+    "tick_refs": [
+      {
+        "tick": 0,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-cancelled/tick/0"
+      },
+      {
+        "tick": 1,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-cancelled/tick/1"
+      },
+      {
+        "tick": 2,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-cancelled/tick/2"
+      }
+    ],
+    "trigger": {
+      "base_weather_version": "2026-10-09T12:00:00Z",
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "duration_hours": 2.0,
+      "ignition_points": [
+        {
+          "lat": 39.75,
+          "lon": -105.25
+        }
+      ],
+      "kind": "scenario",
+      "scenario_id": "scenario-contract",
+      "scenario_name": "Contract wind scenario"
+    }
+  },
+  "scenario_completed": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": null,
+    "final_result_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-completed/tick/2",
+    "finished_at": "2026-10-09T12:00:03Z",
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": {
+      "burned_area_hectares": 2.0,
+      "final_burned_cells": 1,
+      "final_burning_cells": 1,
+      "land_cover_breakdown": [
+        {
+          "area_hectares": 2.0,
+          "class_id": 1,
+          "label": "Contract vegetation",
+          "percentage": 100.0
+        }
+      ],
+      "peak_spread_rate_hectares_per_hour": 1.0
+    },
+    "region_id": "golden-co",
+    "run_id": "run-contract-scenario-completed",
+    "simulation_id": "simulation-contract",
+    "started_at": "2026-10-09T12:00:01Z",
+    "status": "COMPLETED",
+    "tick_refs": [
+      {
+        "tick": 0,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-completed/tick/0"
+      },
+      {
+        "tick": 1,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-completed/tick/1"
+      },
+      {
+        "tick": 2,
+        "world_state_ref": "state://world/pytorchfire/simulation-contract/run-contract-scenario-completed/tick/2"
+      }
+    ],
+    "trigger": {
+      "base_weather_version": "2026-10-09T12:00:00Z",
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "duration_hours": 2.0,
+      "ignition_points": [
+        {
+          "lat": 39.75,
+          "lon": -105.25
+        }
+      ],
+      "kind": "scenario",
+      "scenario_id": "scenario-contract",
+      "scenario_name": "Contract wind scenario"
+    }
+  },
+  "scenario_create": {
+    "base_weather_version": "2026-10-09T12:00:00Z",
+    "duration_hours": 2.0,
+    "geometry": {
+      "coordinates": [
+        [
+          [
+            -105.3,
+            39.7
+          ],
+          [
+            -105.2,
+            39.7
+          ],
+          [
+            -105.2,
+            39.8
+          ],
+          [
+            -105.3,
+            39.8
+          ],
+          [
+            -105.3,
+            39.7
+          ]
+        ]
+      ],
+      "type": "Polygon"
+    },
+    "name": "Contract wind scenario",
+    "region_id": "golden-co",
+    "wind_direction": {
+      "bearing_degrees": 90.0,
+      "reference": "towards"
+    },
+    "wind_speed": {
+      "unit": "m/s",
+      "value": 10.0
+    }
+  },
+  "scenario_failed": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": {
+      "error_message": "Simulation execution failed.",
+      "error_type": "simulation_failed"
+    },
+    "final_result_ref": null,
+    "finished_at": "2026-10-09T12:00:03Z",
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": null,
+    "region_id": "golden-co",
+    "run_id": "run-contract-scenario-failed",
+    "simulation_id": "simulation-contract",
+    "started_at": "2026-10-09T12:00:01Z",
+    "status": "FAILED",
+    "tick_refs": [],
+    "trigger": {
+      "base_weather_version": "2026-10-09T12:00:00Z",
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "duration_hours": 2.0,
+      "ignition_points": [
+        {
+          "lat": 39.75,
+          "lon": -105.25
+        }
+      ],
+      "kind": "scenario",
+      "scenario_id": "scenario-contract",
+      "scenario_name": "Contract wind scenario"
+    }
+  },
+  "scenario_page": {
+    "items": [
+      {
+        "base_weather_version": "2026-10-09T12:00:00Z",
+        "bounds": {
+          "east": -105.2,
+          "north": 39.8,
+          "south": 39.7,
+          "west": -105.3
+        },
+        "duration_hours": 2.0,
+        "name": "Contract wind scenario",
+        "region_id": "golden-co",
+        "scenario_id": "scenario-contract",
+        "status": "ready",
+        "wind_direction": {
+          "canonical_engine_degrees": 0.0,
+          "reference": "towards",
+          "submitted_bearing_degrees": 90.0
+        },
+        "wind_speed": {
+          "canonical_meters_per_second": 10.0,
+          "submitted_unit": "m/s",
+          "submitted_value": 10.0
+        }
+      }
+    ],
+    "next_cursor": null
+  },
+  "scenario_queued": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": null,
+    "final_result_ref": null,
+    "finished_at": null,
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": null,
+    "region_id": "golden-co",
+    "run_id": "run-contract-scenario-queued",
+    "simulation_id": "simulation-contract",
+    "started_at": null,
+    "status": "QUEUED",
+    "tick_refs": [],
+    "trigger": {
+      "base_weather_version": "2026-10-09T12:00:00Z",
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "duration_hours": 2.0,
+      "ignition_points": [
+        {
+          "lat": 39.75,
+          "lon": -105.25
+        }
+      ],
+      "kind": "scenario",
+      "scenario_id": "scenario-contract",
+      "scenario_name": "Contract wind scenario"
+    }
+  },
+  "scenario_run_request": {
+    "ignition_points": [
+      {
+        "coordinates": [
+          -105.25,
+          39.75
+        ],
+        "type": "Point"
+      }
+    ],
+    "scenario_id": "scenario-contract"
+  },
+  "scenario_started": {
+    "created_at": "2026-10-09T12:00:00Z",
+    "failure": null,
+    "final_result_ref": null,
+    "finished_at": null,
+    "grid_geometry": {
+      "cols": 2,
+      "crs": "EPSG:5070",
+      "name": "contract-grid",
+      "projected_bounds": [
+        0.0,
+        0.0,
+        200.0,
+        200.0
+      ],
+      "resolution_m": 100.0,
+      "rows": 2,
+      "wgs84_bounds": {
+        "east": -105.2,
+        "north": 39.8,
+        "south": 39.7,
+        "west": -105.3
+      }
+    },
+    "metrics": null,
+    "region_id": "golden-co",
+    "run_id": "run-contract-scenario-started",
+    "simulation_id": "simulation-contract",
+    "started_at": "2026-10-09T12:00:01Z",
+    "status": "STARTED",
+    "tick_refs": [],
+    "trigger": {
+      "base_weather_version": "2026-10-09T12:00:00Z",
+      "correlation_id": "contract-request",
+      "delta_t_hours": 1.0,
+      "duration_hours": 2.0,
+      "ignition_points": [
+        {
+          "lat": 39.75,
+          "lon": -105.25
+        }
+      ],
+      "kind": "scenario",
+      "scenario_id": "scenario-contract",
+      "scenario_name": "Contract wind scenario"
+    }
+  },
+  "survey_acceptance": {
+    "dataset_id": "survey",
+    "parent_version": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "patch_id": "survey-contract",
+    "region_id": "golden-co",
+    "status": "queued",
+    "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "weather_dataset": {
+    "band_names": [
+      "wind_speed",
+      "wind_direction"
+    ],
+    "bounds": {
+      "east": -105.2,
+      "north": 39.8,
+      "south": 39.7,
+      "west": -105.3
+    },
+    "coverage": null,
+    "crs": "EPSG:5070",
+    "dataset_id": "weather-contract",
+    "fresh_until": "2026-10-09T13:00:00Z",
+    "grid_shape": [
+      2,
+      2
+    ],
+    "provider": "nws_stations",
+    "ready": true,
+    "region_id": "golden-co",
+    "resolution_m": 100.0,
+    "source_kind": "analysis",
+    "version": "2026-10-09T12:00:00Z"
+  },
+  "weather_page": {
+    "items": [
+      {
+        "band_names": [
+          "wind_speed",
+          "wind_direction"
+        ],
+        "bounds": {
+          "east": -105.2,
+          "north": 39.8,
+          "south": 39.7,
+          "west": -105.3
+        },
+        "coverage": null,
+        "crs": "EPSG:5070",
+        "dataset_id": "weather-contract",
+        "fresh_until": "2026-10-09T13:00:00Z",
+        "grid_shape": [
+          2,
+          2
+        ],
+        "provider": "nws_stations",
+        "ready": true,
+        "region_id": "golden-co",
+        "resolution_m": 100.0,
+        "source_kind": "analysis",
+        "version": "2026-10-09T12:00:00Z"
+      }
+    ],
+    "next_cursor": null
+  }
+}

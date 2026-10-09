@@ -1,10 +1,4 @@
-const API_STORAGE_KEY = "geolibre.digital-twin-demo.api-url";
-const DEFAULT_API_URL = "http://127.0.0.1:8000";
-const DEV_API_PROXY_PATH = "/__digital_twin_api";
-
-interface DigitalTwinRuntimeWindow extends Window {
-  __DIGITAL_TWIN_API_URL__?: string;
-}
+import { normalizeDigitalTwinApiUrl, resolveDigitalTwinApiUrl, requestDigitalTwinJson, requestDigitalTwinResponse, fetchDigitalTwinPages } from "./digital-twin-api";
 
 export interface DigitalTwinEarthEngineStyle {
   colormap?: string;
@@ -62,79 +56,6 @@ function pageItems(value: unknown): unknown[] {
   return isRecord(value) && Array.isArray(value.items) ? value.items : [];
 }
 
-export function normalizeDigitalTwinApiUrl(value: string): string {
-  let parsed: URL;
-  try {
-    parsed = new URL(value.trim());
-  } catch {
-    throw new Error("API URL must be an absolute HTTP URL.");
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("API URL must use HTTP or HTTPS.");
-  }
-  parsed.hash = "";
-  parsed.search = "";
-  return parsed.href.replace(/\/+$/, "");
-}
-
-function devProxyApiUrl(runtimeWindow: DigitalTwinRuntimeWindow | undefined): string | undefined {
-  const location = runtimeWindow?.location;
-  if (
-    !location ||
-    location.port !== "5173" ||
-    !["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)
-  ) {
-    return undefined;
-  }
-  return new URL(DEV_API_PROXY_PATH, location.origin).href.replace(/\/+$/, "");
-}
-
-export function defaultDigitalTwinApiUrl(
-  runtimeWindow: DigitalTwinRuntimeWindow | undefined =
-    typeof window === "undefined" ? undefined : (window as DigitalTwinRuntimeWindow),
-): string {
-  const stored = runtimeWindow?.localStorage?.getItem(API_STORAGE_KEY);
-  const candidates = [
-    runtimeWindow?.__DIGITAL_TWIN_API_URL__,
-    stored === DEFAULT_API_URL ? undefined : stored,
-    devProxyApiUrl(runtimeWindow),
-    stored,
-    DEFAULT_API_URL,
-  ];
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    try {
-      return normalizeDigitalTwinApiUrl(candidate);
-    } catch {
-      // Fall through to the next configured default.
-    }
-  }
-  return DEFAULT_API_URL;
-}
-
-export function rememberDigitalTwinApiUrl(value: string): void {
-  if (typeof window === "undefined") return;
-  window.localStorage?.setItem(API_STORAGE_KEY, normalizeDigitalTwinApiUrl(value));
-}
-
-export function resolveDigitalTwinApiUrl(apiUrl: string, path: string): string {
-  if (/^https?:\/\//i.test(path)) return path;
-  return new URL(path.replace(/^\/+/, ""), `${apiUrl}/`).href;
-}
-
-async function requestJson(fetchImpl: FetchLike, url: string, signal?: AbortSignal): Promise<unknown> {
-  const response = await fetchImpl(url, { signal });
-  if (response.ok) return response.json();
-  let detail = "";
-  try {
-    const body = (await response.json()) as unknown;
-    if (isRecord(body)) detail = nonEmptyString(body.detail) ?? nonEmptyString(body.title) ?? "";
-  } catch {
-    // The status text below is enough when the API did not return JSON.
-  }
-  throw new Error(detail || `Digital Twin API request failed (${response.status}).`);
-}
-
 function parseLayer(
   value: unknown,
   apiUrl: string,
@@ -143,8 +64,9 @@ function parseLayer(
 ): DigitalTwinEarthEngineLayer | null {
   if (!isRecord(value) || value.format !== "cog") return null;
   const layerId = nonEmptyString(value.layer_id);
-  const sourceUrl = nonEmptyString(value.url) ?? nonEmptyString(value.tile_url);
+  const sourceUrl = nonEmptyString(value.url);
   if (!layerId || !sourceUrl) return null;
+  if (typeof value.source_ready !== "boolean" || typeof value.artifact_ready !== "boolean") throw new Error("COG descriptor is missing source or artifact readiness.");
   const defaultStyle = isRecord(value.default_style) ? value.default_style : {};
   return {
     id: `${regionId}:${layerId}`,
@@ -258,7 +180,8 @@ export async function prepareDigitalTwinEarthEngineCog(
   }, timeoutMs);
 
   try {
-    const response = await fetchImpl(layer.url, {
+    const response = await requestDigitalTwinResponse(new URL(layer.url).origin, layer.url, {
+      fetchImpl,
       method: "HEAD",
       signal: controller.signal,
     });
@@ -299,28 +222,11 @@ export async function fetchDigitalTwinEarthEngineCatalog(
   const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
   if (!fetchImpl) throw new Error("This environment cannot connect to the Digital Twin API.");
 
-  const regionPage = await requestJson(
-    fetchImpl,
-    resolveDigitalTwinApiUrl(apiUrl, "/api/v1/regions?limit=100"),
-    options.signal,
-  );
-  const regions = pageItems(regionPage).flatMap((value) => {
-    if (!isRecord(value)) return [];
-    const id = nonEmptyString(value.region_id);
-    if (!id) return [];
-    return [{ id, name: nonEmptyString(value.name) }];
-  });
+  const regions = (await fetchDigitalTwinPages<{ region_id: string; name: string }>(apiUrl, "/api/v1/regions?limit=100", options)).map((region) => ({ id: region.region_id, name: region.name }));
 
   const results = await Promise.allSettled(
     regions.map(async (region) => {
-      const response = await requestJson(
-        fetchImpl,
-        resolveDigitalTwinApiUrl(
-          apiUrl,
-          `/api/v1/regions/${encodeURIComponent(region.id)}/earth-engine/map-layers`,
-        ),
-        options.signal,
-      );
+      const response = await requestDigitalTwinJson(apiUrl, `/api/v1/regions/${encodeURIComponent(region.id)}/earth-engine/map-layers`, { fetchImpl, signal: options.signal });
       return pageItems(response)
         .map((item) => parseLayer(item, apiUrl, region.id, region.name ?? region.id))
         .filter((layer): layer is DigitalTwinEarthEngineLayer => layer !== null);
@@ -337,4 +243,10 @@ export async function fetchDigitalTwinEarthEngineCatalog(
     result.status === "rejected" ? [regions[index]?.name ?? regions[index]?.id ?? "Unknown"] : [],
   );
   return { apiUrl, layers, unavailableRegions };
+}
+
+/** Fetch one region's descriptors without searching unrelated regions. */
+export async function fetchDigitalTwinRegionalEarthEngineLayers(apiUrl: string, regionId: string, regionName: string, options: { fetchImpl?: FetchLike; signal?: AbortSignal } = {}): Promise<DigitalTwinEarthEngineLayer[]> {
+  const response = await requestDigitalTwinJson(apiUrl, `/api/v1/regions/${encodeURIComponent(regionId)}/earth-engine/map-layers`, options);
+  return pageItems(response).map((item) => parseLayer(item, apiUrl, regionId, regionName)).filter((layer): layer is DigitalTwinEarthEngineLayer => layer !== null);
 }

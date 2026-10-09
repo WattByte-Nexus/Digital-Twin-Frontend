@@ -1,61 +1,11 @@
 import booleanIntersects from "@turf/boolean-intersects";
 import type { Feature, FeatureCollection, GeoJsonProperties, Geometry } from "geojson";
-import {
-  normalizeDigitalTwinApiUrl,
-  resolveDigitalTwinApiUrl,
-} from "../../../lib/digital-twin-earth-engine";
+import { requestDigitalTwinJson } from "../../../lib/digital-twin-api";
+import type { DigitalTwinWireRun } from "../../../lib/digital-twin-runs";
 
 export type RunDetailTab = "overview" | "behavior" | "exposure" | "inputs" | "activity";
-
-export interface DigitalTwinIgnitionPoint {
-  lat: number;
-  lon: number;
-}
-
-export interface DigitalTwinRunTrigger {
-  kind?: "manual" | "scenario";
-  correlation_id?: string;
-  scenario_id?: string;
-  scenario_name?: string;
-  base_weather_version?: string;
-  weather_version?: string;
-  physics_result_version?: string;
-  collision_trigger_id?: string;
-  ignition_location?: DigitalTwinIgnitionPoint;
-  ignition_points?: DigitalTwinIgnitionPoint[];
-  duration_hours?: number;
-  delta_t_hours?: number;
-  time?: {
-    mode?: string;
-    start_at?: string;
-    end_at?: string;
-    duration_hours?: number;
-  };
-}
-
-export interface DigitalTwinRunRecord {
-  simulation_id: string;
-  run_id: string;
-  region_id: string;
-  status: string;
-  trigger: DigitalTwinRunTrigger;
-  grid_geometry: Record<string, unknown>;
-  tick_refs: Array<{ tick: number; world_state_ref: string }>;
-  final_result_ref: string | null;
-  metrics: {
-    final_burning_cells: number;
-    final_burned_cells: number;
-    burned_area_hectares: number;
-    peak_spread_rate_hectares_per_hour: number;
-    land_cover_breakdown: Array<{
-      class_id: number;
-      label: string;
-      area_hectares: number;
-      percentage: number;
-    }>;
-  } | null;
-  failure: { error_type?: string; message?: string; detail?: string } | null;
-}
+export type DigitalTwinRunRecord = DigitalTwinWireRun;
+export type DigitalTwinRunTrigger = DigitalTwinRunRecord["trigger"];
 
 export interface RunBehaviorSample {
   tick: number;
@@ -79,28 +29,8 @@ export type RunTabData =
 interface LoadRunTabOptions {
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
-}
-
-function endpoint(apiUrl: string, path: string): string {
-  return resolveDigitalTwinApiUrl(normalizeDigitalTwinApiUrl(apiUrl), path);
-}
-
-async function responseBody(response: Response): Promise<unknown> {
-  const contentType = response.headers.get("content-type") ?? "";
-  if (contentType.includes("json")) return response.json();
-  const text = await response.text();
-  return text || null;
-}
-
-function apiErrorMessage(status: number, body: unknown): string {
-  if (typeof body === "object" && body !== null) {
-    const problem = body as Record<string, unknown>;
-    for (const key of ["detail", "message", "title"]) {
-      if (typeof problem[key] === "string" && problem[key].trim()) return problem[key];
-    }
-  }
-  if (typeof body === "string" && body.trim()) return body;
-  return `Digital Twin API request failed (${status}).`;
+  /** Contiguous positive ticks announced by the authoritative progress stream. */
+  completedTicks?: number;
 }
 
 function isNonNegativeFiniteNumber(value: unknown): value is number {
@@ -150,13 +80,7 @@ async function getJson<T>(
   fetchImpl: typeof fetch,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetchImpl(endpoint(apiUrl, path), {
-    headers: { Accept: "application/json, application/geo+json" },
-    signal,
-  });
-  const body = await responseBody(response);
-  if (!response.ok) throw new Error(apiErrorMessage(response.status, body));
-  return body as T;
+  return requestDigitalTwinJson<T>(apiUrl, path, { fetchImpl, signal, headers: { Accept: "application/json, application/geo+json" } });
 }
 
 function resultProperties(result: FeatureCollection): NonNullable<GeoJsonProperties> {
@@ -200,9 +124,11 @@ export async function loadRunTab(
   }
 
   if (tab === "behavior") {
-    const ticks = run.tick_refs
+    const ticks = [...new Set([...run.tick_refs
       .map(({ tick }) => tick)
-      .filter((tick) => Number.isInteger(tick) && tick > 0);
+      .filter((tick) => Number.isInteger(tick) && tick > 0),
+      ...Array.from({ length: options.completedTicks ?? 0 }, (_, index) => index + 1),
+    ])].sort((a, b) => a - b);
     const artifacts = await Promise.all(
       ticks.map((tick) =>
         getJson<FeatureCollection>(
@@ -229,13 +155,13 @@ export async function loadRunTab(
     };
   }
 
-  const latestTick = run.tick_refs
+  const latestTick = Math.max(options.completedTicks ?? 0, ...run.tick_refs
     .map(({ tick }) => tick)
     .filter((tick) => Number.isInteger(tick) && tick > 0)
-    .at(-1);
+  );
   const resultPath = run.final_result_ref
     ? `/api/v1/simulation-runs/${encodedRunId}/result.geojson`
-    : latestTick === undefined
+    : latestTick <= 0
       ? null
       : `/api/v1/simulation-runs/${encodedRunId}/ticks/${latestTick}/result.geojson`;
   if (!resultPath) {

@@ -17,6 +17,7 @@ export default [
     ignores: [
       "**/dist/**",
       "**/dist-embed/**",
+      "**/storybook-static/**",
       "**/build/**",
       "**/target/**",
       "**/node_modules/**",

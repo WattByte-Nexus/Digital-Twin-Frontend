@@ -1,0 +1,5 @@
+{
+  "engineRevision": "c4f3df8456f88f3ac22c25343a6ecb259eb3d284",
+  "schemaSha256": "aec155c6dab8306db44d85cd11c35f8dbd9b7682e52bff39309c11ab60ed4ec8",
+  "note": "Schema hash identifies the exact exported contract, including any working-tree changes."
+}

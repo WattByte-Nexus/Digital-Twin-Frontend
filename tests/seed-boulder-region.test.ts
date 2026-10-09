@@ -44,8 +44,8 @@ describe("Boulder Digital Twin seed", () => {
   it("retains the bundled feeder-aligned vegetation fixture", async () => {
     const [bundledPowerLines, bundledTrees] = await Promise.all(
       [
-        "../apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/boulder_13_8kv_feeder_large.geojson",
-        "../apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/boulder_13_8kv_feeder_large.geojson",
+        "../apps/geolibre-desktop/public/data/reference-networks/boulder_13_8kv_feeder_large.geojson",
+        "../apps/geolibre-desktop/public/data/reference-networks/boulder_13_8kv_feeder_large.geojson",
       ].map(async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"))),
     );
 

@@ -1,8 +1,12 @@
 import {
   normalizeDigitalTwinApiUrl,
-  resolveDigitalTwinApiUrl,
-} from "./digital-twin-earth-engine";
+  fetchDigitalTwinPages,
+  requestDigitalTwinJson,
+} from "./digital-twin-api";
 
+import type { components } from "./digital-twin-contract.generated";
+
+export type DigitalTwinWireRun = components["schemas"]["WildfireSimulationRun"];
 type FetchLike = typeof fetch;
 
 export type DigitalTwinRunStatus =
@@ -50,6 +54,7 @@ export interface DigitalTwinRunRecord {
   burnedAreaHectares: number | null;
   resultAvailable: boolean;
   failureCode: string | null;
+  failureMessage?: string | null;
 }
 
 export interface DigitalTwinRunCatalog {
@@ -75,6 +80,8 @@ export interface DigitalTwinScenarioRunSubmission {
   }>;
   windSpeedMph: number;
   windDirectionDegrees: number;
+  baseWeatherVersion: string;
+  bounds: DigitalTwinRegionBounds;
 }
 
 export interface DigitalTwinRunSubmission {
@@ -122,33 +129,8 @@ function nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function canonicalCursor(value: unknown): string | null {
-  const cursor = nonEmptyString(value);
-  return cursor !== null && /^(?:0|[1-9]\d*)$/.test(cursor) ? cursor : null;
-}
-
 function finiteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function problemDetail(value: unknown): string | null {
-  if (!isRecord(value)) return null;
-  return nonEmptyString(value.detail) ?? nonEmptyString(value.title);
-}
-
-async function apiFailure(response: Response, operation: string): Promise<Error> {
-  let body: unknown = null;
-  try {
-    body = await response.json();
-  } catch {
-    // The status remains useful when the API has no problem body.
-  }
-  const detail = problemDetail(body);
-  return new Error(
-    detail
-      ? `${operation} failed (${response.status}): ${detail}`
-      : `${operation} failed (${response.status}).`,
-  );
 }
 
 function parseRegion(value: unknown): DigitalTwinRegionRecord {
@@ -205,14 +187,34 @@ function triggerData(trigger: Record<string, unknown>, runId: string) {
 
   const ignition = parseIgnitionPoint(trigger.ignition_location, runId, 0);
   const time = isRecord(trigger.time) ? trigger.time : {};
+  if (kind === "manual" && time.mode !== "present_forecast" && time.mode !== "bounded") throw new Error(`Run ${runId} has an invalid time selection.`);
   return {
     scenarioId: null,
     scenarioName: null,
     triggerKind: kind === "manual" ? ("manual" as const) : ("automatic" as const),
     ignitionPoints: [ignition],
-    durationHours: finiteNumber(time.duration_hours),
+    durationHours: time.mode === "bounded"
+      ? boundedDurationHours(time.start_at, time.end_at)
+      : finiteNumber(time.duration_hours),
     deltaTHours: finiteNumber(trigger.delta_t_hours),
   };
+}
+
+export function boundedDurationHours(start: unknown, end: unknown): number | null {
+  if (typeof start !== "string" || typeof end !== "string") return null;
+  const duration = (Date.parse(end) - Date.parse(start)) / 3_600_000;
+  return Number.isFinite(duration) && duration > 0 ? duration : null;
+}
+
+/** Match the Engine's simulation_tick_count, including float tolerance. */
+export function digitalTwinTickCount(durationHours: number, deltaTHours: number): number {
+  if (!Number.isFinite(durationHours) || durationHours <= 0 || !Number.isFinite(deltaTHours) || deltaTHours <= 0) {
+    throw new Error("Duration and timestep must be positive finite numbers.");
+  }
+  const quotient = durationHours / deltaTHours;
+  const nearest = Math.round(quotient);
+  return Math.abs(quotient - nearest) <= Math.max(1e-12, 1e-12 * Math.max(Math.abs(quotient), nearest))
+    ? nearest : Math.ceil(quotient);
 }
 
 export function parseDigitalTwinRun(
@@ -231,12 +233,14 @@ export function parseDigitalTwinRun(
   }
   const trigger = triggerData(value.trigger, id);
   const tickRefs = Array.isArray(value.tick_refs) ? value.tick_refs : [];
-  const completedTicks = tickRefs.length;
+  const completedTicks = new Set(tickRefs.flatMap((ref) =>
+    isRecord(ref) && Number.isInteger(ref.tick) && Number(ref.tick) > 0 ? [ref.tick] : [],
+  )).size;
   const expectedTicks =
     trigger.durationHours !== null &&
     trigger.deltaTHours !== null &&
     trigger.deltaTHours > 0
-      ? Math.round(trigger.durationHours / trigger.deltaTHours)
+      ? digitalTwinTickCount(trigger.durationHours, trigger.deltaTHours)
       : null;
   const failure = isRecord(value.failure) ? value.failure : {};
   const metrics = isRecord(value.metrics) ? value.metrics : {};
@@ -264,57 +268,9 @@ export function parseDigitalTwinRun(
     expectedTicks,
     burnedAreaHectares,
     resultAvailable: nonEmptyString(value.final_result_ref) !== null,
-    failureCode: nonEmptyString(failure.code),
+    failureCode: nonEmptyString(failure.error_type),
+    failureMessage: nonEmptyString(failure.error_message),
   };
-}
-
-interface ApiPage {
-  items: unknown[];
-  nextCursor: string | null;
-}
-
-async function requestPage(
-  fetchImpl: FetchLike,
-  apiUrl: string,
-  path: string,
-  cursor: string | null,
-  signal?: AbortSignal,
-): Promise<ApiPage> {
-  const url = new URL(resolveDigitalTwinApiUrl(apiUrl, path));
-  url.searchParams.set("limit", "100");
-  if (cursor) url.searchParams.set("cursor", cursor);
-  const response = await fetchImpl(url.href, {
-    headers: { Accept: "application/json" },
-    signal,
-  });
-  if (!response.ok) {
-    throw new Error(`Digital Twin API request failed (${response.status}).`);
-  }
-  const value: unknown = await response.json();
-  if (!isRecord(value) || !Array.isArray(value.items)) {
-    throw new Error("Digital Twin API returned an invalid paginated response.");
-  }
-  const nextCursor = value.next_cursor;
-  if (nextCursor !== null && nextCursor !== undefined && !canonicalCursor(nextCursor)) {
-    throw new Error("Digital Twin API returned an invalid page cursor.");
-  }
-  return { items: value.items, nextCursor: canonicalCursor(nextCursor) };
-}
-
-async function requestAllPages(
-  fetchImpl: FetchLike,
-  apiUrl: string,
-  path: string,
-  signal?: AbortSignal,
-): Promise<unknown[]> {
-  const items: unknown[] = [];
-  let cursor: string | null = null;
-  do {
-    const page = await requestPage(fetchImpl, apiUrl, path, cursor, signal);
-    items.push(...page.items);
-    cursor = page.nextCursor;
-  } while (cursor);
-  return items;
 }
 
 export async function fetchDigitalTwinRunCatalog(
@@ -326,7 +282,7 @@ export async function fetchDigitalTwinRunCatalog(
   if (!fetchImpl) throw new Error("This environment cannot connect to the Digital Twin API.");
   const [regions, runValues] = await Promise.all([
     fetchDigitalTwinRegions(apiUrl, { fetchImpl, signal: options.signal }),
-    requestAllPages(fetchImpl, apiUrl, "/api/v1/simulation-runs", options.signal),
+    fetchDigitalTwinPages<unknown>(apiUrl, "/api/v1/simulation-runs", { fetchImpl, signal: options.signal }),
   ]);
   const regionNames = new Map(regions.map((region) => [region.id, region.name]));
   const runs = runValues.map((run) => parseDigitalTwinRun(run, regionNames));
@@ -340,12 +296,7 @@ export async function fetchDigitalTwinRegions(
   const apiUrl = normalizeDigitalTwinApiUrl(value);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
   if (!fetchImpl) throw new Error("This environment cannot connect to the Digital Twin API.");
-  const regionValues = await requestAllPages(
-    fetchImpl,
-    apiUrl,
-    "/api/v1/regions",
-    options.signal,
-  );
+  const regionValues = await fetchDigitalTwinPages<unknown>(apiUrl, "/api/v1/regions", { fetchImpl, signal: options.signal });
   return regionValues.map(parseRegion);
 }
 
@@ -361,181 +312,46 @@ export async function fetchDigitalTwinRun(
   const apiUrl = normalizeDigitalTwinApiUrl(value);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
   if (!fetchImpl) throw new Error("This environment cannot connect to the Digital Twin API.");
-  const response = await fetchImpl(
-    resolveDigitalTwinApiUrl(
-      apiUrl,
-      `/api/v1/simulation-runs/${encodeURIComponent(runId)}`,
-    ),
-    { headers: { Accept: "application/json" }, signal: options.signal },
-  );
-  if (!response.ok) throw await apiFailure(response, "Digital Twin run request");
-  return parseDigitalTwinRun(await response.json(), options.regionNames ?? new Map());
+  const body = await requestDigitalTwinJson<unknown>(apiUrl, `/api/v1/simulation-runs/${encodeURIComponent(runId)}`, options);
+  return parseDigitalTwinRun(body, options.regionNames ?? new Map());
 }
 
-function assertScenarioRunSubmission(
-  submission: DigitalTwinScenarioRunSubmission,
-): void {
-  if (!submission.scenarioName.trim()) throw new Error("A scenario name is required.");
-  if (!submission.regionId.trim()) throw new Error("A simulation region is required.");
-  if (!Number.isFinite(submission.durationHours) || submission.durationHours <= 0) {
-    throw new Error("Simulation duration must be greater than zero.");
-  }
-  if (
-    !Number.isFinite(submission.windSpeedMph) ||
-    submission.windSpeedMph < 0 ||
-    !Number.isFinite(submission.windDirectionDegrees) ||
-    submission.windDirectionDegrees < 0 ||
-    submission.windDirectionDegrees >= 360
-  ) {
-    throw new Error("Simulation wind settings are invalid.");
-  }
-  if (submission.ignitionPoints.length < 1 || submission.ignitionPoints.length > 100) {
-    throw new Error("A simulation must have between 1 and 100 ignition points.");
-  }
-  for (const point of submission.ignitionPoints) {
-    if (
-      !Number.isFinite(point.latitude) ||
-      !Number.isFinite(point.longitude) ||
-      point.latitude < -90 ||
-      point.latitude > 90 ||
-      point.longitude < -180 ||
-      point.longitude > 180
-    ) {
-      throw new Error("A simulation ignition point is invalid.");
-    }
-  }
-}
-
-function parseRegionBounds(value: unknown): DigitalTwinRegionBounds {
-  if (!isRecord(value) || !isRecord(value.bounds)) {
-    throw new Error("Digital Twin API returned an invalid region boundary.");
-  }
-  const west = finiteNumber(value.bounds.west);
-  const south = finiteNumber(value.bounds.south);
-  const east = finiteNumber(value.bounds.east);
-  const north = finiteNumber(value.bounds.north);
-  if (west === null || south === null || east === null || north === null || west >= east || south >= north) {
-    throw new Error("Digital Twin API returned an invalid region boundary.");
-  }
-  return { west, south, east, north };
-}
-
-function latestReadyWeatherVersion(value: unknown): string {
-  if (!isRecord(value) || !Array.isArray(value.items)) {
-    throw new Error("Digital Twin API returned an invalid weather dataset list.");
-  }
-  for (const dataset of value.items) {
-    if (!isRecord(dataset) || dataset.ready !== true) continue;
-    const version = nonEmptyString(dataset.version);
-    if (version) return version;
-  }
-  throw new Error("The selected region has no ready weather dataset.");
-}
-
-async function jsonResponse(
-  fetchImpl: FetchLike,
-  url: string,
-  init: RequestInit,
-  operation: string,
-): Promise<unknown> {
-  const response = await fetchImpl(url, init);
-  if (!response.ok) throw await apiFailure(response, operation);
-  return response.json() as Promise<unknown>;
-}
-
-/** Create an Engine-owned scenario and queue its durable simulation run. */
+/** Submit exactly the reviewed weather/extent rather than resolving mutable latest inputs. */
 export async function submitDigitalTwinScenarioRun(
-  value: string,
+  apiUrl: string,
   submission: DigitalTwinScenarioRunSubmission,
   options: { fetchImpl?: FetchLike; idempotencyKey?: string; signal?: AbortSignal } = {},
 ): Promise<DigitalTwinRunSubmission> {
-  assertScenarioRunSubmission(submission);
-  const apiUrl = normalizeDigitalTwinApiUrl(value);
-  const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
-  if (!fetchImpl) throw new Error("This environment cannot connect to the Digital Twin API.");
+  const { createDigitalTwinScenario } = await import("./digital-twin-scenarios");
+  const key = options.idempotencyKey ?? crypto.randomUUID();
+  const scenario = await createDigitalTwinScenario(apiUrl, submission, { ...options, idempotencyKey: `scenario-${key}` });
+  return submitDigitalTwinSavedScenarioRun(apiUrl, scenario.scenario_id, submission.ignitionPoints, { ...options, idempotencyKey: `run-${key}` });
+}
 
-  const regionId = submission.regionId.trim();
-  const regionPath = `/api/v1/regions/${encodeURIComponent(regionId)}`;
-  const weatherPath = `${regionPath}/weather-datasets?limit=100`;
-  const [regionValue, weatherValue] = await Promise.all([
-    jsonResponse(
-      fetchImpl,
-      resolveDigitalTwinApiUrl(apiUrl, regionPath),
-      { headers: { Accept: "application/json" }, signal: options.signal },
-      "Region request",
-    ),
-    jsonResponse(
-      fetchImpl,
-      resolveDigitalTwinApiUrl(apiUrl, weatherPath),
-      { headers: { Accept: "application/json" }, signal: options.signal },
-      "Weather data request",
-    ),
-  ]);
-  const bounds = parseRegionBounds(regionValue);
-  const baseWeatherVersion = latestReadyWeatherVersion(weatherValue);
-  const submissionId = options.idempotencyKey?.trim() || crypto.randomUUID();
-  const scenarioValue = await jsonResponse(
-    fetchImpl,
-    resolveDigitalTwinApiUrl(apiUrl, "/api/v1/scenarios"),
-    {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "Idempotency-Key": `scenario-${submissionId}`,
-      },
-      body: JSON.stringify({
-        name: submission.scenarioName.trim(),
-        region_id: regionId,
-        geometry: {
-          type: "Polygon",
-          coordinates: [[
-            [bounds.west, bounds.south],
-            [bounds.east, bounds.south],
-            [bounds.east, bounds.north],
-            [bounds.west, bounds.north],
-            [bounds.west, bounds.south],
-          ]],
-        },
-        base_weather_version: baseWeatherVersion,
-        wind_speed: { value: submission.windSpeedMph, unit: "mph" },
-        wind_direction: {
-          bearing_degrees: submission.windDirectionDegrees,
-          reference: "towards",
-        },
-        duration_hours: submission.durationHours,
-      }),
-      signal: options.signal,
+export async function submitDigitalTwinSavedScenarioRun(
+  apiUrl: string,
+  scenarioId: string,
+  points: DigitalTwinScenarioRunSubmission["ignitionPoints"],
+  options: { fetchImpl?: FetchLike; idempotencyKey?: string; signal?: AbortSignal } = {},
+): Promise<DigitalTwinRunSubmission> {
+  if (!scenarioId || points.length < 1 || points.length > 100) throw new Error("Choose a scenario and between 1 and 100 ignition points.");
+  const body = await requestDigitalTwinJson<{ run_id: string }>(apiUrl, "/api/v1/simulation-runs", {
+    ...options, method: "POST", json: {
+      scenario_id: scenarioId,
+      ignition_points: points.map((point) => ({ type: "Point", coordinates: [point.longitude, point.latitude] })),
     },
-    "Scenario creation",
-  );
-  const scenarioId = isRecord(scenarioValue) ? nonEmptyString(scenarioValue.scenario_id) : null;
-  if (!scenarioId) throw new Error("Digital Twin API returned an invalid scenario record.");
+  });
+  if (!body.run_id) throw new Error("Digital Twin API returned an invalid simulation run record.");
+  return { runId: body.run_id };
+}
 
-  const runValue = await jsonResponse(
-    fetchImpl,
-    resolveDigitalTwinApiUrl(apiUrl, "/api/v1/simulation-runs"),
-    {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "Idempotency-Key": `run-${submissionId}`,
-      },
-      body: JSON.stringify({
-        scenario_id: scenarioId,
-        ignition_points: submission.ignitionPoints.map((point) => ({
-          type: "Point",
-          coordinates: [point.longitude, point.latitude],
-        })),
-      }),
-      signal: options.signal,
-    },
-    "Simulation submission",
-  );
-  const runId = isRecord(runValue) ? nonEmptyString(runValue.run_id) : null;
-  if (!runId) throw new Error("Digital Twin API returned an invalid simulation run record.");
-  return { runId };
+function parseRegionBounds(value: unknown): DigitalTwinRegionBounds {
+  if (!isRecord(value) || !isRecord(value.bounds)) throw new Error("Digital Twin API returned an invalid region boundary.");
+  const { west, south, east, north } = value.bounds;
+  if (![west, south, east, north].every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate)) || Number(west) >= Number(east) || Number(south) >= Number(north)) {
+    throw new Error("Digital Twin API returned an invalid region boundary.");
+  }
+  return { west: Number(west), south: Number(south), east: Number(east), north: Number(north) };
 }
 
 export function filterDigitalTwinRuns(

@@ -72,18 +72,19 @@ describe("Digital Twin power-line rendering", () => {
     const start = pole("start", 39.9999);
     const end = pole("end", 40.0003);
     const line = { ...lines[0], assetId: "captured-wire", sourceRef: "point-cloud:test", measuredPath };
-    const network = buildDigitalTwinPowerLineNetwork([line], {
+    const canonical = { ...line, assetId: "canonical-span", measuredPath: null, coordinates: [start.top, end.top] as [typeof start.top, typeof end.top], supportIds: [start.assetId, end.assetId] as [string, string] };
+    const network = buildDigitalTwinPowerLineNetwork([line, canonical], {
       measuredPoles: [start, end],
     });
-    const conductor = network.conductors.find(c => c.inferredConnection)!;
+    const conductor = network.conductors.find(c => c.assetId === canonical.assetId)!;
     assert.deepEqual(new Set([conductor.startPoleId, conductor.endPoleId]), new Set(["start", "end"]));
-    assert.deepEqual(conductor.evidenceAssetIds, ["captured-wire"]);
+    assert.deepEqual(conductor.path, canonical.coordinates.map(p => [p.lon, p.lat, p.elevationM]));
     assert.deepEqual(network.conductors.find(c => c.assetId === line.assetId)!.path,
       measuredPath.map(p => [p.lon, p.lat, p.elevationM]));
     assert.ok(network.poles.every(support => support.assetIds.includes(conductor.assetId)));
     assert.deepEqual(measuredPath[0], { lon: -105, lat: 40, elevationM: 1710 });
   });
-  it("uses the detailed pole model at the measured base and observed height", () => {
+  it("uses the same model size for measured and catalog poles while preserving measured bases", () => {
     const network = buildDigitalTwinPowerLineNetwork([], {
       measuredPoles: [
         {
@@ -106,13 +107,23 @@ describe("Digital Twin power-line rendering", () => {
     assert.deepEqual(pole.position, [-105, 40, 1700]);
     assert.deepEqual(
       pole.scale,
-      Array(3).fill(12 / POWER_POLE_MODEL_HEIGHT_METERS)
+      Array(3).fill(POWER_POLE_HEIGHT_AGL_METERS / POWER_POLE_MODEL_HEIGHT_METERS)
     );
     const layers = createDigitalTwinPowerLineLayers(network, {
       modelUrl: "https://example.com/pole.glb",
     });
     assert.deepEqual(layers[1].props.data, [pole]);
     assert.deepEqual(layers[1].props.getPosition(pole), [-105, 40, 1700]);
+    const shortPole: DigitalTwinPowerPoleAsset = {
+      kind: "power_pole", assetId: "short-pole", regionId: "region-1",
+      base: { lon: -105.002, lat: 40, elevationM: 1700 },
+      top: { lon: -105.002, lat: 40, elevationM: 1703 },
+      radiusM: 0.1, sourceRef: "point-cloud:capture:v1:pole:2",
+    };
+    const mixedNetwork = buildDigitalTwinPowerLineNetwork(lines, { measuredPoles: [shortPole] });
+    assert.ok(mixedNetwork.poles.every(support =>
+      support.scale.every((value, index) => value === pole.scale[index])));
+    assert.equal(shortPole.top.elevationM, 1703);
   });
   it("renders exactly the segmented conductor bundle declared by the asset", () => {
     const [line] = lines;

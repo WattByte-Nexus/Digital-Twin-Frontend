@@ -118,7 +118,7 @@ describe("Digital Twin frontend composition", () => {
   it("shows the live map controls while the scenario builder is open", () => {
     assert.match(
       workspaceSource,
-      /const showLiveMapChrome =\s*!settingsOpen &&\s*\(activeDestination === "live" \|\|\s*\(activeDestination === "scenarios" && scenarioBuilderOpen\)\)/
+      /const showLiveMapChrome =\s*!settingsOpen &&[\s\S]*?\(activeDestination === "live" \|\|\s*\(activeDestination === "scenarios" && scenarioBuilderOpen\)\)/
     );
     assert.match(workspaceSource, /mapToolbar=\{\s*showLiveMapChrome \?/);
   });
@@ -126,7 +126,7 @@ describe("Digital Twin frontend composition", () => {
   it("keeps operational asset auto-fit from overriding the run camera", () => {
     assert.match(
       workspaceSource,
-      /if \(\s*!showLiveMapChrome \|\|\s*!mapInstance \|\|[\s\S]*?mapInstance\.fitBounds\([\s\S]*?regionAssets,[\s\S]*?regionalPowerLines,[\s\S]*?showLiveMapChrome,?\s*\]\);/
+      /if \(!showLiveMapChrome \|\| !mapInstance\) return;[\s\S]*?mapInstance\.fitBounds\([\s\S]*?regionAssets,[\s\S]*?regionalPowerLines,[\s\S]*?showLiveMapChrome,/
     );
   });
 
@@ -144,7 +144,7 @@ describe("Digital Twin frontend composition", () => {
     assert.match(workspaceSource, /<ScenariosView[\s\S]*?regions=\{regions\}/);
     assert.match(
       scenarioBuilderSource,
-      /regions\.map\(\(region\) => \([\s\S]*?<SelectMenuItem key=\{region\.id\} value=\{region\.id\}/
+      /regions\.map\(\(region\) =>[\s\S]*?<SelectMenuItem key=\{region\.id\} value=\{region\.id\}/
     );
     assert.doesNotMatch(
       scenarioBuilderSource,
@@ -156,30 +156,18 @@ describe("Digital Twin frontend composition", () => {
     );
   });
 
-  it("opens scenario weather editing beside the run setup panel", () => {
-    assert.match(
-      scenarioBuilderSource,
-      /<Popover>\s*<FloatingMapPanel[\s\S]*?<PopoverAnchor asChild>\s*<Card/
-    );
-    assert.match(
-      scenarioBuilderSource,
-      /<FloatingMapPanel[\s\S]*?onAnchorChange=\{setRunSetupAnchor\}/
-    );
-    assert.match(
-      scenarioBuilderSource,
-      /<\/FloatingMapPanel>\s*<PopoverContent[\s\S]*?avoidCollisions=\{false\}[\s\S]*?side=\{weatherEditorSide\}[\s\S]*?sideOffset=\{12\}[\s\S]*?<WeatherSettingsPanel/
-    );
+  it("keeps simulation weather distinct from map appearance", () => {
+    assert.match(scenarioBuilderSource, /fetchDigitalTwinWeatherPage/);
+    assert.match(scenarioBuilderSource, /Base weather version/);
+    assert.match(scenarioBuilderSource, /Map appearance and lighting do not change these inputs/);
+    assert.match(workspaceSource, /<WeatherSettingsFloatingPanel/);
   });
 
-  it("supports scenario durations up to 100 hours", () => {
-    assert.match(
-      scenarioBuilderSource,
-      /<Slider[\s\S]*?aria-label="Simulation duration in hours"[\s\S]*?max=\{100\}[\s\S]*?min=\{1\}/
-    );
-    assert.doesNotMatch(
-      scenarioBuilderSource,
-      /<SelectMenuItem value="8">8 hours/
-    );
+  it("supports Engine-compatible synthetic duration and direct timesteps", () => {
+    assert.match(scenarioBuilderSource, /id="simulation-duration" type="number"/);
+    assert.match(scenarioBuilderSource, /The Engine uses one-hour timesteps/);
+    assert.match(scenarioBuilderSource, /id="run-timestep"/);
+    assert.match(scenarioBuilderSource, /Bounded UTC interval/);
   });
 
   it("owns the weather-to-map controller in the shared production component", () => {
@@ -204,7 +192,7 @@ describe("Digital Twin frontend composition", () => {
   });
 
   it("renders canonical assets through one shared surface module", () => {
-    assert.match(workspaceSource, /fetchDigitalTwinAssets/);
+    assert.match(workspaceSource, /observeDigitalTwinAssets/);
     assert.match(mapModuleSource, /createDigitalTwinPowerLineLayers/);
     assert.match(mapModuleSource, /resolveDigitalTwinPowerPoleModelUrl/);
     assert.match(workspaceSource, /surfaceLayers=\{surfaceLayers\}/);
@@ -281,7 +269,7 @@ describe("Digital Twin frontend composition", () => {
 
   it("refines point clouds within the interactive memory budget", () => {
     assert.match(lidarSource, /maximumScreenSpaceError:\s*8/);
-    assert.match(lidarSource, /maximumMemoryUsage:\s*64/);
+    assert.match(lidarSource, /maximumMemoryUsage:\s*256/);
     assert.match(lidarSource, /memoryAdjustedScreenSpaceError:\s*true/);
     assert.match(lidarSource, /pointSize:\s*1/);
     assert.match(lidarSource, /sizeUnits:\s*"pixels"/);
@@ -320,10 +308,10 @@ describe("Digital Twin frontend composition", () => {
     assert.ok(monitoringIndex > lightingIndex);
   });
 
-  it("keeps the bottom-left corner of the map clear", () => {
+  it("keeps diagnostic status and the conductor network card out of the map", () => {
     assert.doesNotMatch(workspaceSource, /<DigitalTwinMapStatus/);
     assert.doesNotMatch(workspaceSource, /Retry point cloud/);
     assert.doesNotMatch(workspaceSource, /Retry power lines/);
-    assert.doesNotMatch(workspaceSource, /absolute bottom-\d+ left-\d+/);
+    assert.doesNotMatch(workspaceSource, /SurveyNetworkLegend/);
   });
 });

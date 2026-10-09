@@ -1,108 +1,48 @@
 import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardFooter,
-  DEFAULT_WEATHER_SETTINGS,
-  FloatingMapPanel,
-  FloatingMapPanelDragHandle,
-  fitScaleForPanel,
-  Input,
-  Label,
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-  PopoverTrigger,
-  ScrollArea,
-  SelectMenu,
-  SelectMenuContent,
-  SelectMenuItem,
-  SelectMenuTrigger,
-  SelectMenuValue,
-  Slider,
-  WeatherSettingsPanel,
-  type DigitalTwinRegion,
-  type FloatingPanelAnchor,
-  surfaceThemeClassName,
-  type SurfaceTheme,
-  type WeatherSettingsValue,
+  Badge, Button, Card, CardContent, CardFooter, DEFAULT_WEATHER_SETTINGS,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+  FloatingMapPanel, FloatingMapPanelDragHandle, Input, Label, ScrollArea,
+  SelectMenu, SelectMenuContent, SelectMenuItem, SelectMenuTrigger, SelectMenuValue,
+  Tabs, TabsList, TabsTrigger, surfaceThemeClassName,
+  type DigitalTwinRegion, type SurfaceTheme,
 } from "@geolibre/ui";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  CircleCheck,
-  Clock3,
-  CloudSun,
-  Crosshair,
-  FileText,
-  Flame,
-  MapPin,
-  Redo2,
-  RotateCcw,
-  SlidersHorizontal,
-  Trash2,
-  Undo2,
-  X,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Crosshair, Flame, Save, Trash2, Undo2, Redo2, RotateCcw, X } from "lucide-react";
 import maplibregl from "maplibre-gl";
-import {
-  type Dispatch,
-  type ReactNode,
-  type RefObject,
-  type SetStateAction,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type Dispatch, type ReactNode, type RefObject, type SetStateAction, useEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { fetchDigitalTwinRegionReadiness } from "../../../../lib/digital-twin-regions";
+import { requestDigitalTwinJson } from "../../../../lib/digital-twin-api";
+import type { DigitalTwinRegionBounds } from "../../../../lib/digital-twin-runs";
 import {
-  DEFAULT_FIRE_MODEL_SETTINGS,
-  type FireModelSettings,
-  type IgnitionPoint,
-  type ScenarioRunRequest,
-} from "../simulation-flow";
+  directRunBody, fetchDigitalTwinWeatherPage, reviewedRunFingerprint, resolveDigitalTwinForecast,
+  scenarioCreateBody, scenarioSubmission, type DigitalTwinForecast, type DigitalTwinScenario, type DigitalTwinWeatherDataset,
+} from "../../../../lib/digital-twin-scenarios";
+import { ScenarioIgnitionCoordinates } from "./ScenarioIgnitionCoordinates";
+import { type IgnitionPoint, type ScenarioRunRequest } from "../simulation-flow";
 
 interface ScenarioBuilderProps {
+  apiUrl: string;
   activeRegionId: string;
   initialRequest?: ScenarioRunRequest;
   mapControllerRef: RefObject<ScenarioMapController | null>;
   mapSlot: ReactNode;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onRun: (request: ScenarioRunRequest, idempotencyKey: string) => Promise<void>;
+  onSave: (request: Extract<ScenarioRunRequest, { mode: "synthetic" }>, idempotencyKey: string) => Promise<DigitalTwinScenario>;
   regions: readonly DigitalTwinRegion[];
   theme: SurfaceTheme;
 }
-
-export interface ScenarioMapController {
-  getMap: () => maplibregl.Map | null;
-}
-
-type SetupStep = "area" | "ignitions" | "weather" | "model" | "review";
-
-const SETUP_STEPS = [
-  { id: "area", label: "Area", Icon: MapPin },
-  { id: "ignitions", label: "Ignitions", Icon: Flame },
-  { id: "weather", label: "Weather", Icon: CloudSun },
-  { id: "model", label: "Model", Icon: SlidersHorizontal },
-  { id: "review", label: "Review", Icon: FileText },
-] as const;
-
-const RUN_SETUP_SIZE = { width: 416, height: 831 };
-const WEATHER_EDITOR_SIZE = { width: 380, height: 832 };
-const PANEL_EDGE_INSET = 16;
-const PANEL_GAP = 12;
-const MAXIMUM_PANEL_SCALE = 1.25;
-
+export interface ScenarioMapController { getMap: () => maplibregl.Map | null }
+type SetupStep = "area" | "ignitions" | "weather" | "time" | "review";
+const SETUP_STEPS = ["area", "ignitions", "weather", "time", "review"] as const;
 function pointId(): string {
   return `ignition-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function useIgnitionMap({
   enabled,
+  maximumPoints,
   mapControllerRef,
   points,
   selectedPointId,
@@ -111,6 +51,7 @@ function useIgnitionMap({
   setSelectedPointId,
 }: {
   enabled: boolean;
+  maximumPoints: number;
   mapControllerRef: RefObject<ScenarioMapController | null>;
   points: IgnitionPoint[];
   selectedPointId: string | null;
@@ -158,7 +99,7 @@ function useIgnitionMap({
         );
         const marker = new maplibregl.Marker({
           element: container,
-          draggable: true,
+          draggable: enabled,
         })
           .setLngLat([point.longitude, point.latitude])
           .addTo(map);
@@ -180,7 +121,7 @@ function useIgnitionMap({
       });
 
       const handleMapClick = (event: maplibregl.MapMouseEvent) => {
-        if (!enabled) return;
+        if (!enabled || points.length >= maximumPoints) return;
         const nextPoint: IgnitionPoint = {
           id: pointId(),
           longitude: event.lngLat.lng,
@@ -211,6 +152,7 @@ function useIgnitionMap({
     };
   }, [
     enabled,
+    maximumPoints,
     mapControllerRef,
     points,
     selectedPointId,
@@ -220,876 +162,206 @@ function useIgnitionMap({
   ]);
 }
 
-export function ScenarioBuilder({
-  activeRegionId,
-  initialRequest,
-  mapControllerRef,
-  mapSlot,
-  onClose,
-  onRun,
-  regions,
-  theme,
-}: ScenarioBuilderProps) {
-  const [scenarioName, setScenarioName] = useState(
-    initialRequest?.scenario ?? ""
-  );
-  const [regionId, setRegionId] = useState(
-    () =>
-      (regions.some((region) => region.id === initialRequest?.regionId)
-        ? initialRequest?.regionId
-        : regions.find((region) => region.name === initialRequest?.location)?.id) ??
-      (regions.some((region) => region.id === activeRegionId)
-        ? activeRegionId
-        : regions[0]?.id ?? "")
-  );
-  const [durationHours, setDurationHours] = useState(
-    initialRequest?.durationHours ?? 4
-  );
-  const [modelSettings, setModelSettings] = useState<FireModelSettings>(() => ({
-    ...(initialRequest?.modelSettings ?? DEFAULT_FIRE_MODEL_SETTINGS),
-  }));
-  const [activeStep, setActiveStep] = useState<SetupStep>(
-    initialRequest ? "ignitions" : "area"
-  );
+export function ScenarioBuilder({ apiUrl, activeRegionId, initialRequest, mapControllerRef, mapSlot, onClose, onDirtyChange, onRun, onSave, regions, theme }: ScenarioBuilderProps) {
+  const initialSynthetic = initialRequest?.mode === "synthetic" ? initialRequest : undefined;
+  const [scenarioName, setScenarioName] = useState(initialSynthetic?.scenario ?? "");
+  const [scenarioId, setScenarioId] = useState(initialSynthetic?.scenarioId);
+  const [mode, setMode] = useState<ScenarioRunRequest["mode"]>(initialRequest?.mode ?? "synthetic");
+  const [regionId, setRegionId] = useState(initialRequest?.regionId ?? activeRegionId);
+  const [durationHours, setDurationHours] = useState(initialRequest && "durationHours" in initialRequest ? initialRequest.durationHours : 4);
+  const [deltaTHours, setDeltaTHours] = useState(initialRequest && "deltaTHours" in initialRequest ? initialRequest.deltaTHours : 1);
+  const [startAt, setStartAt] = useState(initialRequest?.mode === "bounded" ? initialRequest.startAt : "");
+  const [endAt, setEndAt] = useState(initialRequest?.mode === "bounded" ? initialRequest.endAt : "");
+  const [windSpeed, setWindSpeed] = useState(initialSynthetic?.windSpeedMph ?? 18);
+  const [windDirection, setWindDirection] = useState(initialSynthetic?.windDirectionDegrees ?? 90);
+  const [bounds, setBounds] = useState<DigitalTwinRegionBounds | null>(initialSynthetic?.bounds ?? null);
+  const [regionBounds, setRegionBounds] = useState<DigitalTwinRegionBounds | null>(null);
+  const [baseWeatherVersion, setBaseWeatherVersion] = useState(initialSynthetic?.baseWeatherVersion ?? "");
+  const [weatherDatasets, setWeatherDatasets] = useState<DigitalTwinWeatherDataset[]>([]);
+  const [weatherCursor, setWeatherCursor] = useState<string | null>(null);
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
+  const [readiness, setReadiness] = useState<{ ready_to_simulate: boolean; reason_codes: string[] } | null>(null);
+  const [activeStep, setActiveStep] = useState<SetupStep>(initialSynthetic?.scenarioId ? "ignitions" : "area");
   const [placementActive, setPlacementActive] = useState(true);
-  const [points, setPoints] = useState<IgnitionPoint[]>(
-    () => initialRequest?.ignitionPoints.map((point) => ({ ...point })) ?? []
-  );
+  const [points, setPoints] = useState<IgnitionPoint[]>(initialRequest?.ignitionPoints ?? []);
   const [redoPoints, setRedoPoints] = useState<IgnitionPoint[]>([]);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
-  const submissionIdRef = useRef<string | null>(null);
-  const [runSetupAnchor, setRunSetupAnchor] = useState<FloatingPanelAnchor>({
-    edge: "right",
-    offset: 0,
-  });
-  const builderRef = useRef<HTMLDivElement>(null);
-  const [weatherEditorScale, setWeatherEditorScale] = useState(1);
-  const [weather, setWeather] = useState<WeatherSettingsValue>(() => {
-    const initialWeather = initialRequest?.weather ?? {
-      ...DEFAULT_WEATHER_SETTINGS,
-      events: {
-        ...DEFAULT_WEATHER_SETTINGS.events,
-        wind: 18,
-        windDirection: 90,
-      },
-    };
-    return { ...initialWeather, events: { ...initialWeather.events } };
-  });
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [forecastIssueAt, setForecastIssueAt] = useState(new Date().toISOString());
+  const [forecastValidAt, setForecastValidAt] = useState("");
+  const [forecast, setForecast] = useState<DigitalTwinForecast | null>(null);
+  const [forecastError, setForecastError] = useState<string | null>(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const frozenRef = useRef<{ fingerprint: string; key: string; request: ScenarioRunRequest } | null>(null);
+  const frozenSaveRef = useRef<{ fingerprint: string; key: string; request: Extract<ScenarioRunRequest, { mode: "synthetic" }> } | null>(null);
+  const weather = initialRequest?.weather ?? DEFAULT_WEATHER_SETTINGS;
+  const location = regions.find((region) => region.id === regionId)?.name ?? regionId;
+  const maximumPoints = mode === "synthetic" ? 100 : 1;
+  const portalClass = `${surfaceThemeClassName(theme)} surface-glass-overlay min-w-[var(--radix-select-trigger-width)]`;
 
-  useLayoutEffect(() => {
-    const builder = builderRef.current;
-    if (!builder) return;
+  useEffect(() => {
+    const controller = new AbortController();
+    setSourcesLoading(true);
+    setSourceError(null);
+    setReadiness(null);
+    setWeatherDatasets([]);
+    setWeatherCursor(null);
+    void Promise.all([
+      requestDigitalTwinJson<{ bounds: DigitalTwinRegionBounds }>(apiUrl, `/api/v1/regions/${encodeURIComponent(regionId)}`, { signal: controller.signal }),
+      fetchDigitalTwinWeatherPage(apiUrl, regionId, null, { signal: controller.signal }),
+      fetchDigitalTwinRegionReadiness(apiUrl, regionId, { signal: controller.signal }),
+    ]).then(([region, page, ready]) => {
+      if (controller.signal.aborted) return;
+      setRegionBounds(region.bounds);
+      setBounds((current) => current ?? region.bounds);
+      setWeatherDatasets(page.items);
+      setWeatherCursor(page.next_cursor);
+      setReadiness(ready);
+    }).catch((cause: unknown) => {
+      if (!controller.signal.aborted) setSourceError(cause instanceof Error ? cause.message : "Region inputs are unavailable.");
+    }).finally(() => { if (!controller.signal.aborted) setSourcesLoading(false); });
+    return () => controller.abort();
+  }, [apiUrl, regionId]);
 
-    const updateScale = () => {
-      setWeatherEditorScale(
-        fitScaleForPanel(
-          {
-            width: RUN_SETUP_SIZE.width + PANEL_GAP + WEATHER_EDITOR_SIZE.width,
-            height: Math.max(RUN_SETUP_SIZE.height, WEATHER_EDITOR_SIZE.height),
-          },
-          { width: builder.clientWidth, height: builder.clientHeight },
-          PANEL_EDGE_INSET,
-          MAXIMUM_PANEL_SCALE,
-        ),
-      );
-    };
+  useIgnitionMap({ enabled: !isSubmitting && placementActive && activeStep === "ignitions"  , maximumPoints, mapControllerRef, points, selectedPointId, setPoints, setRedoPoints, setSelectedPointId });
 
-    updateScale();
-    const observer = new ResizeObserver(updateScale);
-    observer.observe(builder);
-    return () => observer.disconnect();
-  }, []);
-
-  useIgnitionMap({
-    enabled: placementActive && activeStep === "ignitions",
-    mapControllerRef,
-    points,
-    selectedPointId,
-    setPoints,
-    setRedoPoints,
-    setSelectedPointId,
-  });
-
-  const activeRegion = regions.find((region) => region.id === regionId);
-  const location = activeRegion?.name ?? "";
-  const weatherEditorSide =
-    runSetupAnchor.edge === "left" ||
-    ((runSetupAnchor.edge === "top" || runSetupAnchor.edge === "bottom") &&
-      runSetupAnchor.offset < 0.5)
-      ? "right"
-      : "left";
-  const weatherSummary = useMemo(
-    () =>
-      `NWS · ${weather.events.wind.toFixed(0)} mph · ${weather.temperature}°C`,
-    [weather.events.wind, weather.temperature]
-  );
-
-  const areaComplete = Boolean(scenarioName.trim() && location);
-  const ignitionsComplete = points.length > 0;
-  const readyToRun = areaComplete && ignitionsComplete;
-  const stepComplete = (step: SetupStep) => {
-    if (step === "area") return areaComplete;
-    if (step === "ignitions") return ignitionsComplete;
-    if (step === "weather" || step === "model") return true;
-    return readyToRun;
-  };
-  const activeStepIndex = SETUP_STEPS.findIndex((step) => step.id === activeStep);
-  const previousStep = SETUP_STEPS[activeStepIndex - 1];
-  const nextStep = SETUP_STEPS[activeStepIndex + 1];
-  const nextDisabled =
-    (activeStep === "area" && !areaComplete) ||
-    (activeStep === "ignitions" && !ignitionsComplete) ||
-    (activeStep === "review" && !readyToRun);
-
-  const removePoint = (pointId: string) => {
-    const removedPoint = points.find((point) => point.id === pointId);
-    if (removedPoint) setRedoPoints((current) => [...current, removedPoint]);
-    setPoints((current) => current.filter((point) => point.id !== pointId));
-    if (selectedPointId === pointId) setSelectedPointId(null);
-  };
-
-  const handleNext = async () => {
-    if (nextStep) {
-      setActiveStep(nextStep.id);
-      return;
+  const request: ScenarioRunRequest = mode === "synthetic"
+    ? { mode, scenario: scenarioName, scenarioId, regionId, location, durationHours, ignitionPoints: points, weather,
+        bounds: bounds ?? { west: 0, south: 0, east: 0, north: 0 }, baseWeatherVersion, windSpeedMph: windSpeed, windDirectionDegrees: windDirection }
+    : mode === "bounded"
+      ? { mode, regionId, location, ignitionPoints: points, weather, startAt, endAt, deltaTHours }
+      : { mode, regionId, location, ignitionPoints: points, weather, durationHours, deltaTHours };
+  let validationError: string | null = null;
+  let saveError: string | null = null;
+  try {
+    if (request.mode === "synthetic") {
+      scenarioCreateBody(scenarioSubmission(request));
+      if (!regionBounds || !bounds || bounds.west < regionBounds.west || bounds.east > regionBounds.east || bounds.south < regionBounds.south || bounds.north > regionBounds.north) throw new Error("The scenario extent must be inside the selected region.");
     }
-    setIsSubmitting(true);
-    setSubmissionError(null);
+  } catch (cause) { saveError = cause instanceof Error ? cause.message : "Review scenario inputs."; }
+  try {
+    if (saveError) throw new Error(saveError);
+    if (points.length < 1 || points.length > maximumPoints) throw new Error(`Choose ${mode === "synthetic" ? "1–100" : "exactly one"} ignition point${mode === "synthetic" ? "s" : ""}.`);
+    const extent = mode === "synthetic" ? bounds : regionBounds;
+    if (!extent || points.some((point) => !Number.isFinite(point.latitude) || !Number.isFinite(point.longitude) || point.longitude < extent.west || point.longitude > extent.east || point.latitude < extent.south || point.latitude > extent.north)) throw new Error("Ignitions must be inside the selected extent.");
+    if (request.mode !== "synthetic") directRunBody(request);
+    if (!readiness?.ready_to_simulate) throw new Error(readiness?.reason_codes.join(", ").replaceAll("_", " ") || "Region readiness has not been verified.");
+  } catch (cause) { validationError = cause instanceof Error ? cause.message : "Review run inputs."; }
+  const editableFingerprint = JSON.stringify({ mode, regionId, scenarioName, durationHours, deltaTHours, startAt, endAt, windSpeed, windDirection, bounds, baseWeatherVersion, points });
+  const savedFingerprintRef = useRef(editableFingerprint);
+  const dirty = editableFingerprint !== savedFingerprintRef.current || Boolean(initialSynthetic && !scenarioId);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => () => { onDirtyChange?.(false); }, [onDirtyChange]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+  const currentStepIndex = SETUP_STEPS.indexOf(activeStep);
+
+  const handleRun = async () => {
+    setIsSubmitting(true); setSubmissionError(null);
     try {
-      const submissionId = submissionIdRef.current ?? crypto.randomUUID();
-      submissionIdRef.current = submissionId;
-      await onRun({
-        scenario: scenarioName,
-        regionId,
-        location,
-        durationHours,
-        ignitionPoints: points,
-        weather,
-        modelSettings,
-      }, submissionId);
-    } catch (cause) {
-      setSubmissionError(
-        cause instanceof Error ? cause.message : "Simulation submission failed.",
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+      const fingerprint = reviewedRunFingerprint(request);
+      if (frozenRef.current?.fingerprint !== fingerprint) frozenRef.current = { fingerprint, key: crypto.randomUUID(), request: structuredClone(request) };
+      await onRun(frozenRef.current.request, frozenRef.current.key);
+    } catch (cause) { setSubmissionError(cause instanceof Error ? cause.message : "Run submission failed."); }
+    finally { setIsSubmitting(false); }
+  };
+  const handleSave = async () => {
+    if (request.mode !== "synthetic") return;
+    setIsSubmitting(true); setSubmissionError(null);
+    try {
+      const fingerprint = JSON.stringify(scenarioCreateBody(scenarioSubmission(request)));
+      if (frozenSaveRef.current?.fingerprint !== fingerprint) frozenSaveRef.current = { fingerprint, key: crypto.randomUUID(), request: structuredClone(request) };
+      const saved = await onSave(frozenSaveRef.current.request, frozenSaveRef.current.key);
+      // A scenario save persists environmental intent; run ignitions remain local.
+      savedFingerprintRef.current = JSON.stringify({ mode, regionId, scenarioName, durationHours, deltaTHours, startAt, endAt, windSpeed, windDirection, bounds, baseWeatherVersion, points: [] });
+      setScenarioId(saved.scenario_id); setSavedMessage(`Saved as ${saved.scenario_id}`);
+    } catch (cause) { setSubmissionError(cause instanceof Error ? cause.message : "Scenario save failed."); }
+    finally { setIsSubmitting(false); }
+  };
+  const loadMoreWeather = async () => {
+    if (!weatherCursor) return;
+    setSourcesLoading(true); setSourceError(null);
+    try {
+      const page = await fetchDigitalTwinWeatherPage(apiUrl, regionId, weatherCursor);
+      setWeatherDatasets((current) => [...current, ...page.items]); setWeatherCursor(page.next_cursor);
+    } catch (cause) { setSourceError(cause instanceof Error ? cause.message : "More weather could not be loaded."); }
+    finally { setSourcesLoading(false); }
+  };
+  const changeRegion = (next: string) => {
+    setRegionId(next); setBounds(null); setRegionBounds(null); setBaseWeatherVersion(""); setPoints([]); setRedoPoints([]); setForecast(null); setForecastError(null);
   };
 
   return (
-    <div
-      className="relative h-full min-h-0 w-full overflow-hidden bg-background"
-      ref={builderRef}
-    >
+    <div className="relative h-full min-h-0 w-full overflow-hidden bg-background">
       <div className="absolute inset-0">{mapSlot}</div>
-
-      <Popover>
-        <FloatingMapPanel
-          aria-label="Simulation run setup"
-          defaultSize={{ width: 416, height: 831 }}
-          fitToBounds
-          maximumScale={weatherEditorScale}
-          onAnchorChange={setRunSetupAnchor}
-        >
-          <PopoverAnchor asChild>
-            <Card
-              className={`${surfaceThemeClassName(
-                theme
-              )} relative h-full gap-0 overflow-hidden rounded-[10px] py-0 shadow-xl`}
-              surface="panel"
-            >
-              <FloatingMapPanelDragHandle className="absolute inset-x-0 top-0 z-10 h-[58px] rounded-t-[10px]" />
-              <header className="relative flex min-h-[58px] items-start border-b bg-background px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-card-foreground">
-                    Run setup
-                  </h2>
-                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                    <CircleCheck aria-hidden="true" className="size-3 text-primary" />
-                    Draft autosaved just now
-                  </p>
-                </div>
-                <Button
-                  aria-label="Close run setup"
-                  className="relative z-20 -mr-2 -mt-1"
-                  onClick={onClose}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                >
-                  <X aria-hidden="true" />
-                </Button>
-              </header>
-
-              <nav aria-label="Run setup steps" className="px-3 py-3">
-                <ol className="grid grid-cols-5">
-                  {SETUP_STEPS.map(({ id, label, Icon }, index) => {
-                    const complete = stepComplete(id);
-                    const active = activeStep === id;
-                    return (
-                      <li className="relative" key={id}>
-                        {index > 0 ? (
-                          <span
-                            aria-hidden="true"
-                            className="absolute right-1/2 top-3 h-px w-full bg-border"
-                          />
-                        ) : null}
-                        <button
-                          aria-current={active ? "step" : undefined}
-                          className="relative z-10 flex w-full flex-col items-center gap-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          onClick={() => setActiveStep(id)}
-                          type="button"
-                        >
-                          <span
-                            className={`flex size-6 items-center justify-center rounded-full border bg-background ${
-                              active
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : complete
-                                  ? "border-primary text-primary"
-                                  : "text-muted-foreground"
-                            }`}
-                          >
-                            {active ? (
-                              index + 1
-                            ) : complete ? (
-                              <Check aria-hidden="true" className="size-3.5" />
-                            ) : (
-                              <Icon aria-hidden="true" className="size-3.5" />
-                            )}
-                          </span>
-                          <span className={active ? "text-foreground" : undefined}>
-                            {label}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ol>
-              </nav>
-
-              <ScrollArea className="min-h-0 flex-1">
-                <CardContent className="space-y-4 px-3 py-4">
-                  {activeStep === "area" ? (
-                  <section className="space-y-4">
-                    <div>
-                      <h3 className="text-[16px] font-semibold">Area</h3>
-                      <p className="mt-1 text-xs leading-4 text-muted-foreground">
-                        Name the scenario and choose its simulation region.
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="scenario-name">Scenario name</Label>
-                      <Input
-                        id="scenario-name"
-                        onChange={(event) =>
-                          setScenarioName(event.target.value)
-                        }
-                        placeholder="Name this scenario"
-                        value={scenarioName}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="scenario-location">Simulation area</Label>
-                      <SelectMenu
-                        onValueChange={(nextRegionId) => {
-                          if (nextRegionId !== regionId) {
-                            setPoints([]);
-                            setRedoPoints([]);
-                            setSelectedPointId(null);
-                          }
-                          setRegionId(nextRegionId);
-                        }}
-                        value={regionId}
-                      >
-                        <SelectMenuTrigger
-                          className="w-full"
-                          disabled={regions.length === 0}
-                          id="scenario-location"
-                        >
-                          <SelectMenuValue placeholder="No simulation areas available" />
-                        </SelectMenuTrigger>
-                        <SelectMenuContent
-                          className={surfaceThemeClassName(theme)}
-                        >
-                          {regions.map((region) => (
-                            <SelectMenuItem key={region.id} value={region.id}>
-                              {region.name}
-                            </SelectMenuItem>
-                          ))}
-                        </SelectMenuContent>
-                      </SelectMenu>
-                    </div>
-                    <div className="rounded-md border border-input p-3">
-                      <div className="flex items-start gap-3">
-                        <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium">Selected region</p>
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            {activeRegion?.description || "Choose a simulation area to review its coverage."}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                  ) : null}
-
-                  {activeStep === "ignitions" ? (
-                  <section className="space-y-3">
-                    <div>
-                      <h3 className="text-[16px] font-semibold">Ignitions</h3>
-                      <p className="mt-1 text-xs leading-4 text-muted-foreground">
-                        Add one or more ignition sources to start the simulation.
-                      </p>
-                    </div>
-                    <Button
-                      aria-pressed={placementActive}
-                      className={
-                        placementActive
-                          ? "w-full shadow-sm"
-                          : "w-full bg-muted/40 hover:bg-muted"
-                      }
-                      onClick={() => setPlacementActive((active) => !active)}
-                      variant={placementActive ? "default" : "outline"}
-                    >
-                      <Crosshair aria-hidden="true" />
-                      {placementActive
-                        ? "Click the map to place points"
-                        : "Add ignition sources"}
-                    </Button>
-                    <div className="flex items-center justify-between gap-3 text-xs">
-                      <span className="font-medium">
-                        {points.length} ignition {points.length === 1 ? "source" : "sources"}
-                      </span>
-                      <Badge variant="outline">Point mode</Badge>
-                    </div>
-                    {points.length > 0 ? (
-                      <div className="divide-y overflow-hidden rounded-md border border-input">
-                        {points.map((point, index) => (
-                          <div
-                            className={`flex items-start gap-2.5 px-2.5 py-2.5 ${
-                              selectedPointId === point.id ? "border-l-2 border-l-primary" : ""
-                            }`}
-                            key={point.id}
-                          >
-                            <button
-                              aria-label={`Select ignition source ${index + 1}`}
-                              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-destructive text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                              onClick={() => setSelectedPointId(point.id)}
-                              type="button"
-                            >
-                              <Flame aria-hidden="true" className="size-3" />
-                            </button>
-                            <span className="pt-0.5 text-xs font-semibold">{index + 1}</span>
-                            <button
-                              className="min-w-0 flex-1 text-left"
-                              onClick={() => setSelectedPointId(point.id)}
-                              type="button"
-                            >
-                              <span className="block truncate text-xs font-medium tabular-nums">
-                                {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
-                              </span>
-                              <span className="mt-1 block text-[10px] text-muted-foreground">
-                                Point source
-                              </span>
-                            </button>
-                            <Button
-                              aria-label={`Remove ignition source ${index + 1}`}
-                              className="-mr-1 -mt-1"
-                              onClick={() => removePoint(point.id)}
-                              size="icon"
-                              variant="ghost"
-                            >
-                              <Trash2 aria-hidden="true" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="rounded-md border border-dashed px-3 py-5 text-center text-xs text-muted-foreground">
-                        No ignition sources placed yet.
-                      </div>
-                    )}
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button
-                        disabled={points.length === 0}
-                        onClick={() => {
-                          setPoints((current) => {
-                            const removedPoint = current.at(-1);
-                            if (removedPoint) {
-                              setRedoPoints((redo) => [...redo, removedPoint]);
-                            }
-                            return current.slice(0, -1);
-                          });
-                          setSelectedPointId(null);
-                        }}
-                        size="sm"
-                        variant="outline"
-                      >
-                        <Undo2 aria-hidden="true" /> Undo
-                      </Button>
-                      <Button
-                        disabled={redoPoints.length === 0}
-                        onClick={() => {
-                          const restoredPoint = redoPoints.at(-1);
-                          if (!restoredPoint) return;
-                          setRedoPoints((current) => current.slice(0, -1));
-                          setPoints((current) => [...current, restoredPoint]);
-                          setSelectedPointId(restoredPoint.id);
-                        }}
-                        size="sm"
-                        variant="outline"
-                      >
-                        <Redo2 aria-hidden="true" /> Redo
-                      </Button>
-                      <Button
-                        disabled={points.length === 0}
-                        onClick={() => {
-                          setRedoPoints((current) => [...current, ...points]);
-                          setPoints([]);
-                          setSelectedPointId(null);
-                        }}
-                        size="sm"
-                        variant="outline"
-                      >
-                        <RotateCcw aria-hidden="true" /> Clear all
-                      </Button>
-                    </div>
-                  </section>
-                  ) : null}
-
-                  {activeStep === "weather" ? (
-                    <section className="space-y-4">
-                      <div>
-                        <h3 className="text-[16px] font-semibold">Weather</h3>
-                        <p className="mt-1 text-xs leading-4 text-muted-foreground">
-                          Review the atmospheric inputs used by the model.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3 rounded-md border border-input px-3 py-3">
-                        <CloudSun aria-hidden="true" className="size-5 text-muted-foreground" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium">
-                            {weather.mode === "auto" ? "Automatic weather" : "Manual weather"}
-                          </p>
-                          <p className="mt-1 truncate text-xs text-muted-foreground">{weatherSummary}</p>
-                        </div>
-                      <PopoverTrigger asChild>
-                        <Button size="sm" variant="outline">
-                          Edit
-                        </Button>
-                      </PopoverTrigger>
-                      </div>
-                      <div className="grid grid-cols-2 overflow-hidden rounded-md border border-input [&>*:nth-child(odd)]:border-r [&>*:not(:nth-last-child(-n+2))]:border-b">
-                        <div className="px-3 py-2.5">
-                          <p className="text-[10px] text-muted-foreground">Valid date</p>
-                          <p className="mt-1 text-xs font-medium">{weather.date}</p>
-                        </div>
-                        <div className="px-3 py-2.5">
-                          <p className="text-[10px] text-muted-foreground">Local time</p>
-                          <p className="mt-1 text-xs font-medium tabular-nums">
-                            {String(weather.hour).padStart(2, "0")}:{String(weather.minute).padStart(2, "0")}
-                          </p>
-                        </div>
-                        <div className="px-3 py-2.5">
-                          <p className="text-[10px] text-muted-foreground">Season</p>
-                          <p className="mt-1 text-xs font-medium">{weather.season}</p>
-                        </div>
-                        <div className="px-3 py-2.5">
-                          <p className="text-[10px] text-muted-foreground">Temperature</p>
-                          <p className="mt-1 text-xs font-medium tabular-nums">{weather.temperature}°C</p>
-                        </div>
-                        <div className="px-3 py-2.5">
-                          <p className="text-[10px] text-muted-foreground">Wind</p>
-                          <p className="mt-1 text-xs font-medium tabular-nums">{weather.events.wind.toFixed(0)} mph</p>
-                        </div>
-                        <div className="px-3 py-2.5">
-                          <p className="text-[10px] text-muted-foreground">Direction</p>
-                          <p className="mt-1 text-xs font-medium tabular-nums">{weather.events.windDirection.toFixed(0)}°</p>
-                        </div>
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-medium">Weather observations</h4>
-                        <div className="mt-2 grid grid-cols-4 divide-x overflow-hidden rounded-md border border-input">
-                          {[
-                            ["Humidity", weather.events.relativeHumidity, "%"],
-                            ["Gust", weather.events.windGust, "mph"],
-                            ["Precip.", weather.events.precipitationLastHour, "mm"],
-                            ["Visibility", weather.events.visibility, "km"],
-                          ].map(([label, value, unit]) => (
-                            <div className="px-2 py-2 text-center" key={label}>
-                              <p className="text-[10px] text-muted-foreground">{label}</p>
-                              <p className="mt-1 text-xs font-medium tabular-nums">
-                                {value}
-                                {unit}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </section>
-                  ) : null}
-
-                  {activeStep === "model" ? (
-                  <section className="space-y-4">
-                    <div>
-                      <h3 className="text-[16px] font-semibold">Model</h3>
-                      <p className="mt-1 text-xs leading-4 text-muted-foreground">
-                        Set the simulation horizon for this run.
-                      </p>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="simulation-duration">Duration</Label>
-                        <Badge variant="outline">
-                          {durationHours}{" "}
-                          {durationHours === 1 ? "hour" : "hours"}
-                        </Badge>
-                      </div>
-                      <Slider
-                        aria-label="Simulation duration in hours"
-                        id="simulation-duration"
-                        max={100}
-                        min={1}
-                        onValueChange={([value]) =>
-                          setDurationHours(value ?? 1)
-                        }
-                        step={1}
-                        value={[durationHours]}
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>1 hour</span>
-                        <span>100 hours</span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div>
-                        <h4 className="text-xs font-medium">Fire behavior</h4>
-                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
-                          Control the assumptions that drive spread and intensity.
-                        </p>
-                      </div>
-                      <div className="divide-y overflow-hidden rounded-md border border-input">
-                        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                          <div className="min-w-0">
-                            <Label className="text-xs" htmlFor="fuel-moisture">Fuel moisture</Label>
-                            <p className="mt-0.5 text-[10px] text-muted-foreground">Moisture applied to live and dead fuels</p>
-                          </div>
-                          <SelectMenu
-                            onValueChange={(value) =>
-                              setModelSettings((current) => ({
-                                ...current,
-                                fuelMoisture: value as FireModelSettings["fuelMoisture"],
-                              }))
-                            }
-                            value={modelSettings.fuelMoisture}
-                          >
-                            <SelectMenuTrigger className="h-8 w-36" id="fuel-moisture">
-                              <SelectMenuValue />
-                            </SelectMenuTrigger>
-                            <SelectMenuContent>
-                              <SelectMenuItem value="observed">Observed</SelectMenuItem>
-                              <SelectMenuItem value="dry">Dry −10%</SelectMenuItem>
-                              <SelectMenuItem value="very-dry">Very dry −20%</SelectMenuItem>
-                            </SelectMenuContent>
-                          </SelectMenu>
-                        </div>
-                        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                          <div className="min-w-0">
-                            <Label className="text-xs" htmlFor="ember-spotting">Ember spotting</Label>
-                            <p className="mt-0.5 text-[10px] text-muted-foreground">Allow new ignitions ahead of the front</p>
-                          </div>
-                          <SelectMenu
-                            onValueChange={(value) =>
-                              setModelSettings((current) => ({
-                                ...current,
-                                spotting: value as FireModelSettings["spotting"],
-                              }))
-                            }
-                            value={modelSettings.spotting}
-                          >
-                            <SelectMenuTrigger className="h-8 w-36" id="ember-spotting">
-                              <SelectMenuValue />
-                            </SelectMenuTrigger>
-                            <SelectMenuContent>
-                              <SelectMenuItem value="off">Off</SelectMenuItem>
-                              <SelectMenuItem value="standard">500 m</SelectMenuItem>
-                              <SelectMenuItem value="extended">2 km</SelectMenuItem>
-                            </SelectMenuContent>
-                          </SelectMenu>
-                        </div>
-                        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                          <div className="min-w-0">
-                            <Label className="text-xs" htmlFor="crown-fire">Crown fire</Label>
-                            <p className="mt-0.5 text-[10px] text-muted-foreground">Model transition from surface to canopy</p>
-                          </div>
-                          <SelectMenu
-                            onValueChange={(value) =>
-                              setModelSettings((current) => ({
-                                ...current,
-                                crownFire: value as FireModelSettings["crownFire"],
-                              }))
-                            }
-                            value={modelSettings.crownFire}
-                          >
-                            <SelectMenuTrigger className="h-8 w-36" id="crown-fire">
-                              <SelectMenuValue />
-                            </SelectMenuTrigger>
-                            <SelectMenuContent>
-                              <SelectMenuItem value="enabled">Enabled</SelectMenuItem>
-                              <SelectMenuItem value="disabled">Disabled</SelectMenuItem>
-                            </SelectMenuContent>
-                          </SelectMenu>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div>
-                        <h4 className="text-xs font-medium">Computation</h4>
-                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
-                          Balance spatial detail, playback detail, and run time.
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-md border border-input p-2.5">
-                          <Label className="text-[10px] text-muted-foreground" htmlFor="grid-resolution">Grid resolution</Label>
-                          <SelectMenu
-                            onValueChange={(value) =>
-                              setModelSettings((current) => ({
-                                ...current,
-                                cellSizeMeters: Number(value) as FireModelSettings["cellSizeMeters"],
-                              }))
-                            }
-                            value={String(modelSettings.cellSizeMeters)}
-                          >
-                            <SelectMenuTrigger className="mt-2 h-8 w-full" id="grid-resolution">
-                              <SelectMenuValue />
-                            </SelectMenuTrigger>
-                            <SelectMenuContent>
-                              <SelectMenuItem value="10">10 m · Fine</SelectMenuItem>
-                              <SelectMenuItem value="30">30 m · Balanced</SelectMenuItem>
-                              <SelectMenuItem value="90">90 m · Fast</SelectMenuItem>
-                            </SelectMenuContent>
-                          </SelectMenu>
-                        </div>
-                        <div className="rounded-md border border-input p-2.5">
-                          <Label className="text-[10px] text-muted-foreground" htmlFor="output-interval">Output interval</Label>
-                          <SelectMenu
-                            onValueChange={(value) =>
-                              setModelSettings((current) => ({
-                                ...current,
-                                outputIntervalMinutes: Number(value) as FireModelSettings["outputIntervalMinutes"],
-                              }))
-                            }
-                            value={String(modelSettings.outputIntervalMinutes)}
-                          >
-                            <SelectMenuTrigger className="mt-2 h-8 w-full" id="output-interval">
-                              <SelectMenuValue />
-                            </SelectMenuTrigger>
-                            <SelectMenuContent>
-                              <SelectMenuItem value="5">Every 5 min</SelectMenuItem>
-                              <SelectMenuItem value="15">Every 15 min</SelectMenuItem>
-                              <SelectMenuItem value="30">Every 30 min</SelectMenuItem>
-                            </SelectMenuContent>
-                          </SelectMenu>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                  ) : null}
-
-                  {activeStep === "review" ? (
-                    <section className="space-y-4">
-                      <div>
-                        <h3 className="text-[16px] font-semibold">Review</h3>
-                        <p className="mt-1 text-xs leading-4 text-muted-foreground">
-                          Confirm the scenario configuration before launching.
-                        </p>
-                      </div>
-                      {!readyToRun ? (
-                        <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                          Add a scenario name, area, and at least one ignition source.
-                        </p>
-                      ) : null}
-                      <div className="divide-y overflow-hidden rounded-md border border-input">
-                        <button
-                          className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-muted/40"
-                          onClick={() => setActiveStep("area")}
-                          type="button"
-                        >
-                          <CircleCheck aria-hidden="true" className={`size-4 shrink-0 ${areaComplete ? "text-primary" : "text-muted-foreground"}`} />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-xs font-medium">Scenario and area</span>
-                            <span className="mt-1 block truncate text-[10px] text-muted-foreground">
-                              {scenarioName.trim() || "Scenario name required"} · {location || "Area required"}
-                            </span>
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">Edit</span>
-                        </button>
-                        <button
-                          className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-muted/40"
-                          onClick={() => setActiveStep("ignitions")}
-                          type="button"
-                        >
-                          <CircleCheck aria-hidden="true" className={`size-4 shrink-0 ${ignitionsComplete ? "text-primary" : "text-muted-foreground"}`} />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-xs font-medium">Ignition sources</span>
-                            <span className="mt-1 block text-[10px] text-muted-foreground">
-                              {points.length} point {points.length === 1 ? "source" : "sources"} configured
-                            </span>
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">Edit</span>
-                        </button>
-                        <button
-                          className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-muted/40"
-                          onClick={() => setActiveStep("weather")}
-                          type="button"
-                        >
-                          <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-primary" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-xs font-medium">Weather inputs</span>
-                            <span className="mt-1 block truncate text-[10px] text-muted-foreground">{weatherSummary}</span>
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">Edit</span>
-                        </button>
-                        <button
-                          className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-muted/40"
-                          onClick={() => setActiveStep("model")}
-                          type="button"
-                        >
-                          <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-primary" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-xs font-medium">Model runtime</span>
-                            <span className="mt-1 block text-[10px] text-muted-foreground">
-                              {modelSettings.cellSizeMeters} m grid · {modelSettings.outputIntervalMinutes} min outputs · {durationHours} hours
-                            </span>
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">Edit</span>
-                        </button>
-                      </div>
-                    </section>
-                  ) : null}
-
-                </CardContent>
-              </ScrollArea>
-
-              <section
-                aria-label="Configuration summary"
-                className="grid grid-cols-4 divide-x border-t bg-background"
-              >
-                <button
-                  aria-label={`Area: ${location || "Not selected"}`}
-                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                  onClick={() => setActiveStep("area")}
-                  title={location || "Choose an area"}
-                  type="button"
-                >
-                  <MapPin aria-hidden="true" className="size-3.5 text-muted-foreground" />
-                  <span className="max-w-full truncate text-[11px] font-medium">
-                    {location || "No area"}
-                  </span>
-                </button>
-                <button
-                  aria-label={`Weather: ${weatherSummary}`}
-                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                  onClick={() => setActiveStep("weather")}
-                  title={weatherSummary}
-                  type="button"
-                >
-                  <CloudSun aria-hidden="true" className="size-3.5 text-muted-foreground" />
-                  <span className="max-w-full truncate text-[11px] font-medium">
-                    {weather.events.wind.toFixed(0)} mph · {weather.temperature}°
-                  </span>
-                </button>
-                <button
-                  aria-label={`Model: ${modelSettings.cellSizeMeters} meter grid`}
-                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                  onClick={() => setActiveStep("model")}
-                  title={`${modelSettings.cellSizeMeters} meter grid, ${modelSettings.outputIntervalMinutes} minute outputs`}
-                  type="button"
-                >
-                  <SlidersHorizontal aria-hidden="true" className="size-3.5 text-muted-foreground" />
-                  <span className="max-w-full truncate text-[11px] font-medium">{modelSettings.cellSizeMeters} m grid</span>
-                </button>
-                <button
-                  aria-label={`Duration: ${durationHours} hours`}
-                  className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2.5 text-center hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                  onClick={() => setActiveStep("review")}
-                  title={`${durationHours}-hour duration`}
-                  type="button"
-                >
-                  <Clock3 aria-hidden="true" className="size-3.5 text-muted-foreground" />
-                  <span className="max-w-full truncate text-[11px] font-medium">{durationHours} hours</span>
-                </button>
-              </section>
-
-              <CardFooter className="mt-auto flex-row items-center justify-between border-t bg-background px-3 py-3">
-                <Button
-                  aria-label={previousStep ? `Back to ${previousStep.label}` : "No previous step"}
-                  disabled={!previousStep}
-                  onClick={() => previousStep && setActiveStep(previousStep.id)}
-                  size="icon"
-                  variant="outline"
-                >
-                  <ArrowLeft aria-hidden="true" />
-                </Button>
-                {submissionError ? (
-                  <p className="max-w-52 truncate text-xs text-destructive" role="alert" title={submissionError}>
-                    {submissionError}
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">{SETUP_STEPS[activeStepIndex].label}</span>
-                    {" · "}{activeStepIndex + 1} of {SETUP_STEPS.length}
-                  </p>
-                )}
-                <Button
-                  aria-label={nextStep ? `Continue to ${nextStep.label}` : `Run ${durationHours}-hour simulation`}
-                  disabled={nextDisabled || isSubmitting}
-                  onClick={handleNext}
-                  size="icon"
-                >
-                  <ArrowRight aria-hidden="true" />
-                </Button>
-              </CardFooter>
-            </Card>
-          </PopoverAnchor>
-        </FloatingMapPanel>
-        <PopoverContent
-          align="center"
-          avoidCollisions={false}
-          className={`${surfaceThemeClassName(
-            theme
-          )} z-10 w-auto border-0 bg-transparent p-0 shadow-none`}
-          side={weatherEditorSide}
-          sideOffset={12}
-        >
-          <div
-            style={{
-              height: WEATHER_EDITOR_SIZE.height * weatherEditorScale,
-              width: WEATHER_EDITOR_SIZE.width * weatherEditorScale,
-            }}
-          >
-            <div
-              className="origin-top-left"
-              style={{
-                height: WEATHER_EDITOR_SIZE.height,
-                transform: `scale(${weatherEditorScale})`,
-                width: WEATHER_EDITOR_SIZE.width,
-              }}
-            >
-              <WeatherSettingsPanel
-                className="h-full max-h-none w-full max-w-none"
-                location={location}
-                onValueChange={setWeather}
-                theme={theme}
-                value={weather}
-              />
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
+      <FloatingMapPanel aria-label="Simulation run setup" defaultSize={{ width: 416, height: 831 }} fitToBounds>
+        <Card className={`${surfaceThemeClassName(theme)} relative h-full gap-0 overflow-hidden py-0`} surface="panel">
+          <FloatingMapPanelDragHandle className="absolute inset-x-0 top-0 z-10 h-14" />
+          <header className="relative flex bg-background items-start gap-3 border-b px-4 py-3">
+            <div className="min-w-0 flex-1"><h2 className="text-base font-semibold">Run setup</h2><p className="mt-1 text-xs text-muted-foreground" role="status">{savedMessage ?? (scenarioId ? `Saved scenario ${scenarioId}` : "Unsaved changes · local draft")}</p></div>
+            <Button aria-label="Close run setup" disabled={isSubmitting} className="relative z-20" onClick={() => dirty ? setDiscardOpen(true) : onClose()} size="icon" variant="ghost"><X aria-hidden="true" /></Button>
+          </header>
+          <Tabs value={activeStep} onValueChange={(value) => setActiveStep(value as SetupStep)} className="px-3 pt-3">
+            <TabsList className="w-full">{SETUP_STEPS.map((step) => <TabsTrigger key={step} value={step} className="flex-1 capitalize">{step}</TabsTrigger>)}</TabsList>
+          </Tabs>
+          <ScrollArea className="min-h-0 flex-1"><CardContent className="space-y-4 p-4">
+            <fieldset disabled={isSubmitting} className="min-w-0 space-y-4">
+            {activeStep === "area" ? <>
+              <div className="space-y-2"><Label htmlFor="run-input-mode">Input mode</Label><SelectMenu value={mode} onValueChange={(next) => { setMode(next as ScenarioRunRequest["mode"]); setSavedMessage(null); }} disabled={Boolean(scenarioId)}><SelectMenuTrigger id="run-input-mode" className="w-full"><SelectMenuValue /></SelectMenuTrigger><SelectMenuContent className={portalClass}><SelectMenuItem value="synthetic">Synthetic wind scenario</SelectMenuItem><SelectMenuItem value="present_forecast">Present / forecast</SelectMenuItem><SelectMenuItem value="bounded">Bounded UTC interval</SelectMenuItem></SelectMenuContent></SelectMenu></div>
+              <div className="space-y-2"><Label htmlFor="scenario-location">Simulation region</Label><SelectMenu value={regionId} onValueChange={changeRegion} disabled={Boolean(scenarioId)}><SelectMenuTrigger id="scenario-location" className="w-full"><SelectMenuValue placeholder="Choose a region" /></SelectMenuTrigger><SelectMenuContent className={portalClass}>{regions.map((region) => <SelectMenuItem key={region.id} value={region.id}>{region.name}</SelectMenuItem>)}</SelectMenuContent></SelectMenu></div>
+              {mode === "synthetic" ? <><Label htmlFor="scenario-name">Scenario name</Label><Input id="scenario-name" value={scenarioName} onChange={(event) => setScenarioName(event.target.value)} disabled={Boolean(scenarioId)} placeholder="Name this scenario" /><p className="text-xs text-muted-foreground">Select a rectangular extent inside the region. Saved scenarios remain immutable.</p><div className="grid grid-cols-2 gap-3">{(["west", "south", "east", "north"] as const).map((edge) => <div key={edge} className="space-y-1"><Label htmlFor={`scenario-${edge}`} className="capitalize">{edge}</Label><Input id={`scenario-${edge}`} type="number" step="any" value={bounds?.[edge] ?? ""} disabled={Boolean(scenarioId)} onChange={(event) => setBounds((current) => ({ ...(current ?? { west: 0, south: 0, east: 0, north: 0 }), [edge]: Number(event.target.value) }))} /></div>)}</div></> : null}
+              <div className="rounded-md border p-3"><Badge variant={readiness?.ready_to_simulate ? "default" : "secondary"}>{readiness?.ready_to_simulate ? "Ready to simulate" : sourcesLoading ? "Checking readiness…" : "Not ready to simulate"}</Badge><p className="mt-2 text-xs text-muted-foreground">{readiness?.reason_codes.join(", ").replaceAll("_", " ") || "Publication and model readiness are checked separately."}</p></div>
+              {scenarioId ? <p className="text-xs text-muted-foreground">To change saved conditions, return to the library and choose Edit as new.</p> : null}
+            </> : null}
+            {activeStep === "ignitions" ? <>
+              <h3 className="font-semibold">Ignitions</h3><p className="text-xs text-muted-foreground">Click the map to place points, or drag markers to refine their coordinates.</p><p className="text-sm text-muted-foreground">{mode === "synthetic" ? "Choose 1–100 ordered ignition points for this run. Ignitions are not saved in the scenario." : "Direct runs accept exactly one ignition point."}</p>
+              <Button variant="outline" aria-pressed={placementActive} onClick={() => setPlacementActive((current) => !current)}><Crosshair aria-hidden="true" />{placementActive ? "Pause map placement" : "Place on map"}</Button>
+              {points.map((point, index) => <div className="flex items-center gap-2 rounded-md border p-2" key={point.id}><Badge variant="outline">{index + 1}</Badge><span className="flex-1 text-xs tabular-nums">{point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}</span><Button aria-label={`Remove ignition source ${index + 1}`} size="icon" variant="ghost" onClick={() => { setRedoPoints((current) => [...current, point]); setPoints((current) => current.filter((candidate) => candidate.id !== point.id)); }}><Trash2 aria-hidden="true" /></Button></div>)}
+              <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={!points.length} onClick={() => { const point = points.at(-1); if (point) setRedoPoints((current) => [...current, point]); setPoints((current) => current.slice(0, -1)); }}><Undo2 aria-hidden="true" /> Undo</Button><Button size="sm" variant="outline" disabled={!redoPoints.length || points.length >= maximumPoints} onClick={() => { const point = redoPoints.at(-1); if (point) setPoints((current) => [...current, point]); setRedoPoints((current) => current.slice(0, -1)); }}><Redo2 aria-hidden="true" /> Redo</Button><Button size="sm" variant="outline" disabled={!points.length} onClick={() => { setRedoPoints((current) => [...current, ...points]); setPoints([]); }}><RotateCcw aria-hidden="true" /> Clear all</Button></div>
+              <ScenarioIgnitionCoordinates disabled={points.length >= maximumPoints} onAdd={(latitude, longitude) => { setPoints((current) => [...current, { id: pointId(), latitude, longitude }]); setRedoPoints([]); }} />
+            </> : null}
+            {activeStep === "weather" ? <>
+              {mode === "synthetic" ? <>
+                <h3 className="font-semibold">Exact base weather</h3><p className="text-xs text-muted-foreground">Select the immutable version used by the Engine. Map appearance and lighting do not change these inputs.</p>
+                <SelectMenu value={baseWeatherVersion} onValueChange={setBaseWeatherVersion} disabled={Boolean(scenarioId)}><SelectMenuTrigger className="w-full" aria-label="Base weather version"><SelectMenuValue placeholder="Choose an exact weather version" /></SelectMenuTrigger><SelectMenuContent className={portalClass}>{baseWeatherVersion && !weatherDatasets.some((dataset) => dataset.version === baseWeatherVersion) ? <SelectMenuItem value={baseWeatherVersion}>{baseWeatherVersion}</SelectMenuItem> : null}{weatherDatasets.map((dataset) => <SelectMenuItem key={dataset.dataset_id} value={dataset.version} disabled={!dataset.ready}>{dataset.version} · {dataset.source_kind} · {dataset.provider}{dataset.ready ? "" : " · unavailable"}</SelectMenuItem>)}</SelectMenuContent></SelectMenu>
+                {weatherCursor ? <Button disabled={sourcesLoading} onClick={() => { void loadMoreWeather(); }} variant="outline">{sourcesLoading ? "Loading…" : "Load older weather"}</Button> : null}
+                <p className="text-xs text-muted-foreground">{weatherDatasets.find((dataset) => dataset.version === baseWeatherVersion)?.band_names.join(", ")}</p>{weatherDatasets.find((dataset) => dataset.version === baseWeatherVersion) ? <p className="text-xs text-muted-foreground">Fresh for live monitoring until {weatherDatasets.find((dataset) => dataset.version === baseWeatherVersion)?.fresh_until}. Historical artifacts remain selectable when ready.</p> : null}
+                <div className="grid grid-cols-2 gap-3"><div className="space-y-2"><Label htmlFor="run-wind-speed">Wind speed (mph)</Label><Input id="run-wind-speed" type="number" min="0" step="any" value={windSpeed} disabled={Boolean(scenarioId)} onChange={(event) => setWindSpeed(Number(event.target.value))} /></div><div className="space-y-2"><Label htmlFor="run-wind-direction">Travel towards (°)</Label><Input id="run-wind-direction" type="number" min="0" max="359.999" step="any" value={windDirection} disabled={Boolean(scenarioId)} onChange={(event) => setWindDirection(Number(event.target.value))} /></div></div>
+              </> : <>
+                <h3 className="font-semibold">Forecast availability</h3><p className="text-xs text-muted-foreground">The Engine resolves weather when the run executes. This check previews one exact forecast; it does not reserve weather or guarantee coverage for every tick.</p>
+                <Label htmlFor="forecast-issue-cutoff">Issue at or before (ISO UTC)</Label><Input id="forecast-issue-cutoff" value={forecastIssueAt} onChange={(event) => { setForecastIssueAt(event.target.value); setForecast(null); }} />
+                <Label htmlFor="forecast-valid-time">Valid at (ISO UTC)</Label><Input id="forecast-valid-time" placeholder="2026-10-09T18:00:00Z" value={forecastValidAt} onChange={(event) => { setForecastValidAt(event.target.value); setForecast(null); }} />
+                <Button variant="outline" disabled={forecastLoading} onClick={async () => { setForecastLoading(true); setForecastError(null); setForecast(null); try { setForecast(await resolveDigitalTwinForecast(apiUrl, regionId, forecastIssueAt, forecastValidAt)); } catch (cause) { setForecastError(cause instanceof Error ? cause.message : "Forecast unavailable."); } finally { setForecastLoading(false); } }}>{forecastLoading ? "Checking…" : "Check forecast"}</Button>
+                {forecast ? <div className="rounded-md border p-3 text-xs"><p>{forecast.ready ? "Available" : "Artifact not ready"}: {forecast.dataset_id}</p><p>Issued {forecast.issue_time}</p><p>Valid {forecast.valid_time}</p><p>{forecast.fields.join(", ")}</p></div> : null}{forecastError ? <p role="alert" className="text-sm text-destructive">{forecastError}</p> : null}
+              </>}
+            </> : null}
+            {activeStep === "time" ? <>
+              <h3 className="font-semibold">Simulation time</h3>
+              {mode === "bounded" ? <><Label htmlFor="run-start-at">Start instant (ISO with UTC offset)</Label><Input id="run-start-at" value={startAt} onChange={(event) => setStartAt(event.target.value)} placeholder="2026-10-09T12:00:00Z" /><Label htmlFor="run-end-at">End instant (ISO with UTC offset)</Label><Input id="run-end-at" value={endAt} onChange={(event) => setEndAt(event.target.value)} placeholder="2026-10-09T14:00:00Z" /></> : <><Label htmlFor="simulation-duration">Duration (hours)</Label><Input id="simulation-duration" type="number" min={mode === "synthetic" ? 1 : 0.01} step={mode === "synthetic" ? 1 : "any"} disabled={Boolean(scenarioId)} value={durationHours} onChange={(event) => setDurationHours(Number(event.target.value))} /></>}
+              {mode === "synthetic" ? <p className="text-xs text-muted-foreground">The Engine uses one-hour timesteps for synthetic scenarios. Numerical model configuration is owned by the Engine.</p> : <><Label htmlFor="run-timestep">Timestep (hours)</Label><Input id="run-timestep" type="number" step="any" min="0.000001" value={deltaTHours} onChange={(event) => setDeltaTHours(Number(event.target.value))} /><p className="text-xs text-muted-foreground">Bounded intervals must divide into whole timesteps. Present / forecast may end with a partial tick.</p></>}
+            </> : null}
+            {activeStep === "review" ? <>
+              <h3 className="font-semibold">Review accepted intent</h3><p className="text-xs text-muted-foreground">Retries preserve this exact request and identity. Changing accepted inputs starts a new intent.</p>
+              <div className="space-y-2 rounded-md border p-3 text-sm"><p>{location} · {mode.replaceAll("_", " / ")}</p><p>{points.length} ignition point{points.length === 1 ? "" : "s"}</p>{mode === "synthetic" ? <><p>{scenarioName} · {durationHours} h</p><p>{baseWeatherVersion || "Base weather required"}</p><p>{windSpeed} mph towards {windDirection}°</p><p className="tabular-nums">Extent: {bounds ? `${bounds.west}, ${bounds.south} → ${bounds.east}, ${bounds.north}` : "required"}</p></> : mode === "bounded" ? <><p>{startAt || "Start required"}</p><p>{endAt || "End required"}</p><p>{deltaTHours} h timestep</p></> : <p>{durationHours} h · {deltaTHours} h timestep</p>}</div>
+              {validationError ? <p className="text-sm text-destructive">{validationError}</p> : null}
+              {mode === "synthetic" ? <Button className="w-full" disabled={Boolean(saveError) || isSubmitting || Boolean(scenarioId)} variant="outline" onClick={() => { void handleSave(); }}><Save aria-hidden="true" />Save scenario without running</Button> : null}
+            </> : null}
+            </fieldset>
+            {sourceError ? <p role="alert" className="text-sm text-destructive">{sourceError}</p> : null}
+            {submissionError ? <p role="alert" className="text-sm text-destructive">{submissionError}</p> : null}
+          </CardContent></ScrollArea>
+          <section aria-label="Configuration summary" className="grid grid-cols-4 divide-x border-t bg-background text-center text-xs"><div className="p-2"><p className="text-muted-foreground">Region</p><p className="truncate font-medium">{location}</p></div><div className="p-2"><p className="text-muted-foreground">Ignitions</p><p className="tabular-nums">{points.length}</p></div><div className="p-2"><p className="text-muted-foreground">Weather</p><p>{mode === "synthetic" ? `${windSpeed} mph` : "Engine resolved"}</p></div><div className="p-2"><p className="text-muted-foreground">Time</p><p>{mode === "bounded" ? "UTC interval" : `${durationHours} h`}</p></div></section>
+          <CardFooter className="mt-auto flex-row justify-between border-t p-3"><Button variant="outline" disabled={currentStepIndex === 0 || isSubmitting} onClick={() => setActiveStep(SETUP_STEPS[currentStepIndex - 1])}><ArrowLeft aria-hidden="true" />Back</Button>{activeStep === "review" ? <Button disabled={Boolean(validationError) || isSubmitting} onClick={() => { void handleRun(); }}><Flame aria-hidden="true" />{isSubmitting ? "Submitting…" : "Run simulation"}</Button> : <Button onClick={() => setActiveStep(SETUP_STEPS[currentStepIndex + 1])}>Next<ArrowRight aria-hidden="true" /></Button>}</CardFooter>
+        </Card>
+      </FloatingMapPanel>
+      <Dialog open={discardOpen} onOpenChange={setDiscardOpen}><DialogContent className={`${surfaceThemeClassName(theme)} surface-glass-overlay`}><DialogHeader><DialogTitle>Discard local changes?</DialogTitle><DialogDescription>This draft has not been saved to the Engine. Closing discards unsaved setup and ignition points.</DialogDescription></DialogHeader><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDiscardOpen(false)}>Keep editing</Button><Button variant="destructive" onClick={onClose}>Discard changes</Button></div></DialogContent></Dialog>
     </div>
   );
 }

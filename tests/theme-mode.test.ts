@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { getInitialThemeMode } from "../apps/geolibre-desktop/src/hooks/useThemeMode";
+import { THEME_MODE_STORAGE_KEY } from "../apps/geolibre-desktop/src/lib/storage-keys";
 
 const originalWindow = (globalThis as { window?: unknown }).window;
 
@@ -23,6 +24,13 @@ afterEach(() => {
 });
 
 describe("getInitialThemeMode", () => {
+  it("restores the device choice while explicit embed theme retains precedence", () => {
+    withWindow("", false);
+    Object.assign(window, { localStorage: { getItem: (key: string) => key === THEME_MODE_STORAGE_KEY ? "dark" : null } });
+    assert.equal(getInitialThemeMode(), "dark");
+    window.location.search = "?theme=light";
+    assert.equal(getInitialThemeMode(), "light");
+  });
   it("falls back to the OS preference without a theme param", () => {
     withWindow("", true);
     assert.equal(getInitialThemeMode(), "dark");

@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { defaultDigitalTwinApiUrl } from "../../lib/digital-twin-earth-engine";
+import { defaultDigitalTwinApiUrl } from "../../lib/digital-twin-api";
 import { fetchDigitalTwinRegions } from "../../lib/digital-twin-runs";
 import {
   AccessResolutionError,

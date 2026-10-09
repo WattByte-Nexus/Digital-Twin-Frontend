@@ -31,6 +31,11 @@ function access(
 }
 
 describe("Digital Twin access resolution", () => {
+  it("lets an empty local deployment reach native administration to create its first region", () => {
+    const initial = createDevelopmentAccess([]);
+    assert.deepEqual(initial.regions, []);
+    assert.equal(resolveLandingLocation(initial), "/admin");
+  });
   it("grants local development access only to regions supplied by the Engine", () => {
     const developmentAccess = createDevelopmentAccess([
       { id: "north-grid", name: "North Grid" },

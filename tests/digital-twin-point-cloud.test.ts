@@ -32,6 +32,7 @@ describe("Digital Twin point-cloud catalog", () => {
             attribution: "U.S. Geological Survey 3DEP",
             updated_at: "2026-08-11T18:00:00Z",
             failure_code: null,
+            latest_build: { version: "current-build", status: "ready", updated_at: "2026-08-11T18:00:00Z", failure_code: null },
           },
         ],
       });
@@ -63,6 +64,7 @@ describe("Digital Twin point-cloud catalog", () => {
       attribution: "U.S. Geological Survey 3DEP",
       updatedAt: "2026-08-11T18:00:00Z",
       failureCode: null,
+      latestBuild: { version: "current-build", status: "ready", updated_at: "2026-08-11T18:00:00Z", failure_code: null },
     });
     assert.deepEqual(requests, [
       "https://engine.example.com/api/v1/regions/golden/point-cloud-datasets",
@@ -95,6 +97,7 @@ describe("Digital Twin point-cloud catalog", () => {
                 attribution: "U.S. Geological Survey 3DEP",
                 updated_at: "2026-08-11T18:05:00Z",
                 failure_code: null,
+            latest_build: { version: "current-build", status: "ready", updated_at: "2026-08-11T18:00:00Z", failure_code: null },
               },
             ],
           })) as typeof fetch,
@@ -120,6 +123,7 @@ describe("Digital Twin point-cloud catalog", () => {
         attribution: "U.S. Geological Survey 3DEP",
         updatedAt: "2026-08-11T18:05:00Z",
         failureCode: null,
+      latestBuild: { version: "current-build", status: "ready", updated_at: "2026-08-11T18:00:00Z", failure_code: null },
       },
     });
   });
@@ -161,6 +165,7 @@ describe("Digital Twin point-cloud catalog", () => {
                 attribution: "U.S. Geological Survey 3DEP",
                 updated_at: "2026-08-11T18:05:00Z",
                 failure_code: null,
+            latest_build: { version: "current-build", status: "ready", updated_at: "2026-08-11T18:00:00Z", failure_code: null },
               },
             ],
           })) as typeof fetch,
@@ -193,6 +198,7 @@ describe("Digital Twin point-cloud catalog", () => {
                 attribution: "U.S. Geological Survey 3DEP",
                 updated_at: "2026-08-11T18:05:00Z",
                 failure_code: null,
+            latest_build: { version: "current-build", status: "ready", updated_at: "2026-08-11T18:00:00Z", failure_code: null },
               },
             ],
           })) as typeof fetch,
