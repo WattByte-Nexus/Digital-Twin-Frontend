@@ -16,6 +16,8 @@ import { TimeOfDayControl } from "./time-of-day-control";
 import {
   DEFAULT_WEATHER_EVENTS,
   DEFAULT_WEATHER_SETTINGS,
+  celsiusToFahrenheit,
+  fahrenheitToCelsius,
   type WeatherEventKey,
   type WeatherSettingsPanelProps,
   type WeatherSettingsValue,
@@ -60,10 +62,10 @@ const WEATHER_EVENT_ROWS: readonly {
     autoBand: "dew_point_c",
     event: "dewPoint",
     label: "Dew Point",
-    minimum: -100,
-    maximum: 100,
+    minimum: -148,
+    maximum: 212,
     step: 0.1,
-    unit: "°C",
+    unit: "°F",
   },
   {
     autoBand: "relative_humidity_pct",
@@ -282,20 +284,21 @@ export function WeatherSettingsPanel({
                   </div>
                 ) : (
                   <label className="relative">
-                    <span className="sr-only">Temperature in Celsius</span>
+                    <span className="sr-only">Temperature in Fahrenheit</span>
                     <Input
                       className="input-compact-number min-w-0 pe-10 text-right tabular-nums"
                       type="number"
-                      value={value.temperature}
+                      step={0.1}
+                      value={Math.round(celsiusToFahrenheit(value.temperature) * 10) / 10}
                       onChange={(event) =>
                         setValue((current) => ({
                           ...current,
-                          temperature: Number(event.target.value),
+                          temperature: fahrenheitToCelsius(Number(event.target.value)),
                         }))
                       }
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
-                      °C
+                      °F
                     </span>
                   </label>
                 )}
@@ -309,21 +312,25 @@ export function WeatherSettingsPanel({
                   const autoReading = row.autoBand
                     ? autoReadingByBand.get(row.autoBand)
                     : undefined;
+                  const amount = value.mode === "auto" && autoReading
+                    ? autoReading.value
+                    : value.events[row.event];
                   return (
                     <WeatherEventRow
                       key={row.event}
                       label={row.label}
                       maximum={row.maximum}
                       minimum={row.minimum}
-                      onChange={(next) => updateEvent(row.event, next)}
+                      onChange={(next) => updateEvent(
+                        row.event,
+                        row.event === "dewPoint" ? fahrenheitToCelsius(next) : next
+                      )}
                       step={row.step}
                       unavailable={value.mode === "auto" && !autoReading}
                       unit={row.unit}
-                      value={
-                        value.mode === "auto" && autoReading
-                          ? autoReading.value
-                          : value.events[row.event]
-                      }
+                      value={row.event === "dewPoint"
+                        ? Math.round(celsiusToFahrenheit(amount) * 10) / 10
+                        : amount}
                     />
                   );
                 })}
