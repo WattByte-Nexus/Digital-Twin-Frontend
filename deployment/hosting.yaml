@@ -1,0 +1,189 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Amplify Hosting, Cognito sessions and GitHub OIDC deployment for WattByte Nexus.
+Parameters:
+  ApiOrigin:
+    Type: String
+    Default: ''
+    AllowedPattern: '(^$|https://[a-z0-9.-]+)'
+  EngineRoleName:
+    Type: String
+    Default: digital-twin-golden-engine-host
+  PublicOrigin:
+    Type: String
+    Default: ''
+Conditions:
+  CustomOrigin: !Not [!Equals [!Ref PublicOrigin, '']]
+  ApiConfigured: !Not [!Equals [!Ref ApiOrigin, '']]
+Resources:
+  App:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: wattbyte-nexus
+      Platform: WEB
+      CustomRules:
+        - !If
+          - ApiConfigured
+          - Source: /api/<*>
+            Target: !Sub ${ApiOrigin}/api/<*>
+            Status: '200'
+          - !Ref AWS::NoValue
+        - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|jpeg|js|json|png|svg|txt|webp|woff|woff2|wasm|tif|pnts|bin|map)$)([^.]+$)/>'
+          Target: /index.html
+          Status: '200'
+      CustomHeaders: |
+        customHeaders:
+          - pattern: '**'
+            headers:
+              - key: X-Content-Type-Options
+                value: nosniff
+              - key: Referrer-Policy
+                value: strict-origin-when-cross-origin
+              - key: X-Frame-Options
+                value: SAMEORIGIN
+          - pattern: '/api/**'
+            headers:
+              - key: Cache-Control
+                value: private, no-store
+          - pattern: '/index.html'
+            headers:
+              - key: Cache-Control
+                value: no-cache
+          - pattern: '/sw.js'
+            headers:
+              - key: Cache-Control
+                value: no-cache
+  Main:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt App.AppId
+      BranchName: main
+      Stage: PRODUCTION
+      EnableAutoBuild: false
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: wattbyte-nexus
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      UsernameConfiguration:
+        CaseSensitive: false
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 14
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          TemporaryPasswordValidityDays: 7
+      MfaConfiguration: OPTIONAL
+      EnabledMfas: [SOFTWARE_TOKEN_MFA]
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+  Domain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub wattbyte-nexus-${AWS::AccountId}
+      UserPoolId: !Ref UserPool
+  Client:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: nexus-hosted-session
+      GenerateSecret: true
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs:
+        - !If
+          - CustomOrigin
+          - !Sub ${PublicOrigin}/api/digital-twin/callback
+          - !Sub https://main.${App.DefaultDomain}/api/digital-twin/callback
+      LogoutURLs:
+        - !If [CustomOrigin, !Sub '${PublicOrigin}/', !Sub 'https://main.${App.DefaultDomain}/']
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 1
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+  Administrators:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      UserPoolId: !Ref UserPool
+      GroupName: nexus-administrators
+      Description: Administrators of the single WattByte Nexus deployment
+  SessionSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: digital-twin/frontend/session-signing-key
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+  EngineAuthenticationPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: nexus-hosted-authentication
+      Roles: [!Ref EngineRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource: !Ref SessionSecret
+          - Effect: Allow
+            Action: cognito-idp:DescribeUserPoolClient
+            Resource: !GetAtt UserPool.Arn
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: digital-twin-frontend-github-deploy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: repo:WattByte-Nexus/Digital-Twin-Frontend:ref:refs/heads/main
+      Policies:
+        - PolicyName: deploy-main-only
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [amplify:CreateDeployment, amplify:StartDeployment]
+                Resource: !Sub ${App.Arn}/branches/main
+              - Effect: Allow
+                Action: [amplify:GetJob, amplify:StopJob]
+                Resource: !Sub ${App.Arn}/branches/main/jobs/*
+Outputs:
+  AppId:
+    Value: !GetAtt App.AppId
+  FrontendUrl:
+    Value: !If [CustomOrigin, !Ref PublicOrigin, !Sub 'https://main.${App.DefaultDomain}']
+  AmplifyUrl:
+    Value: !Sub https://main.${App.DefaultDomain}
+  DeployRoleArn:
+    Value: !GetAtt DeployRole.Arn
+  UserPoolId:
+    Value: !Ref UserPool
+  ClientId:
+    Value: !Ref Client
+  CognitoDomain:
+    Value: !Sub https://${Domain}.auth.${AWS::Region}.amazoncognito.com
+  SessionSecretArn:
+    Value: !Ref SessionSecret

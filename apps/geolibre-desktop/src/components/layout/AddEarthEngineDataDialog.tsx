@@ -1,3 +1,4 @@
+import { defaultDigitalTwinApiUrl, rememberDigitalTwinApiUrl } from "../../lib/digital-twin-api";
 import type { GeoLibreAppAPI } from "@geolibre/plugins";
 import {
   Button,
@@ -12,11 +13,9 @@ import {
 import { Database, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  defaultDigitalTwinApiUrl,
   fetchDigitalTwinEarthEngineCatalog,
   groupDigitalTwinEarthEngineLayers,
   prepareDigitalTwinEarthEngineCog,
-  rememberDigitalTwinApiUrl,
   type DigitalTwinEarthEngineDataset,
   type DigitalTwinEarthEngineLayer,
 } from "../../lib/digital-twin-earth-engine";

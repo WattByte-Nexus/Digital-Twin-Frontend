@@ -1,7 +1,7 @@
 import {
-  normalizeDigitalTwinApiUrl,
-  resolveDigitalTwinApiUrl,
-} from "./digital-twin-earth-engine";
+  requestDigitalTwinResponse,
+  requestDigitalTwinJson,
+} from "./digital-twin-api";
 
 export interface DigitalTwinAssetCoordinate {
   lat: number;
@@ -18,6 +18,11 @@ export interface DigitalTwinPowerLineCoordinateInput
   elevation_m: number;
 }
 
+export interface DigitalTwinConductorOffset {
+  lateral: number;
+  vertical: number;
+}
+
 export interface DigitalTwinTreeAsset {
   kind: "tree";
   assetId: string;
@@ -27,6 +32,20 @@ export interface DigitalTwinTreeAsset {
   heightM: number | null;
   canopyRadiusM: number | null;
   sourceRef: string | null;
+  segmentation?: {
+    bounds: [number, number, number, number, number, number];
+    pointCount: number;
+  } | null;
+}
+
+export interface DigitalTwinPowerPoleAsset {
+  kind: "power_pole";
+  assetId: string;
+  regionId: string;
+  base: DigitalTwinPowerLineCoordinate;
+  top: DigitalTwinPowerLineCoordinate;
+  radiusM: number;
+  sourceRef: string;
 }
 
 export interface DigitalTwinPowerLineAsset {
@@ -38,9 +57,13 @@ export interface DigitalTwinPowerLineAsset {
     DigitalTwinPowerLineCoordinate,
   ];
   name: string | null;
+  conductorOffsetsM: DigitalTwinConductorOffset[];
   bounds: DigitalTwinPowerLineBounds | null;
   conductor: DigitalTwinPowerLineConductor | null;
   latestPhysics: DigitalTwinPowerLinePhysics | null;
+  measuredPath?: DigitalTwinPowerLineCoordinate[] | null;
+  supportIds?: [string, string] | null;
+  sourceRef?: string | null;
 }
 
 export interface DigitalTwinPowerLineBounds {
@@ -103,7 +126,7 @@ export type DigitalTwinPowerLinePhysics =
   | DigitalTwinPowerLinePhysicsFailure
   | DigitalTwinPowerLinePhysicsResult;
 
-export type DigitalTwinAsset = DigitalTwinTreeAsset | DigitalTwinPowerLineAsset;
+export type DigitalTwinAsset = DigitalTwinTreeAsset | DigitalTwinPowerLineAsset | DigitalTwinPowerPoleAsset;
 
 export type DigitalTwinAssetPatch =
   | Partial<{
@@ -296,6 +319,30 @@ function parseConductor(value: unknown): DigitalTwinPowerLineConductor | null {
   };
 }
 
+function parseConductorOffsets(
+  value: unknown
+): DigitalTwinConductorOffset[] {
+  if (value === undefined) return [{ lateral: 0, vertical: 0 }];
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("Power line must declare at least one conductor offset.");
+  }
+  return value.map((offset, index) => {
+    if (!isRecord(offset)) {
+      throw new Error(`Conductor offset ${index + 1} must be an object.`);
+    }
+    return {
+      lateral: requiredNumber(
+        offset.lateral,
+        `Conductor offset ${index + 1} lateral position`
+      ),
+      vertical: requiredNumber(
+        offset.vertical,
+        `Conductor offset ${index + 1} vertical position`
+      ),
+    };
+  });
+}
+
 function parsePhysicsLineage(
   value: Record<string, unknown>
 ): DigitalTwinPowerLinePhysicsLineage {
@@ -429,10 +476,38 @@ function parsePowerLine(value: Record<string, unknown>): DigitalTwinPowerLineAss
     regionId,
     coordinates,
     name: optionalString(value.name, "Power-line name"),
+    ...(value.source_ref != null ? { sourceRef: optionalString(value.source_ref, "Power-line source") } : {}),
+    conductorOffsetsM: parseConductorOffsets(value.conductor_offsets_m),
     bounds,
     conductor: parseConductor(value.conductor),
     latestPhysics: parsePhysics(value.latest_physics),
+    measuredPath: value.measured_path == null ? null : parseMeasuredPath(value.measured_path),
+    supportIds: value.support_ids == null ? null : parseSupportIds(value.support_ids),
   };
+}
+
+function parseSupportIds(value: unknown): [string, string] {
+  if (!Array.isArray(value) || value.length !== 2) throw new Error("A span requires two support IDs.");
+  return [requiredString(value[0], "Start support"), requiredString(value[1], "End support")];
+}
+
+function parseMeasuredPath(value: unknown): DigitalTwinPowerLineCoordinate[] {
+  if (!Array.isArray(value) || value.length < 2) throw new Error("Measured wire path requires at least two points.");
+  return value.map((point, index) => powerLineCoordinate(point, `Measured wire point ${index + 1}`));
+}
+
+function parseTreeSegmentation(value: unknown): DigitalTwinTreeAsset["segmentation"] {
+  if (value == null) return null;
+  if (!isRecord(value) || !Array.isArray(value.bounds) || value.bounds.length !== 6) {
+    throw new Error("Tree segmentation requires six bounding coordinates.");
+  }
+  const bounds = value.bounds.map((v) => requiredNumber(v, "Tree bounding coordinate")) as [number, number, number, number, number, number];
+  if (!(bounds[0] < bounds[3] && bounds[1] < bounds[4] && bounds[2] < bounds[5]) || Math.abs(bounds[0]) > 180 || Math.abs(bounds[3]) > 180 || Math.abs(bounds[1]) > 90 || Math.abs(bounds[4]) > 90) {
+    throw new Error("Tree bounding coordinates must be ordered WGS84 and elevation metres.");
+  }
+  const pointCount = requiredInteger(value.point_count, "Tree point count");
+  if (pointCount < 1) throw new Error("Segmented trees require native points.");
+  return { bounds, pointCount };
 }
 
 function parseAsset(value: unknown): DigitalTwinAsset {
@@ -452,10 +527,19 @@ function parseAsset(value: unknown): DigitalTwinAsset {
         "Canopy radius"
       ),
       sourceRef: optionalString(value.source_ref, "Tree source reference"),
+      segmentation: parseTreeSegmentation(value.segmentation),
     };
   }
   if (value.kind === "power_line") {
     return parsePowerLine(value);
+  }
+  if (value.kind === "power_pole") {
+    const base = powerLineCoordinate(value.base, "Pole base");
+    const top = powerLineCoordinate(value.top, "Pole top");
+    if (top.elevationM <= base.elevationM) throw new Error("Pole top must be above its base.");
+    return { kind: "power_pole", assetId, regionId, base, top,
+      radiusM: requiredPositiveNumber(value.radius_m, "Pole radius"),
+      sourceRef: requiredString(value.source_ref, "Pole source reference") };
   }
   throw new Error("Asset response has an unsupported kind.");
 }
@@ -466,24 +550,7 @@ async function request(
   init: RequestInit,
   fetchImpl: typeof fetch
 ): Promise<Response> {
-  const response = await fetchImpl(
-    resolveDigitalTwinApiUrl(normalizeDigitalTwinApiUrl(apiUrl), path),
-    { ...init, headers: { Accept: "application/json", ...init.headers } }
-  );
-  if (!response.ok) {
-    let detail: unknown;
-    try {
-      detail = ((await response.json()) as { detail?: unknown }).detail;
-    } catch {
-      detail = null;
-    }
-    throw new Error(
-      typeof detail === "string"
-        ? detail
-        : `Asset request failed (${response.status}).`
-    );
-  }
-  return response;
+  return requestDigitalTwinResponse(apiUrl, path, { ...init, fetchImpl });
 }
 
 export async function fetchDigitalTwinAssets(
@@ -502,6 +569,39 @@ export async function fetchDigitalTwinAssets(
   const value: unknown = await response.json();
   if (!Array.isArray(value)) throw new Error("Asset catalog must be an array.");
   return value.map(parseAsset);
+}
+
+/**
+ * Keep a live regional catalog current with serialized, cancellable requests.
+ * @param apiUrl Engine API base URL.
+ * @param regionId Region owning the geometry and latest completed physics.
+ * @param onAssets Receives each successful snapshot, including empty catalogs.
+ * @param onError Receives failures; polling continues so recovery needs no reload.
+ * @returns Cleanup that aborts an active request and prevents late callbacks.
+ */
+export function observeDigitalTwinAssets(
+  apiUrl: string,
+  regionId: string,
+  onAssets: (assets: DigitalTwinAsset[]) => void,
+  onError: (error: Error) => void,
+): () => void {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const refresh = async () => {
+    try {
+      const assets = await fetchDigitalTwinAssets(apiUrl, regionId, { signal: controller.signal });
+      if (!controller.signal.aborted) onAssets(assets);
+    } catch (cause) {
+      if (!controller.signal.aborted) onError(cause instanceof Error ? cause : new Error("Regional asset request failed."));
+    } finally {
+      if (!controller.signal.aborted) timer = setTimeout(refresh, 10_000);
+    }
+  };
+  void refresh();
+  return () => {
+    controller.abort();
+    clearTimeout(timer);
+  };
 }
 
 export async function fetchDigitalTwinAsset(
@@ -598,4 +698,40 @@ export async function deleteDigitalTwinAsset(
     { method: "DELETE", signal },
     fetchImpl
   );
+}
+
+export type DigitalTwinAssetCreate = import("./digital-twin-contract.generated").components["schemas"]["TreeAssetCreate"] | import("./digital-twin-contract.generated").components["schemas"]["PowerLineAssetCreate"];
+
+/** Validate the bounded public intake, rejecting server-owned and unknown fields. */
+export function previewDigitalTwinAssetBatch(text: string): DigitalTwinAssetCreate[] {
+  const values: unknown = JSON.parse(text);
+  if (!Array.isArray(values) || values.length < 1 || values.length > 1000) throw new Error("Import requires 1–1,000 assets.");
+  return values.map((value, index) => {
+    const label = `Asset ${index + 1}`;
+    if (!isRecord(value)) throw new Error(`${label} must be an object.`);
+    const keys = value.kind === "tree" ? ["kind", "location", "species", "height_m", "canopy_radius_m", "source_ref"] : ["kind", "coordinates", "name"];
+    if (Object.keys(value).some((key) => !keys.includes(key))) throw new Error(`${label} contains unsupported or server-owned fields.`);
+    if (value.kind === "tree") {
+      coordinate(value.location, `${label} location`);
+      for (const key of ["height_m", "canopy_radius_m"]) if (value[key] !== undefined) optionalPositiveNumber(value[key], `${label} ${key}`);
+      for (const key of ["species", "source_ref"]) if (value[key] !== undefined) optionalString(value[key], `${label} ${key}`);
+    } else if (value.kind === "power_line") {
+      if (!Array.isArray(value.coordinates) || value.coordinates.length !== 2) throw new Error(`${label} needs exactly two coordinates.`);
+      value.coordinates.forEach((point, pointIndex) => powerLineCoordinate(point, `${label} point ${pointIndex + 1}`));
+      if (value.name !== undefined) optionalString(value.name, `${label} name`);
+    } else throw new Error(`${label} must be a tree or power line. Pole mutation is unsupported.`);
+    return value as DigitalTwinAssetCreate;
+  });
+}
+
+export async function createDigitalTwinAsset(apiUrl: string, regionId: string, candidate: DigitalTwinAssetCreate, options: RequestOptions = {}): Promise<DigitalTwinAsset> {
+  previewDigitalTwinAssetBatch(JSON.stringify([candidate]));
+  return parseAsset(await requestDigitalTwinJson(apiUrl, `/api/v1/regions/${encodeURIComponent(regionId)}/assets`, { ...options, method: "POST", json: candidate }));
+}
+
+export async function importDigitalTwinAssetBatch(apiUrl: string, regionId: string, candidates: DigitalTwinAssetCreate[], options: RequestOptions = {}): Promise<DigitalTwinAsset[]> {
+  previewDigitalTwinAssetBatch(JSON.stringify(candidates));
+  const response = await requestDigitalTwinJson<unknown[]>(apiUrl, `/api/v1/regions/${encodeURIComponent(regionId)}/assets:batch`, { ...options, method: "POST", json: candidates });
+  if (!Array.isArray(response)) throw new Error("Asset batch response must be an array.");
+  return response.map(parseAsset);
 }

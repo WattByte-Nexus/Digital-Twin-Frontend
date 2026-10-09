@@ -42,11 +42,12 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { type ReactNode, type RefObject, useMemo, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_DIGITAL_TWIN_RUN_FILTERS,
   digitalTwinRunStatusLabel,
   filterDigitalTwinRuns,
+  fetchDigitalTwinRun,
   type DigitalTwinRegionRecord,
   type DigitalTwinRunFilters,
   type DigitalTwinRunRecord,
@@ -69,6 +70,9 @@ interface RunsViewProps {
   regions: DigitalTwinRegionRecord[];
   runs: DigitalTwinRunRecord[];
   theme: SurfaceTheme;
+  canCancel?: boolean;
+  authorizedRegionIds?: readonly string[];
+  lastSuccessAt?: Date | null;
 }
 
 const RUN_STATUSES: DigitalTwinRunStatus[] = [
@@ -128,9 +132,32 @@ export function RunsView({
   regions,
   runs,
   theme,
+  canCancel = false,
+  authorizedRegionIds,
+  lastSuccessAt,
 }: RunsViewProps) {
   const selectedRunId = runIdFromLocation(location);
-  const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null;
+  const catalogRun = runs.find((run) => run.id === selectedRunId) ?? null;
+  const [recoveredRun, setRecoveredRun] = useState<DigitalTwinRunRecord | null>(null);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryRevision, setRecoveryRevision] = useState(0);
+  const selectedRun = catalogRun ?? (recoveredRun?.id === selectedRunId ? recoveredRun : null);
+  const catalogHasSelectedRun = catalogRun !== null;
+  const allowedRegions = JSON.stringify(authorizedRegionIds ?? regions.map((region) => region.id));
+  const names = JSON.stringify(regions.map((region) => [region.id, region.name]));
+  useEffect(() => {
+    if (!selectedRunId || catalogHasSelectedRun) return;
+    const controller = new AbortController();
+    setRecoveredRun(null); setRecoveryLoading(true); setRecoveryError(null);
+    void fetchDigitalTwinRun(apiUrl, selectedRunId, { signal: controller.signal, regionNames: new Map(JSON.parse(names) as Array<[string, string]>) }).then((run) => {
+      if (controller.signal.aborted) return;
+      const routeRegion = location.split("/")[2];
+      if (!(JSON.parse(allowedRegions) as string[]).includes(run.regionId) || decodeURIComponent(routeRegion ?? "") !== run.regionId) throw new Error("This run is not accessible in the selected region.");
+      setRecoveredRun(run);
+    }).catch((cause: unknown) => { if (!controller.signal.aborted) setRecoveryError(cause instanceof Error ? cause.message : "Run recovery failed."); }).finally(() => { if (!controller.signal.aborted) setRecoveryLoading(false); });
+    return () => controller.abort();
+  }, [apiUrl, selectedRunId, catalogHasSelectedRun, allowedRegions, names, location, recoveryRevision]);
   const [filters, setFilters] = useState<DigitalTwinRunFilters>(
     DEFAULT_DIGITAL_TWIN_RUN_FILTERS,
   );
@@ -197,6 +224,7 @@ export function RunsView({
     return (
       <RunDetailView
         apiUrl={apiUrl}
+        canCancel={canCancel}
         key={selectedRun.id}
         mapControllerRef={mapControllerRef}
         mapSlot={mapSlot}
@@ -206,18 +234,18 @@ export function RunsView({
     );
   }
 
-  if (selectedRunId && !isLoading) {
+  if (selectedRunId) {
     return (
       <div className="grid h-full min-h-0 place-items-center bg-background p-6">
         <Card className="w-full max-w-md text-center">
           <CardHeader>
-            <CardTitle>Run not found</CardTitle>
+            <CardTitle>{recoveryLoading || !recoveryError ? "Recovering run…" : "Run could not be opened"}</CardTitle>
             <CardDescription>
-              The Digital Twin API did not return a run with this identifier.
+              {recoveryError ?? "Loading an authoritative run snapshot by ID."}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={onReturnToRuns} variant="outline">Return to runs</Button>
+            <div className="flex justify-center gap-2"><Button onClick={onReturnToRuns} variant="outline">Return to runs</Button><Button disabled={recoveryLoading} onClick={() => setRecoveryRevision((current) => current + 1)}>Retry</Button></div>
           </CardContent>
         </Card>
       </div>
@@ -252,7 +280,7 @@ export function RunsView({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Runs</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Authoritative simulation runs from the Digital Twin API.
+            Authoritative simulation runs from the Digital Twin API. {lastSuccessAt ? `Last updated ${lastSuccessAt.toLocaleTimeString()}.` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -423,7 +451,7 @@ export function RunsView({
               <CardContent className="flex flex-wrap items-center gap-3 px-5">
                 <AlertCircle aria-hidden="true" className="size-5 text-destructive" />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-foreground">Runs could not be loaded</p>
+                  <p className="font-medium text-foreground">Run updates unavailable · displayed records may be stale</p>
                   <p className="text-sm text-muted-foreground">{error.message}</p>
                 </div>
                 <Button onClick={onRefresh} variant="outline">Try again</Button>

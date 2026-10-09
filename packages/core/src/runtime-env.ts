@@ -138,7 +138,9 @@ export function getMapboxSatelliteTileUrlTemplate(
 
 /**
  * Builds the authenticated TileJSON URL for the Mapbox Streets v8 vector
- * tileset used by the Digital Twin reference overlay.
+ * tileset used by the Digital Twin reference overlay. The `secure` flag keeps
+ * the advertised vector tile templates on HTTPS; without it Mapbox returns
+ * legacy HTTP hosts that browsers can leave blocked or pending.
  *
  * @param env - Environment record (defaults to the runtime environment);
  *   injectable for testing.
@@ -149,7 +151,7 @@ export function getMapboxStreetsTileJsonUrl(
 ): string | undefined {
   const token = getMapboxAccessToken(env);
   if (!token) return undefined;
-  return `${MAPBOX_STREETS_TILEJSON_URL}?access_token=${encodeURIComponent(token)}`;
+  return `${MAPBOX_STREETS_TILEJSON_URL}?secure&access_token=${encodeURIComponent(token)}`;
 }
 
 /**

@@ -285,7 +285,7 @@ export function DigitalTwinSidebar({
                   disabled={!action}
                   isActive={id === "settings" && settingsActive}
                   onClick={action}
-                  tooltip={`${label} — ${description}`}
+                  tooltip={action ? `${label} — ${description}` : `${label} unavailable in this deployment`}
                   type="button"
                 >
                   <Icon aria-hidden="true" className="h-5 w-5" />

@@ -192,6 +192,7 @@ export {
   type PolePropertiesPhysics,
   type PolePropertiesPopoverProps,
 } from "./components/pole-properties-popover";
+export { TreePropertiesPopover, type TreePropertiesAsset, type TreePropertiesPopoverProps } from "./components/tree-properties-popover";
 export {
   WeatherSettingsPanel,
   WeatherSettingsFloatingPanel,

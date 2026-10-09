@@ -1,9 +1,15 @@
 import {
   normalizeDigitalTwinApiUrl,
+  requestDigitalTwinJson,
   resolveDigitalTwinApiUrl,
-} from "./digital-twin-earth-engine";
+} from "./digital-twin-api";
+
+import type { components } from "./digital-twin-contract.generated";
+
+export type DigitalTwinPointCloudBuild = components["schemas"]["PointCloudLatestBuild"];
 
 interface DigitalTwinPointCloudDatasetBase {
+  latestBuild: DigitalTwinPointCloudBuild;
   datasetId: string;
   regionId: string;
   name: string;
@@ -128,6 +134,7 @@ function parseReadyDataset(
   }
 
   return {
+    latestBuild: parseLatestBuild(value.latest_build),
     datasetId: requiredString(value.dataset_id, "dataset_id"),
     regionId,
     name: requiredString(value.name, "name"),
@@ -183,6 +190,7 @@ function parseUnavailableDataset(
   }
 
   return {
+    latestBuild: parseLatestBuild(value.latest_build),
     datasetId: requiredString(value.dataset_id, "dataset_id"),
     regionId,
     name: requiredString(value.name, "name"),
@@ -214,20 +222,8 @@ export async function fetchActiveDigitalTwinPointCloud(
   const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
   if (!fetchImpl) throw new Error("This environment cannot connect to the Digital Twin API.");
 
-  const response = await fetchImpl(
-    resolveDigitalTwinApiUrl(
-      apiUrl,
-      `/api/v1/regions/${encodeURIComponent(regionId)}/point-cloud-datasets`,
-    ),
-    { headers: { Accept: "application/json" }, signal: options.signal },
-  );
-  if (!response.ok) {
-    throw new Error(`Digital Twin point-cloud request failed (${response.status}).`);
-  }
-  const payload = (await response.json()) as unknown;
-  if (!isRecord(payload) || !Array.isArray(payload.items)) {
-    throw new Error("Digital Twin point-cloud response is not a dataset collection.");
-  }
+  const payload = await requestDigitalTwinJson<unknown>(apiUrl, `/api/v1/regions/${encodeURIComponent(regionId)}/point-cloud-datasets`, { fetchImpl, signal: options.signal });
+  if (!isRecord(payload) || !Array.isArray(payload.items)) throw new Error("Digital Twin point-cloud response is not a dataset collection.");
 
   if (payload.active_dataset_id === null) {
     if (payload.items.length === 0) return { status: "none" };
@@ -245,4 +241,60 @@ export async function fetchActiveDigitalTwinPointCloud(
     status: "ready",
     dataset: parseReadyDataset(active, apiUrl, regionId),
   };
+}
+
+function parseLatestBuild(value: unknown): DigitalTwinPointCloudBuild {
+  if (!isRecord(value) || !["queued", "building", "ready", "failed"].includes(String(value.status))) throw new Error("Dataset response is missing its latest build state.");
+  return { version: requiredString(value.version, "latest_build.version"), status: value.status as DigitalTwinPointCloudBuild["status"], updated_at: requiredString(value.updated_at, "latest_build.updated_at"), failure_code: value.failure_code === null ? null : requiredString(value.failure_code, "latest_build.failure_code") };
+}
+function parseDataset(value: unknown, apiUrl: string, regionId: string): DigitalTwinPointCloudDataset {
+  return isRecord(value) && value.status === "ready" ? parseReadyDataset(value, apiUrl, regionId) : parseUnavailableDataset(value, regionId);
+}
+export async function fetchDigitalTwinPointCloudDatasets(apiUrl: string, regionId: string, options: { fetchImpl?: FetchLike; signal?: AbortSignal } = {}): Promise<DigitalTwinPointCloudDataset[]> {
+  const payload = await requestDigitalTwinJson<{ items: unknown[] }>(apiUrl, `/api/v1/regions/${encodeURIComponent(regionId)}/point-cloud-datasets`, options);
+  if (!Array.isArray(payload.items)) throw new Error("Point-cloud catalog must contain datasets.");
+  return payload.items.map((item) => parseDataset(item, apiUrl, regionId));
+}
+export async function fetchDigitalTwinPointCloudDataset(apiUrl: string, regionId: string, datasetId: string, options: { fetchImpl?: FetchLike; signal?: AbortSignal } = {}): Promise<DigitalTwinPointCloudDataset> {
+  const dataset = parseDataset(await requestDigitalTwinJson(apiUrl, `/api/v1/regions/${encodeURIComponent(regionId)}/point-cloud-datasets/${encodeURIComponent(datasetId)}`, options), apiUrl, regionId);
+  if (dataset.datasetId !== datasetId) throw new Error("Dataset response does not match the requested identity.");
+  return dataset;
+}
+
+export type DigitalTwinSurveyMetadata = components["schemas"]["PointCloudSurveyUploadMetadata"];
+export type DigitalTwinSurveySubmission = components["schemas"]["PointCloudSurveySubmission"];
+
+/** Validate reviewed placement metadata before uploading private survey bytes. */
+export function parseDigitalTwinSurveyMetadata(text: string): DigitalTwinSurveyMetadata {
+  const value: unknown = JSON.parse(text);
+  if (!isRecord(value)) throw new Error("Survey metadata must be a JSON object.");
+  const keys = ["patch_id", "acquired_at", "target_crs", "vertical_datum", "meters_per_source_unit", "local_to_target_matrix", "replacement_footprint_wkt", "replacement_z_range", "registration_method", "registration_rmse_m"];
+  if (Object.keys(value).some((key) => !keys.includes(key)) || keys.some((key) => value[key] === undefined)) throw new Error("Survey metadata contains missing or unsupported fields.");
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(requiredString(value.patch_id, "patch_id"))) throw new Error("Patch identity must use lower kebab case.");
+  if (!Number.isFinite(Date.parse(requiredString(value.acquired_at, "acquired_at"))) || !/(Z|\+00:00)$/.test(String(value.acquired_at))) throw new Error("Acquisition time must explicitly use UTC.");
+  for (const key of ["target_crs", "vertical_datum", "replacement_footprint_wkt"]) requiredString(value[key], key);
+  if (typeof value.meters_per_source_unit !== "number" || !Number.isFinite(value.meters_per_source_unit) || value.meters_per_source_unit <= 0) throw new Error("Source units must have a positive metric scale.");
+  if (!Array.isArray(value.local_to_target_matrix) || value.local_to_target_matrix.length !== 16 || !value.local_to_target_matrix.every((n) => typeof n === "number" && Number.isFinite(n))) throw new Error("Placement requires a finite row-major 4×4 matrix.");
+  const m = value.local_to_target_matrix as number[];
+  if (m[12] !== 0 || m[13] !== 0 || m[14] !== 0 || m[15] !== 1) throw new Error("Placement matrix must be affine.");
+  const scale = value.meters_per_source_unit;
+  const columns = [[m[0], m[4], m[8]], [m[1], m[5], m[9]], [m[2], m[6], m[10]]];
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(Math.hypot(...columns[i]) - scale) > scale * 1e-6) throw new Error("Placement matrix scale must match source units.");
+    for (let j = i + 1; j < 3; j++) if (Math.abs(columns[i].reduce((sum, n, k) => sum + n * columns[j][k], 0)) > scale * scale * 1e-6) throw new Error("Placement matrix must not shear geometry.");
+  }
+  if (!Array.isArray(value.replacement_z_range) || value.replacement_z_range.length !== 2 || !value.replacement_z_range.every((n) => typeof n === "number" && Number.isFinite(n)) || value.replacement_z_range[0] >= value.replacement_z_range[1]) throw new Error("Replacement Z range must increase.");
+  if (!["rtk_trajectory", "ground_control_points", "point_pair_icp"].includes(String(value.registration_method)) || typeof value.registration_rmse_m !== "number" || !Number.isFinite(value.registration_rmse_m) || value.registration_rmse_m < 0) throw new Error("Registration method and measured RMSE are required.");
+  return value as unknown as DigitalTwinSurveyMetadata;
+}
+export async function submitDigitalTwinSurvey(apiUrl: string, regionId: string, datasetId: string, file: File, metadata: DigitalTwinSurveyMetadata, options: { fetchImpl?: FetchLike; signal?: AbortSignal } = {}): Promise<DigitalTwinSurveySubmission> {
+  if (!file.name.toLowerCase().endsWith(".ply")) throw new Error("Survey upload requires a .ply file.");
+  if (file.size === 0 || file.size > 2 * 1024 ** 3) throw new Error("Survey must contain data and fit the 2 GiB upload limit.");
+  parseDigitalTwinSurveyMetadata(JSON.stringify(metadata));
+  const body = new FormData(); body.append("file", file, file.name); body.append("metadata", JSON.stringify(metadata));
+  return requestDigitalTwinJson<DigitalTwinSurveySubmission>(apiUrl, `/api/v1/regions/${encodeURIComponent(regionId)}/point-cloud-datasets/${encodeURIComponent(datasetId)}/surveys`, { ...options, method: "POST", body });
+}
+/** An old ready descriptor can never complete a newly accepted version. */
+export function digitalTwinSurveyBuild(dataset: DigitalTwinPointCloudDataset, acceptedVersion: string): DigitalTwinPointCloudBuild | null {
+  return dataset.latestBuild.version === acceptedVersion ? dataset.latestBuild : null;
 }

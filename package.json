@@ -27,13 +27,15 @@
     "test:worker": "npm run typecheck -w geolibre-viewer-worker && npm run typecheck -w geolibre-collab-worker && npm run typecheck -w geolibre-tiles-worker",
     "test:e2e": "playwright test",
     "check:rust": "cargo check --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml",
-    "ci": "npm run lint && npm run build && npm run test:frontend:coverage && npm run test:worker && npm run test:backend:coverage && npm run check:rust",
+    "ci": "npm run check:digital-twin-contract && npm run lint && npm run build && npm run test:frontend:coverage && npm run test:worker && npm run test:backend:coverage && npm run check:rust",
     "tauri": "npm run tauri -w geolibre-desktop",
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",
     "tauri:build": "node scripts/tauri-build.mjs",
     "tauri:build:native-duckdb": "node scripts/tauri-build.mjs --native-duckdb",
     "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1",
-    "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
+    "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1",
+    "sync:digital-twin-contract": "node scripts/digital-twin-contract.mjs",
+    "check:digital-twin-contract": "node scripts/digital-twin-contract.mjs --check"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
@@ -41,6 +43,7 @@
     "@types/node": "^26.1.1",
     "eslint": "^10.7.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "openapi-typescript": "^7.13.0",
     "tsx": "^4.23.1",
     "typescript-eslint": "^8.64.0"
   },

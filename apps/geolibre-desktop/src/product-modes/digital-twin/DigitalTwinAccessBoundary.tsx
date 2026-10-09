@@ -7,6 +7,8 @@ import {
   useMemo,
   useState,
 } from "react";
+import { defaultDigitalTwinApiUrl } from "../../lib/digital-twin-api";
+import { fetchDigitalTwinRegions } from "../../lib/digital-twin-runs";
 import {
   AccessResolutionError,
   createDevelopmentAccess,
@@ -188,10 +190,11 @@ export function DigitalTwinAccessBoundary({ children }: DigitalTwinAccessBoundar
 
     const request =
       import.meta.env.DEV && import.meta.env.VITE_DIGITAL_TWIN_DEV_ACCESS !== "0"
-        ? Promise.resolve(
-            createDevelopmentAccess({
+        ? fetchDigitalTwinRegions(defaultDigitalTwinApiUrl(), {
+            signal: controller.signal,
+          }).then((regions) =>
+            createDevelopmentAccess(regions, {
               regionId: import.meta.env.VITE_DIGITAL_TWIN_DEV_REGION_ID,
-              regionName: import.meta.env.VITE_DIGITAL_TWIN_DEV_REGION_NAME,
             }),
           )
         : loadDigitalTwinAccess({ endpoint: accessEndpoint(), signal: controller.signal });

@@ -9,6 +9,7 @@ import {
   setTerrainGroundVisibility,
   TERRAIN_BACKGROUND_LAYER_ID,
   TERRAIN_GROUND_LAYER_ID,
+  TERRAIN_HILLSHADE_SOURCE_ID,
   TERRAIN_SOURCE_ID,
 } from "../packages/map/src/satellite-terrain-style";
 import {
@@ -30,6 +31,20 @@ const satelliteTerrainConfigSource = readFileSync(
   "utf8"
 );
 
+test("initial terrain framing waits for the first rendered idle state", () => {
+  assert.match(satelliteTerrainMapSource, /map\.once\("idle", applyInitialView\)/);
+  assert.match(satelliteTerrainMapSource, /pitch:\s*0,\s*\n\s*bearing:\s*0,/);
+  assert.equal(
+    [...satelliteTerrainMapSource.matchAll(/applyDigitalTwinSurfaceElevationState\(/g)]
+      .length,
+    1
+  );
+});
+
+test("satellite terrain map paints a non-white loading surface", () => {
+  assert.match(satelliteTerrainMapSource, /\bbg-muted\b/);
+});
+
 test("satellite terrain map includes its reference overlay in the initial style", () => {
   assert.match(
     satelliteTerrainMapSource,
@@ -41,7 +56,7 @@ test("satellite terrain map includes its reference overlay in the initial style"
   );
 });
 
-test("satellite terrain map owns one portable interleaved deck surface", () => {
+test("satellite terrain and analytical layers share one depth-tested surface", () => {
   assert.match(satelliteTerrainMapSource, /new MapboxOverlay\(/);
   assert.match(satelliteTerrainMapSource, /interleaved:\s*true/);
   assert.doesNotMatch(satelliteTerrainMapSource, /\bviews:/);
@@ -63,15 +78,16 @@ test("satellite terrain map owns one portable interleaved deck surface", () => {
 test("terrain camera rejects a 3D tile-origin elevation offset", () => {
   let centerElevation = 1_925.696;
   let centerClampedToGround = false;
-  let terrain: unknown = null;
+  let terrain: { source: string; exaggeration: number } | null = null;
   const map = {
+    getTerrain: () => terrain,
     getCenterClampedToGround: () => centerClampedToGround,
     setCenterClampedToGround: (value: boolean) => {
       centerClampedToGround = value;
     },
-    setTerrain: (value: unknown) => {
+    setTerrain: (value: { source: string; exaggeration: number } | null) => {
       terrain = value;
-      centerElevation = value ? 1_642.25 : 0;
+      centerElevation = 1_642.25 * (value?.exaggeration ?? 0);
     },
   };
 
@@ -90,7 +106,7 @@ test("terrain camera rejects a 3D tile-origin elevation offset", () => {
     enabled: false,
     exaggeration: 1,
   });
-  assert.equal(terrain, null);
+  assert.deepEqual(terrain, { source: TERRAIN_SOURCE_ID, exaggeration: 0 });
   assert.equal(centerClampedToGround, true);
   assert.equal(centerElevation, 0);
 });
@@ -227,6 +243,7 @@ test("satellite terrain style orders imagery, terrain, and reference details", (
   assert.deepEqual(Object.keys(style.sources), [
     SATELLITE_SOURCE_ID,
     TERRAIN_SOURCE_ID,
+    TERRAIN_HILLSHADE_SOURCE_ID,
     SATELLITE_REFERENCE_SOURCE_ID,
   ]);
   assert.deepEqual(style.sources[SATELLITE_SOURCE_ID], {
@@ -237,6 +254,13 @@ test("satellite terrain style orders imagery, terrain, and reference details", (
     maxzoom: 18,
   });
   assert.deepEqual(style.sources[TERRAIN_SOURCE_ID], {
+    type: "raster-dem",
+    tiles: ["https://terrain.example/{z}/{x}/{y}.png"],
+    tileSize: 256,
+    encoding: "terrarium",
+    maxzoom: 14,
+  });
+  assert.deepEqual(style.sources[TERRAIN_HILLSHADE_SOURCE_ID], {
     type: "raster-dem",
     tiles: ["https://terrain.example/{z}/{x}/{y}.png"],
     tileSize: 256,
@@ -261,7 +285,7 @@ test("satellite terrain style orders imagery, terrain, and reference details", (
     {
       id: TERRAIN_GROUND_LAYER_ID,
       type: "hillshade",
-      source: TERRAIN_SOURCE_ID,
+      source: TERRAIN_HILLSHADE_SOURCE_ID,
       layout: { visibility: "none" },
       paint: {
         "hillshade-exaggeration": 0.45,
@@ -302,8 +326,8 @@ test("satellite terrain style renders an atmospheric sky above the horizon", () 
 
   assert.deepEqual(style.sky, {
     "sky-color": "#88c6fc",
-    "horizon-color": "#ffffff",
-    "fog-color": "#ffffff",
+    "horizon-color": "#dbeafe",
+    "fog-color": "#dbeafe",
     "fog-ground-blend": 0.9,
     "horizon-fog-blend": 0.8,
     "sky-horizon-blend": 0.8,
@@ -482,6 +506,13 @@ test("Digital Twin uses Mapbox Satellite without USGS or DRAPP imagery", () => {
   assert.doesNotMatch(satelliteTerrainMapSource, /satelliteFallbackSource/);
 });
 
+test("Digital Twin terrain stops at the provider's highest available DEM zoom", () => {
+  assert.match(
+    satelliteTerrainConfigSource,
+    /url:\s*"https:\/\/tiles\.mapterhorn\.com\/tilejson\.json",\s*\n\s*tileSize:\s*512,\s*\n\s*maxzoom:\s*16,\s*\n\s*encoding:\s*"terrarium"/
+  );
+});
+
 test("satellite terrain map hides vendor attribution chrome", () => {
   assert.match(satelliteTerrainMapSource, /attributionControl:\s*false/);
   assert.doesNotMatch(satelliteTerrainMapSource, /MapboxAttributionLogo/);
@@ -490,9 +521,11 @@ test("satellite terrain map hides vendor attribution chrome", () => {
 test("satellite imagery toggles independently from elevation", () => {
   const layoutCalls: Array<[string, string, string]> = [];
   const terrainCalls: unknown[] = [];
+  let currentTerrain: { source: string; exaggeration: number } | null = { source: TERRAIN_SOURCE_ID, exaggeration: 1 };
   let centerElevation = 0;
   let centerClampedToGround = true;
   const map = {
+    getTerrain: () => currentTerrain,
     getLayer: (id: string) =>
       id === SATELLITE_LAYER_ID ||
       id === TERRAIN_GROUND_LAYER_ID
@@ -501,8 +534,9 @@ test("satellite imagery toggles independently from elevation", () => {
     setLayoutProperty: (id: string, name: string, value: string) => {
       layoutCalls.push([id, name, value]);
     },
-    setTerrain: (terrain: unknown) => {
+    setTerrain: (terrain: { source: string; exaggeration: number } | null) => {
       terrainCalls.push(terrain);
+      currentTerrain = terrain;
     },
     getCenterElevation: () => centerElevation,
     getCenterClampedToGround: () => centerClampedToGround,
@@ -543,7 +577,7 @@ test("satellite imagery toggles independently from elevation", () => {
     [TERRAIN_GROUND_LAYER_ID, "visibility", "none"],
   ]);
   assert.deepEqual(terrainCalls, [
-    null,
+    { source: TERRAIN_SOURCE_ID, exaggeration: 0 },
     { source: TERRAIN_SOURCE_ID, exaggeration: 1.5 },
   ]);
 });
@@ -572,7 +606,7 @@ test("satellite and elevation can start disabled without removing their sources"
     style.layers.find((layer) => layer.id === TERRAIN_GROUND_LAYER_ID)?.layout,
     { visibility: "none" }
   );
-  assert.equal(style.terrain, undefined);
+  assert.deepEqual(style.terrain, { source: TERRAIN_SOURCE_ID, exaggeration: 0 });
 });
 
 test("elevation supplies a visible shaded ground when satellite imagery is off", () => {

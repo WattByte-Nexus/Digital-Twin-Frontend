@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  defaultDigitalTwinApiUrl,
   fetchDigitalTwinEarthEngineCatalog,
   groupDigitalTwinEarthEngineLayers,
-  normalizeDigitalTwinApiUrl,
   prepareDigitalTwinEarthEngineCog,
 } from "../apps/geolibre-desktop/src/lib/digital-twin-earth-engine";
+
+import { defaultDigitalTwinApiUrl, normalizeDigitalTwinApiUrl } from "../apps/geolibre-desktop/src/lib/digital-twin-api";
 
 function json(value: unknown, status = 200): Response {
   return Response.json(value, { status });
@@ -16,7 +16,7 @@ describe("Digital Twin Earth Engine catalog", () => {
   it("uses the same-origin Digital Twin proxy during local Vite development", () => {
     const runtimeWindow = {
       location: new URL("http://127.0.0.1:5173/"),
-      localStorage: { getItem: () => "http://127.0.0.1:8000" },
+      localStorage: { getItem: (key: string) => key === "geolibre.digital-twin-demo.api-url" ? "http://127.0.0.1:8000" : null },
     } as unknown as NonNullable<Parameters<typeof defaultDigitalTwinApiUrl>[0]>;
 
     assert.equal(
@@ -37,6 +37,7 @@ describe("Digital Twin Earth Engine catalog", () => {
       calls.push(url);
       if (url.endsWith("/api/v1/regions?limit=100")) {
         return json({
+          next_cursor: null,
           items: [
             { region_id: "boulder-co", name: "Boulder" },
             { region_id: "golden-co", name: "Golden" },
@@ -49,7 +50,7 @@ describe("Digital Twin Earth Engine catalog", () => {
             {
               layer_id: "earth-engine-boulder-co-evt",
               name: "Existing vegetation type",
-              format: "cog",
+              format: "cog", source_ready: true, artifact_ready: false,
               band: "evt",
               url: "/api/v1/regions/boulder-co/earth-engine/evt.cog.tif",
               default_style: { colormap: "terrain", rescale_min: 1, rescale_max: 10 },
@@ -57,7 +58,7 @@ describe("Digital Twin Earth Engine catalog", () => {
             {
               layer_id: "earth-engine-boulder-co-evc",
               name: "Existing vegetation cover",
-              format: "cog",
+              format: "cog", source_ready: true, artifact_ready: false,
               band: "evc",
               url: "/api/v1/regions/boulder-co/earth-engine/evc.cog.tif",
             },
@@ -70,17 +71,16 @@ describe("Digital Twin Earth Engine catalog", () => {
           {
             layer_id: "earth-engine-golden-co-evc",
             name: "Existing vegetation cover",
-            format: "cog",
+            format: "cog", source_ready: true, artifact_ready: false,
             band: "evc",
-            tile_url: "https://cdn.example.com/golden-evc.tif",
+            url: "https://cdn.example.com/golden-evc.tif",
           },
           {
             layer_id: "earth-engine-golden-co-evt",
             name: "Existing vegetation type",
-            format: "cog",
+            format: "cog", source_ready: true, artifact_ready: true,
             band: "evt",
-            tile_url: "https://cdn.example.com/golden-evt.tif",
-            artifact_ready: true,
+            url: "https://cdn.example.com/golden-evt.tif",
           },
         ],
       });
@@ -192,6 +192,7 @@ describe("Digital Twin Earth Engine catalog", () => {
       const url = String(input);
       if (url.endsWith("/api/v1/regions?limit=100")) {
         return json({
+          next_cursor: null,
           items: [
             { region_id: "healthy", name: "Healthy" },
             { region_id: "missing", name: "Missing" },
@@ -201,7 +202,7 @@ describe("Digital Twin Earth Engine catalog", () => {
       if (url.includes("/missing/")) return json({ detail: "Not downloaded" }, 404);
       return json({
         items: [
-          { layer_id: "dem", name: "Elevation", format: "cog", url: "/cogs/dem.tif" },
+          { layer_id: "dem", name: "Elevation", format: "cog", source_ready: true, artifact_ready: false, url: "/cogs/dem.tif" },
         ],
       });
     };

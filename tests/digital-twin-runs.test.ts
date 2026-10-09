@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DEFAULT_DIGITAL_TWIN_RUN_FILTERS,
+  fetchDigitalTwinRegions,
   fetchDigitalTwinRunCatalog,
   filterDigitalTwinRuns,
+  selectAuthorizedDigitalTwinRegions,
   submitDigitalTwinScenarioRun,
 } from "../apps/geolibre-desktop/src/lib/digital-twin-runs";
 
@@ -90,7 +92,7 @@ test("fetchDigitalTwinRunCatalog loads every region and run page from the API", 
               correlation_id: "request-2",
               ignition_location: { lat: 39.75, lon: -105.22 },
               delta_t_hours: 0.5,
-              time: { mode: "duration", duration_hours: 2 },
+              time: { mode: "present_forecast", duration_hours: 2 },
             },
             grid_geometry: {},
             tick_refs: [
@@ -157,12 +159,65 @@ test("fetchDigitalTwinRunCatalog loads every region and run page from the API", 
     burnedAreaHectares: null,
     resultAvailable: false,
     failureCode: null,
+    failureMessage: null,
   });
   assert.equal(catalog.runs[1].regionName, "Golden");
   assert.equal(catalog.runs[1].triggerKind, "manual");
   assert.equal(catalog.runs[1].durationHours, 2);
   assert.equal(catalog.runs[1].completedTicks, 2);
   assert.equal(catalog.runs[1].burnedAreaHectares, 5.04);
+});
+
+test("fetchDigitalTwinRegions loads the canonical Engine region catalog without fetching runs", async () => {
+  const requestedUrls: string[] = [];
+  const fetchImpl: typeof fetch = async (input) => {
+    requestedUrls.push(String(input));
+    return jsonResponse({
+      items: [
+        {
+          region_id: "north-grid",
+          name: "Canonical North Grid",
+          bounds: { west: -106, south: 39, east: -105, north: 40 },
+          status: "published",
+        },
+      ],
+      next_cursor: null,
+    });
+  };
+
+  const regions = await fetchDigitalTwinRegions("https://engine.example.com", {
+    fetchImpl,
+  });
+
+  assert.deepEqual(
+    requestedUrls.map((url) => new URL(url).pathname),
+    ["/api/v1/regions"],
+  );
+  assert.equal(regions[0].name, "Canonical North Grid");
+});
+
+test("selectAuthorizedDigitalTwinRegions uses Engine metadata and excludes unauthorized regions", () => {
+  const regions = selectAuthorizedDigitalTwinRegions(
+    [
+      {
+        id: "north-grid",
+        name: "Canonical North Grid",
+        status: "published",
+        bounds: { west: -106, south: 39, east: -105, north: 40 },
+      },
+      {
+        id: "south-grid",
+        name: "South Grid",
+        status: "published",
+        bounds: { west: -105, south: 38, east: -104, north: 39 },
+      },
+    ],
+    ["north-grid"],
+  );
+
+  assert.deepEqual(regions.map(({ id, name }) => ({ id, name })), [
+    { id: "north-grid", name: "Canonical North Grid" },
+  ]);
 });
 
 test("filterDigitalTwinRuns filters authoritative API fields", () => {
@@ -231,7 +286,7 @@ test("fetchDigitalTwinRunCatalog reports malformed API records", async () => {
   );
 });
 
-test("fetchDigitalTwinRunCatalog rejects noncanonical page cursors", async () => {
+test("fetchDigitalTwinRunCatalog rejects a repeated opaque page cursor", async () => {
   const fetchImpl: typeof fetch = async () =>
     jsonResponse({ items: [], next_cursor: "next-page" });
 
@@ -271,6 +326,8 @@ test("submitDigitalTwinScenarioRun creates an Engine scenario then submits every
     "https://engine.example.com",
     {
       scenarioName: "Foothills wind test",
+      baseWeatherVersion: "2026-08-12T16:05:00Z",
+      bounds: { west: -105.5, south: 39.8, east: -105.1, north: 40.2 },
       regionId: "boulder-co",
       durationHours: 4,
       ignitionPoints: [
@@ -285,12 +342,10 @@ test("submitDigitalTwinScenarioRun creates an Engine scenario then submits every
 
   assert.equal(accepted.runId, "run-456");
   assert.deepEqual(requests.map(({ url }) => url.pathname), [
-    "/api/v1/regions/boulder-co",
-    "/api/v1/regions/boulder-co/weather-datasets",
     "/api/v1/scenarios",
     "/api/v1/simulation-runs",
   ]);
-  const scenario = JSON.parse(String(requests[2].init?.body));
+  const scenario = JSON.parse(String(requests[0].init?.body));
   assert.deepEqual(scenario, {
     name: "Foothills wind test",
     region_id: "boulder-co",
@@ -304,23 +359,23 @@ test("submitDigitalTwinScenarioRun creates an Engine scenario then submits every
         [-105.5, 39.8],
       ]],
     },
-    base_weather_version: "2026-08-12T16:05:00Z",
+    base_weather_version: "2026-08-12T16:05:00.000Z",
     wind_speed: { value: 18, unit: "mph" },
     wind_direction: { bearing_degrees: 90, reference: "towards" },
     duration_hours: 4,
   });
-  assert.deepEqual(JSON.parse(String(requests[3].init?.body)), {
+  assert.deepEqual(JSON.parse(String(requests[1].init?.body)), {
     scenario_id: "scenario-123",
     ignition_points: [
       { type: "Point", coordinates: [-105.27, 40.02] },
       { type: "Point", coordinates: [-105.25, 40.03] },
     ],
   });
-  for (const request of requests.slice(2)) {
+  for (const request of requests) {
     const headers = new Headers(request.init?.headers);
     assert.match(headers.get("Idempotency-Key") ?? "", /^(scenario|run)-/);
   }
-  const scenarioKey = new Headers(requests[2].init?.headers).get("Idempotency-Key") ?? "";
-  const runKey = new Headers(requests[3].init?.headers).get("Idempotency-Key") ?? "";
+  const scenarioKey = new Headers(requests[0].init?.headers).get("Idempotency-Key") ?? "";
+  const runKey = new Headers(requests[1].init?.headers).get("Idempotency-Key") ?? "";
   assert.equal(scenarioKey.slice("scenario-".length), runKey.slice("run-".length));
 });

@@ -1,7 +1,10 @@
 import {
+  fetchDigitalTwinPages,
+  requestDigitalTwinResponse,
+  requestDigitalTwinJson,
   normalizeDigitalTwinApiUrl,
   resolveDigitalTwinApiUrl,
-} from "./digital-twin-earth-engine";
+} from "./digital-twin-api";
 
 type FetchLike = typeof fetch;
 
@@ -278,7 +281,7 @@ async function sampleLayer(
   );
   url.searchParams.set("longitude", String(point.longitude));
   url.searchParams.set("latitude", String(point.latitude));
-  const response = await fetchImpl(url.href, { signal, cache: "no-cache" });
+  const response = await requestDigitalTwinResponse(apiUrl, url.href, { fetchImpl, signal, cache: "no-cache" });
   if (!response.ok) {
     throw new Error(
       `Live weather reading failed with HTTP ${response.status}.`
@@ -352,51 +355,23 @@ export async function fetchDigitalTwinLiveWeather(
     throw new Error("A valid map location is required.");
   }
   const fetchImpl = fetchFor(options);
-  const datasetsResponse = await fetchImpl(
-    resolveDigitalTwinApiUrl(
-      apiUrl,
-      `/api/v1/regions/${encodeURIComponent(
-        normalizedRegionId
-      )}/weather-datasets?limit=20`
-    ),
-    { signal: options.signal, cache: "no-cache" }
-  );
-  if (!datasetsResponse.ok) {
-    throw new Error(
-      `Weather data request failed with HTTP ${datasetsResponse.status}.`
-    );
-  }
-  const dataset = parseLatestDataset(
-    (await datasetsResponse.json()) as unknown
-  );
+  const datasets = await fetchDigitalTwinPages<unknown>(apiUrl,
+    `/api/v1/regions/${encodeURIComponent(normalizedRegionId)}/weather-datasets`, options);
+  const dataset = parseLatestDataset({ items: datasets });
   const datasetPath =
     `/api/v1/regions/${encodeURIComponent(normalizedRegionId)}` +
     `/weather-datasets/${encodeURIComponent(dataset.datasetId)}`;
-  const [layersResponse, stationResponse] = await Promise.all([
-    fetchImpl(resolveDigitalTwinApiUrl(apiUrl, `${datasetPath}/map-layers`), {
-      signal: options.signal,
-      cache: "no-cache",
+  const [layerCollection, stationCollection] = await Promise.all([
+    requestDigitalTwinJson<unknown>(apiUrl, `${datasetPath}/map-layers`, options),
+    requestDigitalTwinJson<unknown>(apiUrl, `${datasetPath}/station-observations`, options).catch((error) => {
+      if (options.signal?.aborted) throw error;
+      return [];
     }),
-    fetchImpl(
-      resolveDigitalTwinApiUrl(apiUrl, `${datasetPath}/station-observations`),
-      {
-        signal: options.signal,
-        cache: "no-cache",
-      }
-    ).catch(() => null),
   ]);
-  if (!layersResponse.ok) {
-    throw new Error(
-      `Weather map-layer request failed with HTTP ${layersResponse.status}.`
-    );
-  }
-  const layers = parseLayers((await layersResponse.json()) as unknown);
-  if (layers.length === 0)
-    throw new Error("The live weather dataset has no readable layers.");
+  const layers = parseLayers(layerCollection);
+  if (layers.length === 0) throw new Error("The live weather dataset has no readable layers.");
   const points = samplePoints(point, dataset.bounds);
-  const stationObservations = stationResponse?.ok
-    ? parseStationObservations((await stationResponse.json()) as unknown)
-    : [];
+  const stationObservations = parseStationObservations(stationCollection);
   const stationPoint = points[0] ?? point;
   const nearestStationObservation = nearestObservation(
     stationObservations,

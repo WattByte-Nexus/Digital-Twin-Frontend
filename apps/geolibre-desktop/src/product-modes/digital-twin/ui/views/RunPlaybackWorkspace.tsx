@@ -204,9 +204,9 @@ export function RunPlaybackWorkspace({
   useEffect(() => {
     const controller = new AbortController();
     setBehavior({ status: "loading" });
-    void loadRunTab(apiUrl, run.id, "behavior", { signal: controller.signal }).then(
+    void loadRunTab(apiUrl, run.id, "behavior", { signal: controller.signal, completedTicks: run.completedTicks }).then(
       (data) => {
-        if (data.kind !== "behavior") return;
+        if (controller.signal.aborted || data.kind !== "behavior") return;
         setBehavior({ status: "ready", data });
         setSampleIndex(Math.max(0, data.samples.length - 1));
       },

@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
 const DEFAULT_REGION_NAME = "Boulder Demo";
 const DEFAULT_POWER_LINE_PATH =
-  "apps/geolibre-desktop/public/plugins/digital-twin-demo/assets/boulder_13_8kv_feeder_large.geojson";
+  "apps/geolibre-desktop/public/data/reference-networks/boulder_13_8kv_feeder_large.geojson";
 const DEFAULT_TREE_SERVICE_URL =
   "https://gis.bouldercolorado.gov/ags_svr2/rest/services/parks/TreesOpenData/MapServer/0";
 const DEFAULT_PADDING_DEGREES = 0.001;

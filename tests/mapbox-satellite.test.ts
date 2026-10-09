@@ -26,7 +26,7 @@ describe("Mapbox Satellite runtime configuration", () => {
     );
   });
 
-  it("builds direct HTTPS satellite tiles without the legacy redirect", () => {
+  it("builds direct HTTPS Mapbox resources without legacy tile hosts", () => {
     assert.equal(
       getMapboxSatelliteTileUrlTemplate({
         MAPBOX_ACCESS_TOKEN: "  pk.a/b?c  ",
@@ -35,7 +35,7 @@ describe("Mapbox Satellite runtime configuration", () => {
     );
     assert.equal(
       getMapboxStreetsTileJsonUrl({ MAPBOX_ACCESS_TOKEN: "  pk.a/b?c  " }),
-      "https://api.mapbox.com/v4/mapbox.mapbox-streets-v8.json?access_token=pk.a%2Fb%3Fc"
+      "https://api.mapbox.com/v4/mapbox.mapbox-streets-v8.json?secure&access_token=pk.a%2Fb%3Fc"
     );
     assert.equal(
       getMapboxGlyphsUrl({ MAPBOX_ACCESS_TOKEN: "  pk.a/b?c  " }),

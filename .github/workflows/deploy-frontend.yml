@@ -1,0 +1,104 @@
+name: Frontend AWS deployment
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-aws-${{ github.ref }}
+  # Do not interrupt an accepted Amplify deployment with a newer build.
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Test and build frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: apps/geolibre-desktop/jupyterlite/requirements.txt
+      - name: Install dependencies
+        run: |
+          npm ci
+          python -m pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
+      - name: Verify native API contract, lint and tests
+        run: |
+          npm run check:digital-twin-contract
+          npm run lint
+          npm run test:frontend
+          npm run test:worker
+      - name: Build production artifact
+        run: |
+          npm run build
+          test -f apps/geolibre-desktop/dist/jupyterlite/lab/index.html
+          printf '{"commit":"%s","run":"%s"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > apps/geolibre-desktop/dist/deployment.json
+        env:
+          GEOLIBRE_APP_BASE: /
+          VITE_MAPBOX_ACCESS_TOKEN: ${{ secrets.VITE_MAPBOX_ACCESS_TOKEN }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_CESIUM_TOKEN: ${{ secrets.VITE_CESIUM_TOKEN }}
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
+          VITE_MAPILLARY_ACCESS_TOKEN: ${{ secrets.VITE_MAPILLARY_ACCESS_TOKEN }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: frontend-${{ github.sha }}
+          path: apps/geolibre-desktop/dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    name: Deploy tested artifact to Amplify
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.FRONTEND_AWS_REGION }}
+      AMPLIFY_APP_ID: ${{ vars.FRONTEND_AMPLIFY_APP_ID }}
+      FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Require provisioned deployment settings
+        env:
+          DEPLOY_ROLE: ${{ vars.FRONTEND_DEPLOY_ROLE_ARN }}
+        run: |
+          : "${AWS_REGION:?Missing FRONTEND_AWS_REGION}"
+          : "${AMPLIFY_APP_ID:?Missing FRONTEND_AMPLIFY_APP_ID}"
+          : "${FRONTEND_URL:?Missing FRONTEND_URL}"
+          : "${DEPLOY_ROLE:?Missing FRONTEND_DEPLOY_ROLE_ARN}"
+      - uses: actions/download-artifact@v8
+        with:
+          name: frontend-${{ github.sha }}
+          path: apps/geolibre-desktop/dist/
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.FRONTEND_DEPLOY_ROLE_ARN }}
+          allowed-account-ids: '078183419290'
+          role-session-name: frontend-${{ github.run_id }}
+      - name: Deploy
+        run: bash scripts/deploy-amplify.sh
+      - name: Verify deployed revision, API and authentication
+        run: node scripts/smoke-frontend-deployment.mjs

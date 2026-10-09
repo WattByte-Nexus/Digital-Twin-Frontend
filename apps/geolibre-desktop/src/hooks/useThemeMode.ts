@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useState } from "react";
+import { THEME_MODE_STORAGE_KEY } from "../lib/storage-keys";
 
 export type ThemeMode = "light" | "dark";
 
@@ -14,6 +15,13 @@ export function getInitialThemeMode(): ThemeMode {
     return themeParam;
   }
 
+  try {
+    const saved = window.localStorage.getItem(THEME_MODE_STORAGE_KEY);
+    if (saved === "light" || saved === "dark") return saved;
+  } catch {
+    // Restricted storage still permits OS-based appearance and session toggles.
+  }
+
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
@@ -27,8 +35,10 @@ export function useThemeMode() {
   }, [themeMode]);
 
   const toggleThemeMode = useCallback(() => {
-    setThemeMode((currentThemeMode) => (currentThemeMode === "dark" ? "light" : "dark"));
-  }, []);
+    const next = themeMode === "dark" ? "light" : "dark";
+    setThemeMode(next);
+    try { window.localStorage.setItem(THEME_MODE_STORAGE_KEY, next); } catch { /* Session preference remains usable. */ }
+  }, [themeMode]);
 
   return { themeMode, toggleThemeMode };
 }

@@ -46,16 +46,16 @@ export function createDigitalTwinPolePropertiesAsset({
   regionId: string;
 }): PolePropertiesAsset {
   const lineById = new Map(powerLines.map((line) => [line.assetId, line]));
-  const conductorById = new Map(
-    network.conductors.map((conductor) => [conductor.id, conductor])
+  const conductorByAssetId = new Map(
+    network.conductors.map((conductor) => [conductor.assetId, conductor])
   );
   const poleNumber = network.poles.findIndex((candidate) => candidate.id === pole.id) + 1;
 
   return {
     assetId: pole.id,
-    connectedSpans: pole.assetIds.flatMap((assetId) => {
+    connectedSpans: pole.assetIds.flatMap<PolePropertiesAsset["connectedSpans"][number]>((assetId) => {
       const line = lineById.get(assetId);
-      const conductor = conductorById.get(assetId);
+      const conductor = conductorByAssetId.get(assetId);
       if (!line || !conductor) return [];
       return [
         {
@@ -76,7 +76,12 @@ export function createDigitalTwinPolePropertiesAsset({
     },
     name: `Pole ${poleNumber || pole.id}`,
     observation: null,
-    poleType: "Distribution pole",
+    poleType: pole.measured ? "Survey pole" : "Distribution pole",
+    networkReview: pole.measured
+      ? pole.assetIds.length > 0
+        ? "Connected spans are included in physics and vegetation-contact checks."
+        : "No published conductor connects this pole."
+      : undefined,
     regionId,
   };
 }

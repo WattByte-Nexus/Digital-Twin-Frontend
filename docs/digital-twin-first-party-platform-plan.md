@@ -1,5 +1,7 @@
 # Digital Twin First-Party Platform Plan
 
+> Implementation update (2026-10-09): the current product is `App.tsx → DigitalTwinMapWorkspace`, with shared `DigitalTwinTopbar` and `DigitalTwinSidebar`. The bundled demo plugin and duplicate workspace/header were removed during [native API synchronization](native-api-sync-implementation-2026-10-09.md). References below to those paths describe earlier architecture or planning, not the current runtime.
+
 Status: General implementation roadmap  
 Source: [Digital Twin Frontend Product Requirements](digital-twin-product-requirements.md)  
 Applies to: GeoLibre fork in this repository  

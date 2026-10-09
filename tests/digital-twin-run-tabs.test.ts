@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import {
   loadRunTab,
   type DigitalTwinRunRecord,
 } from "../apps/geolibre-desktop/src/product-modes/digital-twin/ui/digital-twin-run-api";
 
+const engineFixtures = JSON.parse(readFileSync(new URL("./fixtures/digital-twin-engine.api-fixtures.json", import.meta.url), "utf8"));
+
 const run: DigitalTwinRunRecord = {
+  ...engineFixtures.scenario_completed,
   simulation_id: "simulation-1",
   run_id: "run/1",
   region_id: "region-1",
@@ -20,7 +24,7 @@ const run: DigitalTwinRunRecord = {
     duration_hours: 2,
     delta_t_hours: 1,
   },
-  grid_geometry: {},
+  grid_geometry: engineFixtures.scenario_completed.grid_geometry,
   tick_refs: [
     { tick: 0, world_state_ref: "state://initial" },
     { tick: 1, world_state_ref: "state://tick-1" },
@@ -178,8 +182,9 @@ test("run tabs load their authoritative API resources", async (context) => {
 
   await context.test("exposure uses the latest immutable tick while a run is active", async () => {
     const calls: string[] = [];
-    const activeRun = { ...run, status: "STARTED", final_result_ref: null };
+    const activeRun = { ...run, status: "STARTED", final_result_ref: null, metrics: null, tick_refs: [], finished_at: null };
     await loadRunTab("http://engine.test", "run/1", "exposure", {
+      completedTicks: 2,
       fetchImpl: async (input) => {
         const url = String(input);
         calls.push(url);

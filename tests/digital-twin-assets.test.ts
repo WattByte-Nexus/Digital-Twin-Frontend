@@ -4,6 +4,7 @@ import {
   deleteDigitalTwinAsset,
   fetchDigitalTwinAsset,
   fetchDigitalTwinAssets,
+  observeDigitalTwinAssets,
   importDigitalTwinAssetCsv,
   updateDigitalTwinAsset,
 } from "../apps/geolibre-desktop/src/lib/digital-twin-assets";
@@ -28,6 +29,12 @@ const powerLine = {
     { lat: 40.02, lon: -105.26, elevation_m: 1_712.25 },
   ],
   name: "North feeder span",
+  conductor_offsets_m: [
+    { lateral: -1.5, vertical: 0 },
+    { lateral: -0.5, vertical: 0 },
+    { lateral: 0.5, vertical: 0 },
+    { lateral: 1.5, vertical: 0 },
+  ],
 };
 
 const powerLineDetail = {
@@ -48,11 +55,45 @@ const powerLineDetail = {
       north: 40.02,
     },
   },
+  conductor_offsets_m: powerLine.conductor_offsets_m,
   conductor: null,
   latest_physics: null,
 };
 
 describe("Digital Twin asset API", () => {
+  it("refreshes live catalogs, recovers errors, and cancels without late updates", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    let requestCount = 0;
+    let finishRequest: ((response: Response) => void) | undefined;
+    const updates: string[] = [];
+    const errors: string[] = [];
+    t.mock.method(globalThis, "fetch", async () => {
+      requestCount += 1;
+      if (requestCount === 2) throw new Error("temporarily offline");
+      if (requestCount === 4) return new Promise<Response>(resolve => { finishRequest = resolve; });
+      return Response.json([{ ...tree, height_m: requestCount * 10 }]);
+    });
+    const stop = observeDigitalTwinAssets("http://engine.test", "region/1",
+      assets => updates.push(JSON.stringify(assets)), error => errors.push(error.message));
+    await new Promise(setImmediate);
+    assert.match(updates[0], /"heightM":10/);
+    t.mock.timers.tick(10_000);
+    await new Promise(setImmediate);
+    assert.deepEqual(errors, ["temporarily offline"]);
+    t.mock.timers.tick(10_000);
+    await new Promise(setImmediate);
+    assert.match(updates[1], /"heightM":30/);
+    t.mock.timers.tick(10_000);
+    await new Promise(setImmediate);
+    t.mock.timers.tick(60_000);
+    assert.equal(requestCount, 4, "requests must not overlap");
+    stop();
+    finishRequest?.(Response.json([tree]));
+    await new Promise(setImmediate);
+    t.mock.timers.tick(60_000);
+    assert.equal(updates.length, 2, "an old region must not publish after cleanup");
+    assert.equal(requestCount, 4);
+  });
   it("loads and validates region assets and asset details", async () => {
     const urls: string[] = [];
     const fetchImpl: typeof fetch = async (input) => {
@@ -81,6 +122,12 @@ describe("Digital Twin asset API", () => {
         { lat: 40.02, lon: -105.26, elevationM: 1_712.25 },
       ],
       name: "North feeder span",
+      conductorOffsetsM: [
+        { lateral: -1.5, vertical: 0 },
+        { lateral: -0.5, vertical: 0 },
+        { lateral: 0.5, vertical: 0 },
+        { lateral: 1.5, vertical: 0 },
+      ],
       bounds: {
         west: -105.27,
         south: 40.01,
@@ -89,6 +136,8 @@ describe("Digital Twin asset API", () => {
       },
       conductor: null,
       latestPhysics: null,
+      measuredPath: null,
+      supportIds: null,
     });
     assert.deepEqual(urls, [
       "http://engine.test/api/v1/regions/region%2F1/assets",

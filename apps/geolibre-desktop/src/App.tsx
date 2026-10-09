@@ -66,6 +66,7 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
       <DigitalTwinMapWorkspace
         activeDestination={route.view}
         activeRegionId={activeRegionId}
+        authorizedRegionIds={access.regions.map((region) => region.id)}
         location={route.location}
         operator={{
           initials: displayNameInitials(access.displayName),
@@ -73,10 +74,6 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
           role: roleLabel(access.roles[0]),
         }}
         organizationName={access.organization.name}
-        regions={access.regions.map((region) => ({
-          ...region,
-          description: `${region.name} operational area`,
-        }))}
         showLidar
         showWeather
         themeMode={themeMode}
@@ -87,11 +84,7 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
             }`,
           )
         }
-        onOpenAdministration={
-          access.capabilities.includes("administration")
-            ? () => navigate("/admin")
-            : undefined
-        }
+        canManageData={access.capabilities.includes("administration")}
         onOpenDiagnostics={() => navigate("/diagnostics")}
         onOpenExpertWorkspace={
           access.capabilities.includes("expert-gis")

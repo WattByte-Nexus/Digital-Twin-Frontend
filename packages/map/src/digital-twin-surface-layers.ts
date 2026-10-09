@@ -3,7 +3,9 @@ import type { Layer } from "@deck.gl/core";
 /**
  * The only coordinate frame accepted by the Digital Twin map surface.
  * Every layer must resolve through its loader/transform to WGS84 horizontal
- * coordinates plus absolute meters; the map never guesses or applies offsets.
+ * coordinates plus absolute meters above sea level, matching the terrain DEM;
+ * ellipsoid heights must be normalized before delivery. The map never guesses
+ * per-dataset vertical offsets.
  */
 export const DIGITAL_TWIN_SHARED_SURFACE = Object.freeze({
   id: "digital-twin-world-v1",
@@ -39,7 +41,8 @@ function isSharedSurface(surface: DigitalTwinSharedSurface): boolean {
 
 /** Validate and flatten typed capabilities for the map's single deck surface. */
 export function composeDigitalTwinSurfaceLayers(
-  groups: readonly DigitalTwinSurfaceLayerGroup[]
+  groups: readonly DigitalTwinSurfaceLayerGroup[],
+  beforeId?: string
 ): ComposedDigitalTwinSurfaceLayers {
   const groupIds = new Set<string>();
   const layerIds = new Set<string>();
@@ -62,7 +65,10 @@ export function composeDigitalTwinSurfaceLayers(
         throw new Error(`Digital Twin layer id must be unique: ${layer.id}`);
       }
       layerIds.add(layer.id);
-      layers.push(layer);
+      // One render batch below labels keeps new capabilities in the same
+      // depth pass. Individual features must not invent their own stacking.
+      const surfaceProps = { ...layer.props, beforeId };
+      layers.push(layer.clone(surfaceProps));
     }
 
   }

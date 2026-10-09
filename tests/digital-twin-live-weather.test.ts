@@ -15,6 +15,7 @@ describe("Digital Twin live weather", () => {
           calls.push(url);
           if (url.includes("/weather-datasets?")) {
             return Response.json({
+              next_cursor: null,
               items: [
                 {
                   dataset_id: "weather:boulder/co:2026-08-12T18:00:00Z",
@@ -27,6 +28,7 @@ describe("Digital Twin live weather", () => {
           }
           if (url.endsWith("/map-layers")) {
             return Response.json({
+              next_cursor: null,
               items: [
                 {
                   layer_id: "wind-speed",
@@ -57,6 +59,7 @@ describe("Digital Twin live weather", () => {
           }
           if (url.endsWith("/station-observations")) {
             return Response.json({
+              next_cursor: null,
               items: [
                 {
                   station_id: "KBDU",
@@ -187,6 +190,7 @@ describe("Digital Twin live weather", () => {
           const url = new URL(String(input));
           if (url.pathname.endsWith("/weather-datasets")) {
             return Response.json({
+              next_cursor: null,
               items: [
                 {
                   dataset_id: "weather:boulder:2026-08-12T18:00:00Z",
@@ -199,6 +203,7 @@ describe("Digital Twin live weather", () => {
           }
           if (url.pathname.endsWith("/map-layers")) {
             return Response.json({
+              next_cursor: null,
               items: [
                 {
                   layer_id: "wind-speed",
