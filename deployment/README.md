@@ -53,8 +53,26 @@ aws cloudformation deploy --stack-name digital-twin-frontend \
 
 `ApiOrigin` may be omitted during bootstrap. Set it to the API-edge stack's
 `ApiOrigin` output after authentication is installed. If using a custom domain,
-set `PublicOrigin` to its HTTPS origin and configure the Amplify domain/DNS
-association. Register only that origin in Cognito and the Engine CSRF policy.
+set `PublicOrigin` to its HTTPS origin. The stack associates that hostname with
+the Amplify `main` branch and provisions an Amplify-managed TLS certificate.
+Amplify creates routing and certificate validation records automatically when
+the parent domain is in Route 53 in the same AWS account. Register only that
+origin in Cognito and the Engine CSRF policy.
+
+The production frontend is `https://digital-twin.wattbyte-nexus.com`:
+
+```sh
+aws cloudformation deploy --stack-name digital-twin-frontend \
+  --template-file deployment/hosting.yaml \
+  --parameter-overrides ApiOrigin=https://api.nexus.ipss.ai \
+    PublicOrigin=https://digital-twin.wattbyte-nexus.com \
+  --capabilities CAPABILITY_NAMED_IAM --region us-east-1
+```
+
+When changing its hostname, also update the Cognito `frontend_origin` in the
+Engine's deployed `config/app.yaml`, restart the API, and set the repository's
+`FRONTEND_URL` Actions variable to the same origin. The deployment smoke check
+verifies that Cognito redirects back to that origin.
 
 ## GitHub configuration
 

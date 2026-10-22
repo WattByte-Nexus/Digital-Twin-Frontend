@@ -11,6 +11,7 @@ Parameters:
   PublicOrigin:
     Type: String
     Default: ''
+    AllowedPattern: '(^$|https://[a-z0-9.-]+)'
 Conditions:
   CustomOrigin: !Not [!Equals [!Ref PublicOrigin, '']]
   ApiConfigured: !Not [!Equals [!Ref ApiOrigin, '']]
@@ -59,6 +60,16 @@ Resources:
       BranchName: main
       Stage: PRODUCTION
       EnableAutoBuild: false
+  PublicDomain:
+    Type: AWS::Amplify::Domain
+    Condition: CustomOrigin
+    Properties:
+      AppId: !GetAtt App.AppId
+      DomainName: !Select [2, !Split ['/', !Ref PublicOrigin]]
+      EnableAutoSubDomain: false
+      SubDomainSettings:
+        - Prefix: ''
+          BranchName: !GetAtt Main.BranchName
   UserPool:
     Type: AWS::Cognito::UserPool
     DeletionPolicy: Retain

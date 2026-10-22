@@ -24,4 +24,5 @@ const location = new URL(signIn.headers.get('location'));
 assert.ok(location.hostname.endsWith('.amazoncognito.com'));
 assert.equal(location.searchParams.get('response_type'), 'code');
 assert.equal(location.searchParams.get('code_challenge_method'), 'S256');
+assert.equal(location.searchParams.get('redirect_uri'), new URL('/api/digital-twin/callback', origin).href);
 console.log(`Verified release, deep links, backend readiness and authentication at ${origin}`);
