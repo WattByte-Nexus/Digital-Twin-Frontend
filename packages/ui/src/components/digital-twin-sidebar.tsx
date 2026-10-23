@@ -159,8 +159,10 @@ export function DigitalTwinSidebar({
           <img
             alt=""
             aria-hidden="true"
-            className="h-6 w-6 shrink-0 object-contain"
-            src={`${import.meta.env.BASE_URL}maskable-icon-512x512.png`}
+            className="h-8 w-8 shrink-0 rounded-md object-contain"
+            height={32}
+            src={`${import.meta.env.BASE_URL}assets/wattbyte-nexus-logo.jpeg`}
+            width={32}
           />
           <span className="truncate text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
             WattByte Nexus
