@@ -309,10 +309,8 @@ let ParticleLayerClass: (new (props: WindParticleLayerProps) => Layer) | null =
 /**
  * Mount WeatherLayers on its own overlaid Deck canvas.
  *
- * MapboxOverlay interleaved instances reuse one Deck instance per map. External
- * plugins can legitimately own another interleaved overlay, so a wind overlay
- * joining that shared instance would make the two producers replace each
- * other's complete layer lists. A non-interleaved overlay owns its renderer
+ * The native adapter permits one interleaved overlay per map, which is owned
+ * by the shared GIS layer producers. A non-interleaved overlay owns its renderer
  * and can animate independently without clobbering engine/3D layers.
  */
 export async function createWindParticleOverlay(
@@ -320,7 +318,7 @@ export async function createWindParticleOverlay(
 ): Promise<WindParticleOverlay | null> {
   if (!app.getDeckGL) return null;
   const deckGL = await app.getDeckGL();
-  const overlay = new deckGL.mapbox.MapboxOverlay({
+  const overlay = new deckGL.maplibre.MapLibreOverlay({
     interleaved: false,
     layers: [],
   });

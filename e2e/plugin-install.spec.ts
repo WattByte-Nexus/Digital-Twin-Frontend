@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { strToU8, zipSync } from "fflate";
 
 // A minimal but valid external GeoLibre plugin: the entry is a self-contained

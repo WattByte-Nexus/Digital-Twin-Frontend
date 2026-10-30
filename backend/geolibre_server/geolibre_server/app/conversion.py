@@ -34,13 +34,13 @@ logger = logging.getLogger(__name__)
 CONVERSION_RUN_TIMEOUT_SECS = 3600
 CONVERSION_PYTHON_VERSION = os.environ.get("GEOLIBRE_CONVERSION_PYTHON_VERSION", "3.12")
 # Whitespace-separated so a single requirement may carry a comma-joined version
-# range (e.g. "duckdb>=1.1.0,<2.0.0") without being split into two tokens.
+# range (e.g. "duckdb>=2.0.0,<2.0.0") without being split into two tokens.
 # rasterio + numpy already arrive transitively via rio-cogeo; they are listed
 # explicitly so the Raster processing tools' dependency is intentional, and
 # contourpy is added for the Contour tool.
 CONVERSION_RUNTIME_PACKAGES = os.environ.get(
     "GEOLIBRE_CONVERSION_PACKAGES",
-    "duckdb>=1.1.0 rio-cogeo>=5.0.0 freestiler>=0.1.0 rasterio>=1.3.0 numpy>=1.24 contourpy>=1.2.0",
+    "duckdb>=2.0.0 rio-cogeo>=5.0.0 freestiler>=0.1.0 rasterio>=1.3.0 numpy>=1.24 contourpy>=1.2.0",
 ).split()
 
 VECTOR_COMPRESSIONS = {"zstd", "snappy", "gzip", "lz4", "uncompressed"}
@@ -255,7 +255,7 @@ def quote_ident(value):
     return '"' + str(value).replace('"', '""') + '"'
 
 con = duckdb.connect()
-con.execute("INSTALL spatial; LOAD spatial;")
+con.execute("INSTALL spatial; LOAD spatial; SET geometry_always_xy = true;")
 
 if source_kind == "csv":
     lon = params["lon_column"]
@@ -423,7 +423,7 @@ def quote_ident(value):
 {shapefile_field_warnings}
 
 con = duckdb.connect()
-con.execute("INSTALL spatial; LOAD spatial;")
+con.execute("INSTALL spatial; LOAD spatial; SET geometry_always_xy = true;")
 
 # Confirm the requested driver can actually be created by this spatial build so
 # an unsupported format fails with a clear, listed error instead of a raw GDAL
@@ -668,7 +668,7 @@ def quote(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 con = duckdb.connect()
-con.execute("INSTALL spatial; LOAD spatial;")
+con.execute("INSTALL spatial; LOAD spatial; SET geometry_always_xy = true;")
 
 low = input_path.lower()
 if low.endswith(".zip"):
@@ -740,7 +740,7 @@ def quote(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 con = duckdb.connect()
-con.execute("INSTALL spatial; LOAD spatial;")
+con.execute("INSTALL spatial; LOAD spatial; SET geometry_always_xy = true;")
 
 if input_path.lower().endswith((".parquet", ".geoparquet")):
     relation = f"read_parquet({quote(input_path)})"

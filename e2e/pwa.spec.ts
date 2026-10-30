@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 
 /**
  * Validates the web build's PWA/offline support (issue #274):
@@ -31,7 +31,7 @@ test("exposes a valid, installable web manifest", async ({ page }) => {
     return res.json();
   }, manifestHref);
 
-  expect(manifest.name).toBe("GeoLibre");
+  expect(manifest.name).toBe("WattByte Nexus");
   expect(manifest.display).toBe("standalone");
   expect(manifest.start_url).toBeTruthy();
   // Installability needs at least a 192px and a 512px icon.

@@ -1,3 +1,4 @@
+import type { AllPaintProperties } from "maplibre-gl";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 
@@ -33,18 +34,20 @@ export type GeoAgentOverlayRecord = {
  * The slice of the GeoAgent tools surface the store -> GeoAgent sync needs.
  * Structural (rather than maplibre-gl types) so tests can pass fakes.
  */
+type OpacityPaintProperty = Extract<keyof AllPaintProperties, `${string}-opacity` | "hillshade-exaggeration">;
+
 export type GeoAgentSyncableTools = {
   map?: {
     getLayer: (id: string) => { type: string } | undefined;
-    setLayoutProperty: (id: string, property: string, value: unknown) => unknown;
-    setPaintProperty: (id: string, property: string, value: unknown) => unknown;
+    setLayoutProperty: (id: string, property: "visibility", value: "visible" | "none") => unknown;
+    setPaintProperty: (id: string, property: OpacityPaintProperty, value: number) => unknown;
   };
   removeOverlay?: (name: string) => boolean;
 };
 
 const GEOAGENT_SOURCE_KIND = "geoagent-overlay";
 
-const NATIVE_OPACITY_PROPERTIES: Record<string, string[]> = {
+const NATIVE_OPACITY_PROPERTIES: Record<string, OpacityPaintProperty[]> = {
   background: ["background-opacity"],
   circle: ["circle-opacity"],
   fill: ["fill-opacity"],

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import fixtures from "../tests/fixtures/digital-twin-engine.api-fixtures.json";
 
 async function installEngine(page: Page) {
@@ -135,6 +135,82 @@ test.describe("Digital Twin settings", () => {
     await expect(page).toHaveURL(/\/scenarios$/);
     await expect(page.locator(".dt-settings-view")).toHaveCount(0);
     expect(pageErrors).toEqual([]);
+  });
+
+  test("point-cloud views stay synchronized between settings and toolbar", async ({ page }) => {
+    await installEngine(page);
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await openSettings(page);
+    await chooseSection(page, "Map & display");
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeDisabled();
+    await page.getByRole("switch", { name: "Point clouds", exact: true }).click();
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeChecked();
+    await page.getByRole("radio", { name: "Tree crowns", exact: true }).click();
+    await page.getByRole("button", { name: "Close settings and return to workspace" }).click();
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await expect(page.getByRole("menuitemradio", { name: "Tree crowns", exact: true })).toBeChecked();
+    await page.getByRole("menuitemradio", { name: "Full scan", exact: true }).click();
+    await openSettings(page);
+    await chooseSection(page, "Map & display");
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeChecked();
+    await page.getByRole("button", { name: "Restore map defaults" }).click();
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeDisabled();
+  });
+
+  test("full-scan requests do not depend on detected crowns", async ({ page }) => {
+    await installEngine(page);
+    await page.addInitScript(() => {
+      const key = "geolibre.desktopSettings";
+      const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
+      settings.aiProviderEnv = { ...settings.aiProviderEnv, VITE_MAPBOX_ACCESS_TOKEN: "pk.e2e" };
+      localStorage.setItem(key, JSON.stringify(settings));
+      Object.assign(window, { __GEOLIBRE_RUNTIME_ENV__: settings.aiProviderEnv });
+    });
+    // Serve actual raster/DEM pixels and a valid empty vector tile. Empty
+    // TileJSON URLs or JSON image responses prevent MapLibre from settling.
+    const flatTile = Buffer.from(await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 512;
+      const context = canvas.getContext("2d")!;
+      // Terrarium encodes zero metres as RGB(128, 0, 0).
+      context.fillStyle = "rgb(128, 0, 0)";
+      context.fillRect(0, 0, 512, 512);
+      return canvas.toDataURL("image/png").split(",")[1];
+    }), "base64");
+    await page.route("https://api.mapbox.com/**", route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith(".json")) return route.fulfill({ json: {
+        tilejson: "3.0.0", minzoom: 0, maxzoom: 0,
+        tiles: ["https://api.mapbox.com/e2e/{z}/{x}/{y}.pbf"],
+        vector_layers: ["water", "waterway", "landuse", "admin", "building", "road", "place_label", "poi_label", "natural_label"].map(id => ({ id, fields: {} })),
+      } });
+      if (path.endsWith(".pbf")) return route.fulfill({ contentType: "application/x-protobuf", body: Buffer.alloc(0) });
+      return route.fulfill({ contentType: "image/png", body: flatTile });
+    });
+    await page.route("https://tiles.mapterhorn.com/**", route =>
+      new URL(route.request().url()).pathname.endsWith(".json")
+        ? route.fulfill({ json: { tilejson: "3.0.0", minzoom: 0, maxzoom: 0, tiles: ["https://tiles.mapterhorn.com/e2e/{z}/{x}/{y}.png"] } })
+        : route.fulfill({ contentType: "image/png", body: flatTile }),
+    );
+    const dataset = { ...fixtures.point_cloud_ready, region_id: fixtures.region.region_id, point_count: 0 };
+    await page.route("**/point-cloud-datasets", route => route.fulfill({ json: {
+      active_dataset_id: dataset.dataset_id, items: [dataset],
+    } }));
+    let fullRequests = 0;
+    await page.route("**/full/tileset.json", route => {
+      fullRequests++;
+      return route.fulfill({ status: 404, json: { detail: "Dataset requires a full-scan rebuild." } });
+    });
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: "Point clouds", exact: true }).click();
+    await expect.poll(() => fullRequests).toBeGreaterThan(0);
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Tree crowns", exact: true }).click();
+    await expect(page.getByText("No segmented tree crowns are available in this dataset.", { exact: true })).toHaveCount(1);
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Full scan", exact: true }).click();
+    await expect.poll(() => fullRequests).toBeGreaterThan(1);
   });
 
   test("engine health refreshes from ready through degraded and offline", async ({ page }) => {

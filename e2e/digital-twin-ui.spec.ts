@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import fixtures from "../tests/fixtures/digital-twin-engine.api-fixtures.json";
 
 /** These response examples are exported from the Engine's current Pydantic models. */

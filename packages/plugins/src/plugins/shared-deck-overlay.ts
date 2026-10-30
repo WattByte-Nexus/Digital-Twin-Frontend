@@ -1,5 +1,5 @@
 import type { Layer } from "@deck.gl/core";
-import type { MapboxOverlay } from "@deck.gl/mapbox";
+import type { MapLibreOverlay } from "@deck.gl/maplibre";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../types";
 
 /**
@@ -8,12 +8,9 @@ import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../types";
  * 3D Z-value vectors), Google Photorealistic 3D Tiles, and the web COG raster
  * control.
  *
- * deck.gl keeps exactly ONE interleaved Deck per map, stored on `map.__deck`
- * (see `@deck.gl/mapbox`'s getDeckInstance). A second interleaved MapboxOverlay
- * reuses that same Deck, but each overlay's `setProps({ layers })` overwrites
- * the Deck's entire layer list with only its own layers -- so the last overlay
- * to render wins and the others' layers silently vanish, and removing one
- * interleaved overlay finalizes the shared Deck out from under the others (see
+ * The native MapLibre adapter permits one interleaved overlay per map.
+ * Multiple producers therefore contribute to this single shared layer list
+ * instead of competing for ownership of the map's Deck instance (see
  * opengeos/GeoLibre#1149: enabling a track's "3D (Z values)" made Google
  * Photorealistic tiles disappear). Routing every interleaved producer through
  * this one overlay keeps their layers in a single `setProps` call, so they
@@ -40,7 +37,7 @@ const SOURCE_DRAW_ORDER = [
 ] as const;
 export type SharedDeckSource = (typeof SOURCE_DRAW_ORDER)[number];
 
-let overlay: MapboxOverlay | null = null;
+let overlay: MapLibreOverlay | null = null;
 let overlayMounted = false;
 let deckGL: GeoLibreDeckGL | null = null;
 let appRef: GeoLibreAppAPI | null = null;
@@ -50,7 +47,7 @@ let boundMap: unknown;
 // Serialises concurrent setup calls: several producers (deckgl-viz, Google,
 // raster) can all race to ensure the overlay before the first getDeckGL()
 // resolves, and only one overlay may exist per map.
-let ensureInFlight: Promise<MapboxOverlay | null> | null = null;
+let ensureInFlight: Promise<MapLibreOverlay | null> | null = null;
 
 // The per-source layer lists, aggregated into one setProps on every render.
 const layersBySource = new Map<SharedDeckSource, Layer[]>();
@@ -79,7 +76,7 @@ let mountGaveUp = false;
  * @param app - The host application API.
  * @returns The shared overlay, or null when deck.gl is unavailable.
  */
-export function ensureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOverlay | null> {
+export function ensureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapLibreOverlay | null> {
   if (ensureInFlight) return ensureInFlight;
   ensureInFlight = runEnsureSharedDeckOverlay(app).finally(() => {
     ensureInFlight = null;
@@ -87,7 +84,7 @@ export function ensureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOver
   return ensureInFlight;
 }
 
-async function runEnsureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOverlay | null> {
+async function runEnsureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapLibreOverlay | null> {
   appRef = app;
   if (!app.getDeckGL) return null;
   deckGL ??= await app.getDeckGL();
@@ -112,7 +109,7 @@ async function runEnsureSharedDeckOverlay(app: GeoLibreAppAPI): Promise<MapboxOv
   }
   boundMap = map;
   device = null;
-  overlay = new deckGL.mapbox.MapboxOverlay({
+  overlay = new deckGL.maplibre.MapLibreOverlay({
     interleaved: true,
     layers: [],
     onDeviceInitialized: (initializedDevice: unknown) => {

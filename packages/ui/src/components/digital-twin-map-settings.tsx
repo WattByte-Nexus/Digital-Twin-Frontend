@@ -8,7 +8,7 @@ import type { DigitalTwinMapDisplaySettings } from "./digital-twin-map-toolbar";
 const DISPLAY_GROUPS: ReadonlyArray<{
   title: string;
   description: string;
-  settings: ReadonlyArray<{ key: keyof DigitalTwinMapDisplaySettings; label: string }>;
+  settings: ReadonlyArray<{ key: Exclude<keyof DigitalTwinMapDisplaySettings, "pointCloudView">; label: string }>;
 }> = [
   {
     title: "Map surface",
@@ -95,6 +95,16 @@ export function DigitalTwinMapSettings({
               />
             </SettingRow>
           ))}
+          {group.title === "Map surface" ? (
+            <SettingRow label="Point-cloud view" labelId={`${id}-point-cloud-view`} description="Show the complete scan, including ground and buildings, or only segmented tree crowns.">
+              <ToggleGroup aria-labelledby={`${id}-point-cloud-view`} disabled={!value.pointClouds} onValueChange={(view) => {
+                if (view === "full" || view === "crowns") onValueChange({ ...value, pointCloudView: view });
+              }} type="single" value={value.pointCloudView} variant="outline">
+                <ToggleGroupItem className="min-h-11 px-3" value="full">Full scan</ToggleGroupItem>
+                <ToggleGroupItem className="min-h-11 px-3" value="crowns">Tree crowns</ToggleGroupItem>
+              </ToggleGroup>
+            </SettingRow>
+          ) : null}
         </SettingsCard>
       ))}
     </div>

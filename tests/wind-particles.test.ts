@@ -57,7 +57,7 @@ describe("wind particles", () => {
     const constructed: Record<string, unknown>[] = [];
     const added: unknown[] = [];
     const removed: unknown[] = [];
-    class FakeMapboxOverlay {
+    class FakeMapLibreOverlay {
       constructor(props: Record<string, unknown>) {
         constructed.push(props);
       }
@@ -65,7 +65,7 @@ describe("wind particles", () => {
     }
     const app = {
       getDeckGL: async () => ({
-        mapbox: { MapboxOverlay: FakeMapboxOverlay },
+        maplibre: { MapLibreOverlay: FakeMapLibreOverlay },
       }),
       addMapControl: (control: unknown) => {
         added.push(control);

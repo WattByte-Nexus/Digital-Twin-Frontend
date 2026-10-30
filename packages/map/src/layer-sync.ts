@@ -10,7 +10,7 @@ import {
   validateMapExpression,
 } from "@geolibre/core";
 import { addProtocol, config } from "maplibre-gl";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import type { PropertyValueSpecification } from "maplibre-gl";
 import { FileSource, PMTiles, Protocol } from "pmtiles";
 import {
@@ -68,7 +68,7 @@ import {
 /**
  * Notified of the computed `beforeId` for a deck.gl-backed external custom layer
  * (a `maplibre-gl-raster` COG) whenever layers are synced. Such a layer is not a
- * real MapLibre style layer — `@deck.gl/mapbox` groups it by a `beforeId` prop —
+ * real MapLibre style layer — `@deck.gl/maplibre` groups it by a `beforeId` prop —
  * so `moveLayer` cannot reorder it; the host registers a handler that pushes the
  * `beforeId` into the owning control instead. See issue #393 follow-up.
  */
@@ -431,7 +431,7 @@ function syncExternalNativeLayer(
     }
     syncVectorControlPointSymbology(map, layer, beforeId);
     // A deck.gl raster has no real MapLibre style layer to move (it renders in a
-    // `deck-layer-group-*` keyed by its beforeId prop), so forward the computed
+    // a layer group keyed by its beforeId prop), so forward the computed
     // beforeId to the control that owns it.
     if (layer.metadata.externalDeckLayer === true) {
       externalDeckLayerOrderHandler?.(layer.id, beforeId);
@@ -1497,7 +1497,7 @@ function syncVectorControlPointSymbology(
   // of the other rule-based paint overrides apply to control-owned layers.
   const radius = proportionalRadiusExpression(layer.style);
   if (radius) {
-    map.setPaintProperty(circleNativeId, "circle-radius", radius);
+    map.setPaintProperty(circleNativeId, "circle-radius", radius as maplibregl.ExpressionSpecification);
     overriddenRadiusIdsFor(map).add(circleNativeId);
   } else {
     restoreOverriddenCircleRadius(map, circleNativeId, layer);
@@ -1552,7 +1552,7 @@ function setExternalNativeLayerPaint(
 
   for (const [property, value] of Object.entries(paint)) {
     try {
-      map.setPaintProperty(nativeLayerId, property, value);
+      map.setPaintProperty(nativeLayerId, property as keyof maplibregl.AllPaintProperties, value);
     } catch {
       // External controls can create heterogeneous style layers. Ignore paint
       // properties that do not apply to a specific native layer type.
@@ -3133,12 +3133,12 @@ function ensureLayer(
   if (map.getLayer(id)) {
     if (spec.paint) {
       for (const [key, value] of Object.entries(spec.paint)) {
-        map.setPaintProperty(id, key, value);
+        map.setPaintProperty(id, key as keyof maplibregl.AllPaintProperties, value as maplibregl.AllPaintProperties[keyof maplibregl.AllPaintProperties]);
       }
     }
     if (spec.layout) {
       for (const [key, value] of Object.entries(spec.layout)) {
-        map.setLayoutProperty(id, key, value);
+        map.setLayoutProperty(id, key as keyof maplibregl.AllLayoutProperties, value as maplibregl.AllLayoutProperties[keyof maplibregl.AllLayoutProperties]);
       }
     }
     if ("filter" in spec) {

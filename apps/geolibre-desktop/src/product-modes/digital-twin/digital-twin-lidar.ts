@@ -148,6 +148,7 @@ interface SelectedPointCloudTile {
 }
 
 interface DigitalTwinPointCloudLayerCallbacks {
+  view?: "full" | "crowns";
   onError: (error: Error) => void;
   onReady?: () => void;
   onDiagnostics?: (snapshot: DigitalTwinPointCloudDiagnostics) => void;
@@ -168,6 +169,7 @@ export function createDigitalTwinPointCloudLayer(
     onReady,
     onDiagnostics,
     beforeId,
+    view = "full",
   }: DigitalTwinPointCloudLayerCallbacks
 ): DigitalTwinPointCloudTileLayer {
   let visiblePointsReported = false;
@@ -216,8 +218,8 @@ export function createDigitalTwinPointCloudLayer(
   };
 
   return new DigitalTwinPointCloudTileLayer({
-    id: `digital-twin-point-cloud-${dataset.datasetId}`,
-    data: dataset.tilesetUrl,
+    id: `digital-twin-point-cloud-${dataset.datasetId}-${view}`,
+    data: view === "full" ? new URL("full/tileset.json", dataset.tilesetUrl).href : dataset.tilesetUrl,
     getTraversalElevationMeters: () => traversalElevationMeters,
     // LOD controls density; a stable pixel footprint keeps close views crisp
     // and prevents coarse preview points from becoming metre-wide bubbles.

@@ -8,7 +8,7 @@ import {
   sunPositionAt,
 } from "@geolibre/plugins/maplibre-sun";
 import type { WeatherSettingsValue } from "@geolibre/ui";
-import type { Map as MapLibreMap } from "maplibre-gl";
+import type { AllPaintProperties, Map as MapLibreMap } from "maplibre-gl";
 import { weatherSettingsDateMs } from "./weather-settings-time";
 import {
   timeOfDayIllumination,
@@ -50,8 +50,8 @@ export function createWeatherSunSimulationController(
   let autoClock: ReturnType<typeof setInterval> | null = null;
   let destroyed = false;
   let baseSky = map.isStyleLoaded() ? map.getSky() : undefined;
-  let baseHillshadeDirection: unknown;
-  let baseHillshadeAltitude: unknown;
+  let baseHillshadeDirection: AllPaintProperties["hillshade-illumination-direction"];
+  let baseHillshadeAltitude: AllPaintProperties["hillshade-illumination-altitude"];
   const baseRasterPresentation = new Map<string, RasterPresentation>();
   const sun = createSunSimulationController(map, {
     ...DEFAULT_SUN_SETTINGS,

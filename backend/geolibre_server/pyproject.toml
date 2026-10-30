@@ -3,7 +3,7 @@ name = "geolibre-server"
 version = "1.0.0"
 description = "Optional Python processing sidecar for GeoLibre Desktop"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["fastapi>=0.115.0", "uvicorn[standard]>=0.32.0"]
 
 [project.optional-dependencies]
@@ -14,7 +14,7 @@ dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0"]
 # this group; run it locally with `pip install -e "backend/geolibre_server[test]"`.
 test = ["geolibre-server[dev,vector,raster,conversion,ml,sedona,postgis]"]
 whitebox = ["whitebox-workflows>=2.0.2"]
-conversion = ["duckdb>=1.1.0", "rio-cogeo>=5.0.0", "freestiler>=0.1.0"]
+conversion = ["duckdb>=2.0.0", "rio-cogeo>=5.0.0", "freestiler>=0.1.0"]
 # Optional GeoPandas engine for the Vector processing tools. Not installed by
 # default to keep the bundled sidecar small; the desktop app falls back to the
 # client-side (Turf.js) engine when this is absent.

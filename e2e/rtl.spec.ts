@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
 const FIXTURE_TEXT = readFixture("smoke.geojson");
@@ -28,7 +28,7 @@ function isAllowlistedSerious(violation: {
  * test-id based so assertions stay language-neutral.
  */
 test("mirrors the document and loads a layer in the Arabic locale", async ({ page }, testInfo) => {
-  await waitForMap(page, "/?locale=ar");
+  await waitForMap(page, "/workspace?locale=ar");
 
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");

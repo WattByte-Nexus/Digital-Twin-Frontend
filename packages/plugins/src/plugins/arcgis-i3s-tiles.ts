@@ -1,5 +1,5 @@
 // ArcGIS I3S (Indexed 3D Scene Layer) support, rendered through a deck.gl
-// Tile3DLayer + @loaders.gl/i3s I3SLoader in a @deck.gl/mapbox MapboxOverlay.
+// Tile3DLayer + @loaders.gl/i3s I3SLoader in a @deck.gl/maplibre MapLibreOverlay.
 //
 // This mirrors the Google Photorealistic 3D Tiles overlay in maplibre-3d-tiles.ts
 // (same lazy mount / store-driven render / mercator-forcing lifecycle) but for
@@ -10,7 +10,7 @@
 
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
-import type { MapboxOverlay } from "@deck.gl/mapbox";
+import type { MapLibreOverlay } from "@deck.gl/maplibre";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../types";
 import {
   acquireMercatorProjectionLock,
@@ -62,7 +62,7 @@ const I3S_MAX_MOUNT_RETRIES = 60;
 // portals, and hosted feature/scene services.
 const I3S_SCENE_SERVER_RE = /\/SceneServer(\/|$|\?|#)/i;
 
-let i3sOverlay: MapboxOverlay | null = null;
+let i3sOverlay: MapLibreOverlay | null = null;
 let i3sOverlayMounted = false;
 let i3sDeckGL: GeoLibreDeckGL | null = null;
 let i3sApp: GeoLibreAppAPI | null = null;
@@ -218,11 +218,11 @@ async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void
   }
   i3sBoundMap = map;
   // Overlaid (not interleaved): I3S mesh tiles use the METER_OFFSETS coordinate
-  // system, which the interleaved MapboxOverlay renderer rejects ("Invalid
+  // system, which the interleaved MapLibreOverlay renderer rejects ("Invalid
   // coordinateSystem: 2"). Overlaid mode renders deck on its own canvas above
   // the map and supports it; buildings are not depth-composited with the
   // basemap, which is fine for a scene-layer overlay.
-  i3sOverlay = new i3sDeckGL.mapbox.MapboxOverlay({
+  i3sOverlay = new i3sDeckGL.maplibre.MapLibreOverlay({
     interleaved: false,
     layers: [],
   });

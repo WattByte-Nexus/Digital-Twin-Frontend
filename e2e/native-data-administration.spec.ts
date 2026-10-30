@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { readFileSync } from "node:fs";
 
 const bounds = { west: -105.35, south: 39.95, east: -105.15, north: 40.1 };
@@ -89,10 +89,10 @@ test.describe("Native data administration", () => {
     state.latestStatus = "ready"; state.selectedVersion = acceptedVersion; await expect(page.getByText("Accepted replacement is ready. View selected dataset to display the new tiles.", { exact: true })).toBeVisible(); await expect(page.getByText(`Viewable version: ${acceptedVersion}`, { exact: true })).toBeVisible();
   });
   test("settings use actual health, local appearance and the saved scenario library", async ({ page }) => {
-    const state = await installDataMocks(page); await page.getByRole("button", { name: "Settings", exact: true }).click(); await expect(page.getByRole("heading", { name: "Status & health", exact: true })).toBeVisible(); await expect(page.getByText("Live and ready", { exact: true })).toBeVisible();
+    const state = await installDataMocks(page); await page.getByRole("button", { name: "Settings", exact: true }).click(); await page.getByRole("button", { name: "Status & health", exact: true }).click(); await expect(page.getByRole("heading", { name: "Status & health", exact: true })).toBeVisible(); await expect(page.getByText("Live and ready", { exact: true })).toBeVisible();
     state.healthOnline = false; await page.getByRole("button", { name: "Check now", exact: true }).click(); await expect(page.getByText("Offline", { exact: true })).toBeVisible(); await expect(page.getByText(/Redis|Queue depth|Last checked just now/)).toHaveCount(0);
-    await page.getByRole("searchbox", { name: "Search settings", exact: true }).fill("Appearance"); await page.getByRole("button", { name: "Appearance", exact: true }).click(); const toggle = page.getByRole("button", { name: /^Switch to (?:dark|light)$/ }); const before = await toggle.innerText(); await toggle.click(); await expect(toggle).toHaveText(before === "Switch to dark" ? "Switch to light" : "Switch to dark");
-    await page.reload(); await page.getByRole("button", { name: "Settings", exact: true }).click(); await page.getByRole("button", { name: "Appearance", exact: true }).click(); await expect(page.getByRole("button", { name: /^Switch to (?:dark|light)$/ })).toHaveText(before === "Switch to dark" ? "Switch to light" : "Switch to dark");
+    await page.getByRole("button", { name: "Appearance", exact: true }).click(); await page.getByRole("radio", { name: "Dark", exact: true }).click(); await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeChecked();
+    await page.reload(); await page.getByRole("button", { name: "Settings", exact: true }).click(); await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeChecked();
     await page.getByRole("button", { name: "Saved scenarios", exact: true }).click(); await page.getByRole("button", { name: "Open saved scenarios", exact: true }).click(); await expect(page.getByRole("heading", { name: "Scenarios", exact: true })).toBeVisible();
   });
 

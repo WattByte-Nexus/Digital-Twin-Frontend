@@ -166,8 +166,8 @@ export interface GeoLibreDeckGL {
   geoLayers: typeof import("@deck.gl/geo-layers");
   /** `@deck.gl/mesh-layers` (SimpleMeshLayer, ScenegraphLayer). */
   meshLayers: typeof import("@deck.gl/mesh-layers");
-  /** `@deck.gl/mapbox` - use `mapbox.MapboxOverlay` for interleaved MapLibre rendering. */
-  mapbox: typeof import("@deck.gl/mapbox");
+  /** `@deck.gl/maplibre` - use `maplibre.MapLibreOverlay` for interleaved MapLibre rendering. */
+  maplibre: typeof import("@deck.gl/maplibre");
 }
 
 /**

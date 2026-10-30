@@ -11,6 +11,7 @@ import {
 } from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-lidar";
 import type { DigitalTwinReadyPointCloudDataset } from "../apps/geolibre-desktop/src/lib/digital-twin-point-cloud";
 import { DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS } from "../packages/ui/src/components/digital-twin-map-toolbar";
+import { createDigitalTwinMapSurfaceLayers } from "../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-map-module";
 
 const DATASET: DigitalTwinReadyPointCloudDataset = {
   datasetId: "golden-lidar",
@@ -34,6 +35,7 @@ const DATASET: DigitalTwinReadyPointCloudDataset = {
 describe("Digital Twin LiDAR fusion layer", () => {
   it("shows tree models by default and lets the toolbar enable point clouds", () => {
     assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.pointClouds, false);
+    assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.pointCloudView, "full");
     assert.equal(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS.assetTrees, true);
   });
 
@@ -50,8 +52,8 @@ describe("Digital Twin LiDAR fusion layer", () => {
       onReady: () => {},
     });
 
-    assert.equal(layer.props.id, "digital-twin-point-cloud-golden-lidar");
-    assert.equal(layer.props.data, DATASET.tilesetUrl);
+    assert.equal(layer.props.id, "digital-twin-point-cloud-golden-lidar-full");
+    assert.equal(layer.props.data, "https://cdn.example.com/golden/sha256-a1/full/tileset.json");
     assert.equal(layer.props.pointSize, 1);
     assert.equal(layer.props.opacity, 1);
     assert.equal(layer.props.pickable, false);
@@ -84,6 +86,24 @@ describe("Digital Twin LiDAR fusion layer", () => {
     const shaders = new VisibleRgbPointCloudLayer({ id: "coverage-test", data: [] })
       .getShaders();
     assert.equal(shaders.inject?.["vs:DECKGL_FILTER_SIZE"], undefined);
+  });
+
+  it("switches representations within the same authenticated immutable dataset", () => {
+    const dataset = { ...DATASET, tilesetUrl: "https://engine.example.com/api/v1/point-clouds/golden/survey/version/tileset.json" };
+    const full = createDigitalTwinPointCloudLayer(dataset, { view: "full", onError: () => {} });
+    const crowns = createDigitalTwinPointCloudLayer(dataset, { view: "crowns", onError: () => {} });
+    assert.equal(full.props.data, "https://engine.example.com/api/v1/point-clouds/golden/survey/version/full/tileset.json");
+    assert.equal(crowns.props.data, dataset.tilesetUrl);
+    assert.notEqual(full.id, crowns.id);
+  });
+
+  it("shows the full scan even when no tree crowns were detected", () => {
+    const pointCloud = { dataset: { ...DATASET, pointCount: 0 }, onError: () => {} };
+    const full = createDigitalTwinMapSurfaceLayers({ pointCloud: { ...pointCloud, view: "full" } });
+    const crowns = createDigitalTwinMapSurfaceLayers({ pointCloud: { ...pointCloud, view: "crowns" } });
+    assert.equal(full.length, 1);
+    assert.match(String(full[0].layers[0].props.data), /full\/tileset\.json$/);
+    assert.equal(crowns.length, 0);
   });
 
   it("releases retained parent tiles only after their point-cloud replacement draws", (context) => {

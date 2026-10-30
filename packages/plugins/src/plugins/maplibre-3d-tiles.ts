@@ -90,7 +90,7 @@ let activeThreeDTilesApp: GeoLibreAppAPI | null = null;
 // (./shared-deck-overlay.ts) under the "google-3d-tiles" source, so they coexist
 // with the deckgl-viz overlay and the COG raster overlay instead of clobbering
 // deck.gl's per-map Deck (see #1149). This module only builds the layer list;
-// the shared overlay owns the MapboxOverlay and its map binding.
+// the shared overlay owns the MapLibreOverlay and its map binding.
 let googleTilesStoreUnsubscribe: (() => void) | null = null;
 let googleTilesDeckGL: GeoLibreDeckGL | null = null;
 let googleTilesApp: GeoLibreAppAPI | null = null;
@@ -1141,7 +1141,7 @@ async function runEnsureGooglePhotorealisticTilesOverlay(app: GeoLibreAppAPI): P
   if (!app.getDeckGL) return;
   googleTilesDeckGL ??= await app.getDeckGL();
 
-  // The shared overlay owns the single interleaved MapboxOverlay and its map
+  // The shared overlay owns the single interleaved MapLibreOverlay and its map
   // binding (including rebind on a globe/projection toggle); this module only
   // supplies the "google-3d-tiles" layer list. Clearing the signature forces the
   // next render to rebuild the layers into the (possibly fresh) shared overlay.
