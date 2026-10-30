@@ -1,7 +1,7 @@
 import { type GeoLibreLayer, lineWidthValue, styleValue, useAppStore } from "@geolibre/core";
 import { Geoman, defaultLayerStyles } from "@geoman-io/maplibre-geoman-free";
 import type { Feature, FeatureCollection } from "geojson";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
   SKETCHES_SOURCE_KIND,
@@ -110,6 +110,8 @@ let viewImportBaseline: ViewImportBaseline | null = null;
 let viewImportLoadCounter = 0;
 
 const GEOMAN_EDIT_SYNC_EVENTS = ["gm:dragend", "gm:editend", "gm:rotateend"] as const;
+// Geoman adds these events to MapLibre's emitter beyond its native event catalog.
+type GeomanEditEvented = maplibregl.Evented<Record<(typeof GEOMAN_EDIT_SYNC_EVENTS)[number], maplibregl.Event>>;
 
 export const GEO_EDITOR_PLUGIN_ID = "maplibre-gl-geo-editor";
 
@@ -227,14 +229,14 @@ function bindGeomanEditSync(map: maplibregl.Map): void {
   unbindGeomanEditSync();
   geomanEditSyncMap = map;
   for (const eventName of GEOMAN_EDIT_SYNC_EVENTS) {
-    map.on(eventName, handleGeomanEditSync);
+    (map as unknown as GeomanEditEvented).on(eventName, handleGeomanEditSync);
   }
 }
 
 function unbindGeomanEditSync(): void {
   if (!geomanEditSyncMap) return;
   for (const eventName of GEOMAN_EDIT_SYNC_EVENTS) {
-    geomanEditSyncMap.off(eventName, handleGeomanEditSync);
+    (geomanEditSyncMap as unknown as GeomanEditEvented).off(eventName, handleGeomanEditSync);
   }
   geomanEditSyncMap = null;
 }
@@ -1214,7 +1216,7 @@ function applyGeomanDisplayLayerWidth(
   if (layer.type !== "line") return;
   const id = layer.id.toLowerCase();
   if (!id.startsWith("gm_main") || id.includes("snap")) return;
-  setGeomanPaintProperty(map, layer.id, "line-width", lineWidthValue(style));
+  setGeomanPaintProperty(map, layer.id, "line-width", lineWidthValue(style) as maplibregl.AllPaintProperties["line-width"]);
 }
 
 function applyGeomanDisplayLayerOpacity(
@@ -1237,11 +1239,11 @@ function applyGeomanDisplayLayerOpacity(
   }
 }
 
-function setGeomanPaintProperty(
+function setGeomanPaintProperty<K extends keyof maplibregl.AllPaintProperties>(
   map: maplibregl.Map,
   layerId: string,
-  property: string,
-  value: unknown,
+  property: K,
+  value: maplibregl.AllPaintProperties[K],
 ): void {
   try {
     map.setPaintProperty(layerId, property, value);

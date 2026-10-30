@@ -13,7 +13,7 @@ interface StatusMetricProps {
 function StatusMetric({ label, value, className }: StatusMetricProps) {
   return (
     <span className={cn("inline-flex shrink-0 items-baseline gap-1.5 px-1.5", className)}>
-      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/80">
+      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </span>
       <span className="font-mono text-[11px] font-medium tabular-nums text-foreground/85">

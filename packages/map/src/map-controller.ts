@@ -18,7 +18,7 @@ import type {
 } from "@geolibre/core";
 import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { LayerControl, type CustomLayerAdapter, type LayerState } from "maplibre-gl-layer-control";
 import {
   circleLayerId,
@@ -62,7 +62,8 @@ const NON_BASEMAP_STYLE_LAYER_IDS = [
   highlightLineLayerId(),
   highlightCircleLayerId(),
 ];
-const OPACITY_PAINT_PROPERTIES: Record<string, string[]> = {
+type OpacityPaintProperty = Extract<keyof maplibregl.AllPaintProperties, `${string}-opacity` | "hillshade-exaggeration">;
+const OPACITY_PAINT_PROPERTIES: Record<string, OpacityPaintProperty[]> = {
   background: ["background-opacity"],
   // A point's outline fades with its fill so story playback can fully hide a
   // circle layer; without the stroke property a faded-out point still renders
@@ -373,7 +374,7 @@ export class MapController {
   private basemapVisible = true;
   private basemapOpacity = 1;
   private mapPreferences: MapPreferences = DEFAULT_PROJECT_PREFERENCES.map;
-  private basemapOriginalPaintValues = new Map<string, Map<string, unknown>>();
+  private basemapOriginalPaintValues = new Map<string, Map<OpacityPaintProperty, maplibregl.AllPaintProperties[OpacityPaintProperty]>>();
   private syncedLayers: GeoLibreLayer[] = [];
   private layerIds: string[] = [];
   private styleReady = false;
@@ -1038,12 +1039,12 @@ export class MapController {
     );
   }
 
-  private setBasemapPaintOpacity(layerId: string, property: string): void {
+  private setBasemapPaintOpacity(layerId: string, property: OpacityPaintProperty): void {
     if (!this.map) return;
 
     let originalPaintValues = this.basemapOriginalPaintValues.get(layerId);
     if (!originalPaintValues) {
-      originalPaintValues = new Map<string, unknown>();
+      originalPaintValues = new Map<OpacityPaintProperty, maplibregl.AllPaintProperties[OpacityPaintProperty]>();
       this.basemapOriginalPaintValues.set(layerId, originalPaintValues);
     }
     if (!originalPaintValues.has(property)) {

@@ -70,7 +70,7 @@ import type {
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { bundledPluginManifestPaths } from "virtual:bundled-plugins";

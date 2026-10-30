@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import fixtures from "../tests/fixtures/digital-twin-engine.api-fixtures.json";
 
 async function installEngine(page: Page) {
@@ -159,6 +159,19 @@ test.describe("Digital Twin settings", () => {
 
   test("full-scan requests do not depend on detected crowns", async ({ page }) => {
     await installEngine(page);
+    await page.addInitScript(() => {
+      const key = "geolibre.desktopSettings";
+      const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
+      settings.aiProviderEnv = { ...settings.aiProviderEnv, VITE_MAPBOX_ACCESS_TOKEN: "pk.e2e" };
+      localStorage.setItem(key, JSON.stringify(settings));
+      Object.assign(window, { __GEOLIBRE_RUNTIME_ENV__: settings.aiProviderEnv });
+    });
+    await page.route("https://api.mapbox.com/**", route => route.fulfill({ json: {
+      tilejson: "3.0.0", tiles: [], vector_layers: [],
+    } }));
+    await page.route("https://tiles.mapterhorn.com/**", route => route.fulfill({ json: {
+      tilejson: "3.0.0", tiles: [],
+    } }));
     const dataset = { ...fixtures.point_cloud_ready, region_id: fixtures.region.region_id, point_count: 0 };
     await page.route("**/point-cloud-datasets", route => route.fulfill({ json: {
       active_dataset_id: dataset.dataset_id, items: [dataset],

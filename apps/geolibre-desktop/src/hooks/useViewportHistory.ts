@@ -1,6 +1,7 @@
 import type { MapViewState } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { MapEventType } from "maplibre-gl";
 
 /**
  * How many distinct viewports the history keeps. The oldest entries are trimmed
@@ -117,7 +118,7 @@ export function useViewportHistory(
       syncNav();
     };
 
-    const onMoveEnd = (event: { storyCameraToken?: number }) => {
+    const onMoveEnd = (event: MapEventType["moveend"] & { storyCameraToken?: number }) => {
       // Story presenter / chapter-preview camera moves carry a storyCameraToken
       // in their event data. Those are scripted playback, not user navigation,
       // so don't record them (checked before the restore counter so a story

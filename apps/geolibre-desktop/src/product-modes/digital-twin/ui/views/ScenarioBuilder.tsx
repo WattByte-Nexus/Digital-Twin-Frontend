@@ -7,7 +7,7 @@ import {
   type DigitalTwinRegion, type SurfaceTheme,
 } from "@geolibre/ui";
 import { ArrowLeft, ArrowRight, Crosshair, Flame, Save, Trash2, Undo2, Redo2, RotateCcw, X } from "lucide-react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { type Dispatch, type ReactNode, type RefObject, type SetStateAction, useEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { fetchDigitalTwinRegionReadiness } from "../../../../lib/digital-twin-regions";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
 import { createMapController, MapController } from "../packages/map/src/map-controller";
 
@@ -663,20 +663,9 @@ describe("MapController built-in control positions", () => {
 // Internal surface used to drive the geolocate error handler in plain Node.
 interface GeolocateInternals {
   map: unknown;
-  geolocateControl: { handlers: Record<string, (e: unknown) => void> } | null;
+  geolocateControl: maplibregl.GeolocateControl | null;
   controlVisibility: Record<string, boolean>;
   addGeolocateControl(): boolean;
-}
-
-/** Minimal stand-in for maplibregl.GeolocateControl that records listeners. */
-class FakeGeolocateControl {
-  handlers: Record<string, (e: unknown) => void> = {};
-  on(event: string, fn: (e: unknown) => void): void {
-    this.handlers[event] = fn;
-  }
-  off(event: string, fn: (e: unknown) => void): void {
-    if (this.handlers[event] === fn) delete this.handlers[event];
-  }
 }
 
 /**
@@ -704,7 +693,7 @@ function stubNavigator(
 function controllerWithGeolocate(): {
   controller: MapController;
   internal: GeolocateInternals;
-  firstControl: { handlers: Record<string, (e: unknown) => void> };
+  firstControl: maplibregl.GeolocateControl;
 } {
   const controller = createMapController();
   const internal = controller as unknown as GeolocateInternals;
@@ -718,140 +707,122 @@ function controllerWithGeolocate(): {
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("MapController geolocate permission-denied recovery", () => {
-  const originalControl = maplibregl.GeolocateControl;
+  it("re-creates the control when the prompt was dismissed (state 'prompt')", async () => {
+    const restore = stubNavigator("prompt");
+    try {
+      const { internal, firstControl } = controllerWithGeolocate();
+      // A dismissed prompt surfaces as a PERMISSION_DENIED (code 1) error.
+      firstControl.fire("error", { code: 1 });
+      await flush();
+      assert.notEqual(internal.geolocateControl, firstControl);
+      assert.ok(internal.geolocateControl instanceof maplibregl.GeolocateControl);
+    } finally {
+      restore();
+    }
+  });
 
-  function withStubbedControl(run: () => Promise<void>): Promise<void> {
-    (maplibregl as { GeolocateControl: unknown }).GeolocateControl = FakeGeolocateControl;
-    return run().finally(() => {
-      (maplibregl as { GeolocateControl: unknown }).GeolocateControl = originalControl;
+  it("leaves the control disabled on a genuine denial (state 'denied')", async () => {
+    const restore = stubNavigator("denied");
+    try {
+      const { internal, firstControl } = controllerWithGeolocate();
+      firstControl.fire("error", { code: 1 });
+      await flush();
+      assert.equal(internal.geolocateControl, firstControl);
+    } finally {
+      restore();
+    }
+  });
+
+  it("does not reset on a contradictory granted denial (state 'granted')", async () => {
+    const restore = stubNavigator("granted");
+    try {
+      const { internal, firstControl } = controllerWithGeolocate();
+      firstControl.fire("error", { code: 1 });
+      await flush();
+      assert.equal(internal.geolocateControl, firstControl);
+    } finally {
+      restore();
+    }
+  });
+
+  it("re-creates when the Permissions API is unavailable", async () => {
+    const restore = stubNavigator(null);
+    try {
+      const { internal, firstControl } = controllerWithGeolocate();
+      firstControl.fire("error", { code: 1 });
+      await flush();
+      assert.notEqual(internal.geolocateControl, firstControl);
+    } finally {
+      restore();
+    }
+  });
+
+  it("re-creates when the permission query rejects", async () => {
+    const restore = stubNavigator(null, () => Promise.reject(new Error("not supported")));
+    try {
+      const { internal, firstControl } = controllerWithGeolocate();
+      firstControl.fire("error", { code: 1 });
+      await flush();
+      assert.notEqual(internal.geolocateControl, firstControl);
+    } finally {
+      restore();
+    }
+  });
+
+  it("re-creates when the permission query throws synchronously", async () => {
+    const restore = stubNavigator(null, () => {
+      throw new Error("permissions blocked");
     });
-  }
+    try {
+      const { internal, firstControl } = controllerWithGeolocate();
+      firstControl.fire("error", { code: 1 });
+      await flush();
+      assert.notEqual(internal.geolocateControl, firstControl);
+    } finally {
+      restore();
+    }
+  });
 
-  it("re-creates the control when the prompt was dismissed (state 'prompt')", () =>
-    withStubbedControl(async () => {
-      const restore = stubNavigator("prompt");
-      try {
-        const { internal, firstControl } = controllerWithGeolocate();
-        // A dismissed prompt surfaces as a PERMISSION_DENIED (code 1) error.
-        firstControl.handlers.error({ code: 1 });
-        await flush();
-        assert.notEqual(internal.geolocateControl, firstControl);
-        assert.ok(internal.geolocateControl instanceof FakeGeolocateControl);
-      } finally {
-        restore();
-      }
-    }));
+  it("ignores non-permission errors (e.g. timeout, code 3)", async () => {
+    const restore = stubNavigator("prompt");
+    try {
+      const { internal, firstControl } = controllerWithGeolocate();
+      firstControl.fire("error", { code: 3 });
+      await flush();
+      assert.equal(internal.geolocateControl, firstControl);
+    } finally {
+      restore();
+    }
+  });
 
-  it("leaves the control disabled on a genuine denial (state 'denied')", () =>
-    withStubbedControl(async () => {
-      const restore = stubNavigator("denied");
-      try {
-        const { internal, firstControl } = controllerWithGeolocate();
-        firstControl.handlers.error({ code: 1 });
-        await flush();
-        assert.equal(internal.geolocateControl, firstControl);
-      } finally {
-        restore();
-      }
-    }));
+  it("does not disturb a control that was replaced before the check resolved", async () => {
+    const restore = stubNavigator("prompt");
+    try {
+      const { internal, firstControl } = controllerWithGeolocate();
+      firstControl.fire("error", { code: 1 });
+      // The control is swapped out (e.g. toggled off/on) before the async
+      // permission query resolves; the stale handler must not touch it.
+      const replacement = new maplibregl.GeolocateControl();
+      internal.geolocateControl = replacement;
+      await flush();
+      assert.equal(internal.geolocateControl, replacement);
+    } finally {
+      restore();
+    }
+  });
 
-  it("does not reset on a contradictory granted denial (state 'granted')", () =>
-    withStubbedControl(async () => {
-      const restore = stubNavigator("granted");
-      try {
-        const { internal, firstControl } = controllerWithGeolocate();
-        firstControl.handlers.error({ code: 1 });
-        await flush();
-        assert.equal(internal.geolocateControl, firstControl);
-      } finally {
-        restore();
-      }
-    }));
-
-  it("re-creates when the Permissions API is unavailable", () =>
-    withStubbedControl(async () => {
-      const restore = stubNavigator(null);
-      try {
-        const { internal, firstControl } = controllerWithGeolocate();
-        firstControl.handlers.error({ code: 1 });
-        await flush();
-        assert.notEqual(internal.geolocateControl, firstControl);
-      } finally {
-        restore();
-      }
-    }));
-
-  it("re-creates when the permission query rejects", () =>
-    withStubbedControl(async () => {
-      const restore = stubNavigator(null, () => Promise.reject(new Error("not supported")));
-      try {
-        const { internal, firstControl } = controllerWithGeolocate();
-        firstControl.handlers.error({ code: 1 });
-        await flush();
-        assert.notEqual(internal.geolocateControl, firstControl);
-      } finally {
-        restore();
-      }
-    }));
-
-  it("re-creates when the permission query throws synchronously", () =>
-    withStubbedControl(async () => {
-      const restore = stubNavigator(null, () => {
-        throw new Error("permissions blocked");
-      });
-      try {
-        const { internal, firstControl } = controllerWithGeolocate();
-        firstControl.handlers.error({ code: 1 });
-        await flush();
-        assert.notEqual(internal.geolocateControl, firstControl);
-      } finally {
-        restore();
-      }
-    }));
-
-  it("ignores non-permission errors (e.g. timeout, code 3)", () =>
-    withStubbedControl(async () => {
-      const restore = stubNavigator("prompt");
-      try {
-        const { internal, firstControl } = controllerWithGeolocate();
-        firstControl.handlers.error({ code: 3 });
-        await flush();
-        assert.equal(internal.geolocateControl, firstControl);
-      } finally {
-        restore();
-      }
-    }));
-
-  it("does not disturb a control that was replaced before the check resolved", () =>
-    withStubbedControl(async () => {
-      const restore = stubNavigator("prompt");
-      try {
-        const { internal, firstControl } = controllerWithGeolocate();
-        firstControl.handlers.error({ code: 1 });
-        // The control is swapped out (e.g. toggled off/on) before the async
-        // permission query resolves; the stale handler must not touch it.
-        const replacement = new FakeGeolocateControl();
-        internal.geolocateControl = replacement;
-        await flush();
-        assert.equal(internal.geolocateControl, replacement);
-      } finally {
-        restore();
-      }
-    }));
-
-  it("is a no-op when the map is destroyed before the check resolves", () =>
-    withStubbedControl(async () => {
-      const restore = stubNavigator("prompt");
-      try {
-        const { internal, firstControl } = controllerWithGeolocate();
-        firstControl.handlers.error({ code: 1 });
-        internal.map = null;
-        await flush();
-        assert.equal(internal.geolocateControl, firstControl);
-      } finally {
-        restore();
-      }
-    }));
+  it("is a no-op when the map is destroyed before the check resolves", async () => {
+    const restore = stubNavigator("prompt");
+    try {
+      const { internal, firstControl } = controllerWithGeolocate();
+      firstControl.fire("error", { code: 1 });
+      internal.map = null;
+      await flush();
+      assert.equal(internal.geolocateControl, firstControl);
+    } finally {
+      restore();
+    }
+  });
 });
 
 interface LayerLabelWindow {

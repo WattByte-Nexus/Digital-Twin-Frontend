@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
 const FIXTURE_TEXT = readFixture("smoke.geojson");
@@ -7,7 +7,7 @@ const LIBERTY_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const DARK_STYLE = "https://tiles.openfreemap.org/styles/dark";
 
 test("switches the built-in basemap with the app theme", async ({ page }) => {
-  await waitForMap(page, "/?theme=light");
+  await waitForMap(page, "/workspace?theme=light");
   const map = page.getByTestId("map-canvas");
   await expect(map).toHaveAttribute("data-basemap-style", LIBERTY_STYLE);
 
@@ -29,7 +29,7 @@ test("switches the built-in basemap with the app theme", async ({ page }) => {
  * theme breaking the app shell or the data path.
  */
 test("loads a layer and opens the attribute table in dark theme", async ({ page }) => {
-  await waitForMap(page, "/?theme=dark");
+  await waitForMap(page, "/workspace?theme=dark");
 
   // The theme applies as `class="dark"` on <html> with a matching color-scheme.
   await expect(page.locator("html")).toHaveClass(/(^|\s)dark(\s|$)/);

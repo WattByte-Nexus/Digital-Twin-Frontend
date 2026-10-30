@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 /** JS-observable marker for occluded popups; visual hiding is applied inline. */
 export const GLOBE_POPUP_OCCLUDED_CLASS = "geolibre-globe-popup-occluded";
