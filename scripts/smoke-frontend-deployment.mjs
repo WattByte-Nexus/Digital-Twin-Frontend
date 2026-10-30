@@ -7,7 +7,7 @@ const get = (path, init = {}) => fetch(new URL(path, origin), { redirect: 'manua
 const release = await get(`/deployment.json?run=${process.env.GITHUB_RUN_ID ?? Date.now()}`);
 assert.equal(release.status, 200);
 assert.equal((await release.json()).commit, process.env.GITHUB_SHA);
-for (const path of ['/regions/golden-co/live', '/regions/route.with.period/live', '/workspace', '/admin', '/diagnostics']) {
+for (const path of ['/regions/golden-co/live', '/regions/route.with.period/live', '/REGIONS/route.with.period/live', '/workspace', '/admin', '/diagnostics']) {
   const deepLink = await get(path);
   assert.equal(deepLink.status, 200, `${path} must load the application shell`);
   assert.match(deepLink.headers.get('content-type') ?? '', /text\/html/);
