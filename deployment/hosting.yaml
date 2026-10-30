@@ -28,7 +28,7 @@ Resources:
             Target: !Sub ${ApiOrigin}/api/<*>
             Status: '200'
           - !Ref AWS::NoValue
-        - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|jpeg|js|json|png|svg|txt|webp|woff|woff2|wasm|tif|pnts|bin|map)$)([^.]+$)/>'
+        - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|jpeg|js|json|png|svg|txt|webp|woff|woff2|wasm|tif|pnts|bin|glb|gltf|map)$)([^.]+$)/>'
           Target: /index.html
           Status: '200'
       CustomHeaders: |
