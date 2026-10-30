@@ -5,9 +5,6 @@ Parameters:
     Type: String
     Default: ''
     AllowedPattern: '(^$|https://[a-z0-9.-]+)'
-  EngineRoleName:
-    Type: String
-    Default: digital-twin-golden-engine-host
   PublicOrigin:
     Type: String
     Default: ''
@@ -141,20 +138,6 @@ Resources:
       GenerateSecretString:
         PasswordLength: 64
         ExcludePunctuation: true
-  EngineAuthenticationPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: nexus-hosted-authentication
-      Roles: [!Ref EngineRoleName]
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action: secretsmanager:GetSecretValue
-            Resource: !Ref SessionSecret
-          - Effect: Allow
-            Action: cognito-idp:DescribeUserPoolClient
-            Resource: !GetAtt UserPool.Arn
   DeployRole:
     Type: AWS::IAM::Role
     Properties:

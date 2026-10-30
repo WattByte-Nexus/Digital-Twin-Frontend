@@ -1,12 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: HTTPS API edge owned by the frontend; supports independently verified Fargate targets.
+Description: HTTPS API edge owned by the frontend for the independent Fargate API.
 Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
-  EngineInstanceId:
-    Type: AWS::EC2::Instance::Id
-  EngineSecurityGroupId:
-    Type: AWS::EC2::SecurityGroup::Id
   EngineSubnetId:
     Type: AWS::EC2::Subnet::Id
   PublicRouteTableId:
@@ -22,42 +18,13 @@ Parameters:
     Default: 'false'
   FargateTargetGroupArn:
     Type: String
-    Default: ''
-    Description: Terraform-owned IP target group; set during preparation without switching ordinary traffic.
-    AllowedPattern: '^$|^arn:aws:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:targetgroup/.+$'
+    Description: Terraform-owned current API IP target group.
+    AllowedPattern: '^arn:aws:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:targetgroup/.+$'
   FargateSecurityGroupId:
     Type: String
-    Default: ''
     Description: Terraform-owned API task security group; CloudFormation owns ALB egress to it.
-    AllowedPattern: '^$|^sg-([0-9a-f]{8}|[0-9a-f]{17})$'
-  UseFargateApi:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'false'
-    Description: Switch ordinary authenticated API requests only after independent acceptance checks pass.
-Rules:
-  FargateInputsTogether:
-    Assertions:
-      - Assert: !Or
-          - !And
-            - !Equals [!Ref FargateTargetGroupArn, '']
-            - !Equals [!Ref FargateSecurityGroupId, '']
-          - !And
-            - !Not [!Equals [!Ref FargateTargetGroupArn, '']]
-            - !Not [!Equals [!Ref FargateSecurityGroupId, '']]
-        AssertDescription: Supply both Fargate target group and task security group together.
-  FargateSwitchRequiresTarget:
-    RuleCondition: !Equals [!Ref UseFargateApi, 'true']
-    Assertions:
-      - Assert: !Not [!Equals [!Ref FargateTargetGroupArn, '']]
-        AssertDescription: Prepare Fargate before switching ordinary traffic.
+    AllowedPattern: '^sg-([0-9a-f]{8}|[0-9a-f]{17})$'
 Conditions:
-  FargatePrepared: !Not [!Equals [!Ref FargateTargetGroupArn, '']]
-  FargateActive: !Equals [!Ref UseFargateApi, 'true']
-  FargateVerification: !And
-    - !Not [!Equals [!Ref FargateTargetGroupArn, '']]
-    - !Equals [!Ref UseFargateApi, 'false']
-    - !Equals [!Ref EnableApi, 'true']
   ApiEnabled: !Equals [!Ref EnableApi, 'true']
 Resources:
   SecondSubnet:
@@ -85,20 +52,11 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 8000
-          ToPort: 8000
-          DestinationSecurityGroupId: !Ref EngineSecurityGroupId
+      # The existing FargateEgress resource owns the only outbound rule.
+      SecurityGroupEgress: []
   # This stack remains the sole owner of every ALB security-group egress rule.
   FargateEgress:
-    # W1030 cannot infer nonempty paired parameters from the CloudFormation Rules.
-    Metadata:
-      cfn-lint:
-        config:
-          ignore_checks: [W1030]
     Type: AWS::EC2::SecurityGroupEgress
-    Condition: FargatePrepared
     Properties:
       GroupId: !Ref SecurityGroup
       IpProtocol: tcp
@@ -127,21 +85,6 @@ Resources:
           Value: '120'
         - Key: routing.http.drop_invalid_header_fields.enabled
           Value: 'true'
-  TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: digital-twin-frontend-api
-      VpcId: !Ref VpcId
-      Protocol: HTTP
-      Port: 8000
-      TargetType: instance
-      Targets:
-        - Id: !Ref EngineInstanceId
-      HealthCheckPath: /api/v1/health/ready
-      HealthCheckIntervalSeconds: 15
-      HealthyThresholdCount: 2
-      Matcher:
-        HttpCode: '200'
   Listener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -155,28 +98,12 @@ Resources:
         - !If
           - ApiEnabled
           - Type: forward
-            TargetGroupArn: !If [FargateActive, !Ref FargateTargetGroupArn, !Ref TargetGroup]
+            TargetGroupArn: !Ref FargateTargetGroupArn
           - Type: fixed-response
             FixedResponseConfig:
               StatusCode: '503'
               ContentType: text/plain
               MessageBody: Authenticated API deployment is being configured.
-  # Association permits ECS startup before cutover. This opt-in diagnostic route
-  # uses the same API authentication and disappears when normal traffic switches.
-  FargateVerificationRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Condition: FargateVerification
-    Properties:
-      ListenerArn: !Ref Listener
-      Priority: 49000
-      Conditions:
-        - Field: http-header
-          HttpHeaderConfig:
-            HttpHeaderName: X-Digital-Twin-Api-Target
-            Values: [fargate]
-      Actions:
-        - Type: forward
-          TargetGroupArn: !Ref FargateTargetGroupArn
   Dns:
     Type: AWS::Route53::RecordSet
     Properties:
@@ -192,9 +119,6 @@ Outputs:
   SecurityGroupId:
     Value: !Ref SecurityGroup
   TargetGroupArn:
-    Value: !Ref TargetGroup
-  FargateTargetGroupArn:
-    Condition: FargatePrepared
     Value: !Ref FargateTargetGroupArn
   LoadBalancerArn:
     Value: !Ref LoadBalancer
