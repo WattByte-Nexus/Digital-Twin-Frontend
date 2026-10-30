@@ -137,6 +137,49 @@ test.describe("Digital Twin settings", () => {
     expect(pageErrors).toEqual([]);
   });
 
+  test("point-cloud views stay synchronized between settings and toolbar", async ({ page }) => {
+    await installEngine(page);
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await openSettings(page);
+    await chooseSection(page, "Map & display");
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeDisabled();
+    await page.getByRole("switch", { name: "Point clouds", exact: true }).click();
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeChecked();
+    await page.getByRole("radio", { name: "Tree crowns", exact: true }).click();
+    await page.getByRole("button", { name: "Close settings and return to workspace" }).click();
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await expect(page.getByRole("menuitemradio", { name: "Tree crowns", exact: true })).toBeChecked();
+    await page.getByRole("menuitemradio", { name: "Full scan", exact: true }).click();
+    await openSettings(page);
+    await chooseSection(page, "Map & display");
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeChecked();
+    await page.getByRole("button", { name: "Restore map defaults" }).click();
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeDisabled();
+  });
+
+  test("full-scan requests do not depend on detected crowns", async ({ page }) => {
+    await installEngine(page);
+    const dataset = { ...fixtures.point_cloud_ready, region_id: fixtures.region.region_id, point_count: 0 };
+    await page.route("**/point-cloud-datasets", route => route.fulfill({ json: {
+      active_dataset_id: dataset.dataset_id, items: [dataset],
+    } }));
+    let fullRequests = 0;
+    await page.route("**/full/tileset.json", route => {
+      fullRequests++;
+      return route.fulfill({ status: 404, json: { detail: "Dataset requires a full-scan rebuild." } });
+    });
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: "Point clouds", exact: true }).click();
+    await expect.poll(() => fullRequests).toBeGreaterThan(0);
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Tree crowns", exact: true }).click();
+    await expect(page.getByText("No segmented tree crowns are available in this dataset.", { exact: true })).toHaveCount(1);
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Full scan", exact: true }).click();
+    await expect.poll(() => fullRequests).toBeGreaterThan(1);
+  });
+
   test("engine health refreshes from ready through degraded and offline", async ({ page }) => {
     const engine = await installEngine(page);
     await page.goto(`/regions/${fixtures.region.region_id}/live`);

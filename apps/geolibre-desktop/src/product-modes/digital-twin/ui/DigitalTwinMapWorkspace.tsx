@@ -185,6 +185,8 @@ function pointCloudStatusText(
   pointCloud: PointCloudLoadState,
   readyDatasetKey: string | null,
   enabled: boolean,
+  view: "full" | "crowns",
+  renderError: { key: string; message: string } | null
 ): string {
   if (!enabled) return "Point clouds disabled.";
   if (pointCloud.status === "loading") return "Point-cloud metadata loading.";
@@ -195,9 +197,13 @@ function pointCloudStatusText(
     return `Point cloud failed to load: ${pointCloud.error.message}`;
   }
   if (pointCloud.status === "ready") {
-    return readyDatasetKey === pointCloudDatasetKey(pointCloud.dataset)
-      ? `${pointCloud.dataset.name} ready. Source RGB is preserved; missing RGB is shown in cyan.`
-      : `${pointCloud.dataset.name} tiles loading.`;
+    const key = `${pointCloudDatasetKey(pointCloud.dataset)}:${view}`;
+    if (view === "crowns" && pointCloud.dataset.pointCount === 0) return "No segmented tree crowns are available in this dataset.";
+    if (renderError?.key === key) return `Point cloud failed to load: ${renderError.message}`;
+    const label = view === "full" ? "Full scan" : "Tree crowns";
+    return readyDatasetKey === key
+      ? `${pointCloud.dataset.name} ready. ${label}. Source RGB is preserved; missing RGB is shown in cyan.`
+      : `${pointCloud.dataset.name}: ${label.toLowerCase()} tiles loading.`;
   }
   if (pointCloud.status === "queued") return "Point-cloud build queued.";
   if (pointCloud.status === "building") return "Point-cloud build in progress.";
@@ -439,6 +445,7 @@ export function DigitalTwinMapWorkspace({
   });
   const [engineHealth, setEngineHealth] = useState<EngineHealthLoadState>("checking");
   const [readyPointCloudDatasetKey, setReadyPointCloudDatasetKey] = useState<string | null>(null);
+  const [pointCloudRenderError, setPointCloudRenderError] = useState<{ key: string; message: string } | null>(null);
   const [displaySettings, setDisplaySettings] = useState<DigitalTwinMapDisplaySettings>(
     DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS,
   );
@@ -1005,11 +1012,11 @@ export function DigitalTwinMapWorkspace({
         : undefined;
 
     return createDigitalTwinMapSurfaceLayers({
-      raster:
-        raster?.regionId === activeRegionId
-          ? { descriptor: raster, onError: setRasterError }
+      raster: raster?.regionId === activeRegionId ? { descriptor: raster, onError: setRasterError } : undefined,
+      trees:
+        displaySettings.assetTrees && assetsSurfaceReady
+          ? regionalTrees
           : undefined,
-      trees: displaySettings.assetTrees && assetsSurfaceReady ? regionalTrees : undefined,
       treeSurfaceElevations: assetSurfaceElevations,
       treeInteraction: assetMapInteraction.treeInteraction,
       powerLineNetwork: basePowerLineNetwork,
@@ -1017,16 +1024,17 @@ export function DigitalTwinMapWorkspace({
       pointCloud: activePointCloud
         ? {
             dataset: activePointCloud,
+            view: displaySettings.pointCloudView,
             onError: (error) => {
-              const datasetKey = pointCloudDatasetKey(activePointCloud);
+              const key = `${pointCloudDatasetKey(activePointCloud)}:${displaySettings.pointCloudView}`;
               console.error(`${activePointCloud.name} could not be loaded`, error);
-              setPointCloud((current) =>
-                current.status === "ready" && pointCloudDatasetKey(current.dataset) === datasetKey
-                  ? { status: "error", error }
-                  : current,
-              );
+              setPointCloudRenderError({ key, message: error.message });
             },
-            onReady: () => setReadyPointCloudDatasetKey(pointCloudDatasetKey(activePointCloud)),
+            onReady: () => {
+              const key = `${pointCloudDatasetKey(activePointCloud)}:${displaySettings.pointCloudView}`;
+              setReadyPointCloudDatasetKey(key);
+              setPointCloudRenderError((current) => current?.key === key ? null : current);
+            },
           }
         : undefined,
     });
@@ -1036,6 +1044,7 @@ export function DigitalTwinMapWorkspace({
     assetsSurfaceReady,
     displaySettings.assetTrees,
     displaySettings.pointClouds,
+    displaySettings.pointCloudView,
     raster,
     pointCloud,
     assetMapInteraction.poleInteraction,
@@ -1049,6 +1058,8 @@ export function DigitalTwinMapWorkspace({
     pointCloud,
     readyPointCloudDatasetKey,
     showLidar && displaySettings.pointClouds,
+    displaySettings.pointCloudView,
+    pointCloudRenderError
   );
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

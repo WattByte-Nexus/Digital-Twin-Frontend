@@ -92,7 +92,7 @@ test("the product map module combines captured crowns with grounded tree trunks"
   assert.deepEqual(groups[0].layers[1].props.data, []);
   assert.equal(groups[0].layers[0].props.getPolygon(survey)[0][2], 1720);
   assert.equal(groups[0].layers[0].props.getElevation(survey), 18.5);
-  assert.equal(groups[1].layers[0].id, "digital-twin-point-cloud-golden-lidar");
+  assert.equal(groups[1].layers[0].id, "digital-twin-point-cloud-golden-lidar-full");
 });
 
 test("surface layer composition preserves one declared world frame", () => {
