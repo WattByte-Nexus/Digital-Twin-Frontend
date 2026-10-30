@@ -1,5 +1,5 @@
 // Generated from the pinned Digital Twin Engine OpenAPI. Do not edit.
-// Engine revision: c4f3df8456f88f3ac22c25343a6ecb259eb3d284; schema SHA-256: aec155c6dab8306db44d85cd11c35f8dbd9b7682e52bff39309c11ab60ed4ec8
+// Engine revision: 383a5f2a275198ea7281a16281a672652e6be87c; schema SHA-256: 89a792a5899c52dcfd88f9fcd4d6f38ae17c0e9a5f93d3449f5973714f807341
 
 export interface paths {
     "/": {
@@ -195,8 +195,9 @@ export interface paths {
          *             these failures to safe problem details.
          *
          *     Side Effects:
-         *         A cache miss dispatches blocking Zarr, raster, and filesystem work to a
-         *         worker thread before streaming the resulting local file.
+         *         FastAPI runs this synchronous handler off the event loop. A cold source
+         *         may generate and publish a COG; committed objects stream exact private
+         *         S3 versions without a complete local download or hash pass.
          */
         get: operations["get_map_layer_cog_api_v1_map_layers__layer_id__data_tif_get"];
         put?: never;
@@ -1020,7 +1021,7 @@ export interface paths {
         put?: never;
         /**
          * Submit a simulation run
-         * @description Persist and enqueue one validated manual wildfire simulation.
+         * @description Durably accept one validated wildfire simulation and its queue intent.
          *
          *     Args:
          *         candidate: Client-owned simulation inputs validated at the HTTP edge.
@@ -1036,7 +1037,8 @@ export interface paths {
          *         HTTPException: If the idempotency key belongs to another request.
          *
          *     Side Effects:
-         *         Persists a queued run and publishes it once to Redis Streams.
+         *         Atomically persists the queued run, region reservation, idempotency
+         *         record, and outbox intent for independent delivery to the cloud queue.
          */
         post: operations["create_simulation_run_api_v1_simulation_runs_post"];
         delete?: never;
@@ -1136,7 +1138,7 @@ export interface paths {
          *             malformed.
          *
          *     Side Effects:
-         *         Reads durable run/progress state, performs bounded blocking Redis reads,
+         *         Reads durable run/progress state, performs bounded cloud journal polling,
          *         and holds one HTTP connection until terminal state or disconnection.
          */
         get: operations["stream_simulation_run_events_api_v1_simulation_runs__run_id__events_get"];

@@ -4055,7 +4055,7 @@
     },
     "/api/v1/map-layers/{layer_id}/data.tif": {
       "get": {
-        "description": "Generate or serve one safe COG with ranges and cache validators.\n\nArgs:\n    layer_id: Public catalog identity returned by a descriptor endpoint.\n    request: Active request carrying conditional and range headers.\n    artifact_service: Runtime-owned generator and bounded source catalog.\n\nReturns:\n    A full or partial TIFF response, or an empty 304 when the caller's\n    ``If-None-Match`` value matches the prepared artifact.\n\nRaises:\n    MapLayerArtifactError: If the layer is unknown, its source is not ready,\n        or a valid COG cannot be generated. Standard API handlers convert\n        these failures to safe problem details.\n\nSide Effects:\n    A cache miss dispatches blocking Zarr, raster, and filesystem work to a\n    worker thread before streaming the resulting local file.",
+        "description": "Generate or serve one safe COG with ranges and cache validators.\n\nArgs:\n    layer_id: Public catalog identity returned by a descriptor endpoint.\n    request: Active request carrying conditional and range headers.\n    artifact_service: Runtime-owned generator and bounded source catalog.\n\nReturns:\n    A full or partial TIFF response, or an empty 304 when the caller's\n    ``If-None-Match`` value matches the prepared artifact.\n\nRaises:\n    MapLayerArtifactError: If the layer is unknown, its source is not ready,\n        or a valid COG cannot be generated. Standard API handlers convert\n        these failures to safe problem details.\n\nSide Effects:\n    FastAPI runs this synchronous handler off the event loop. A cold source\n    may generate and publish a COG; committed objects stream exact private\n    S3 versions without a complete local download or hash pass.",
         "operationId": "get_map_layer_cog_api_v1_map_layers__layer_id__data_tif_get",
         "parameters": [
           {
@@ -5854,7 +5854,7 @@
         ]
       },
       "post": {
-        "description": "Persist and enqueue one validated manual wildfire simulation.\n\nArgs:\n    candidate: Client-owned simulation inputs validated at the HTTP edge.\n    request: Active request carrying its middleware-assigned request ID.\n    response: Mutable response used to publish the resource location.\n    commands: Service coordinating durable acceptance and publication.\n    idempotency_key: Client key identifying one logical submission.\n\nReturns:\n    The newly queued run or the original run for an identical replay.\n\nRaises:\n    HTTPException: If the idempotency key belongs to another request.\n\nSide Effects:\n    Persists a queued run and publishes it once to Redis Streams.",
+        "description": "Durably accept one validated wildfire simulation and its queue intent.\n\nArgs:\n    candidate: Client-owned simulation inputs validated at the HTTP edge.\n    request: Active request carrying its middleware-assigned request ID.\n    response: Mutable response used to publish the resource location.\n    commands: Service coordinating durable acceptance and publication.\n    idempotency_key: Client key identifying one logical submission.\n\nReturns:\n    The newly queued run or the original run for an identical replay.\n\nRaises:\n    HTTPException: If the idempotency key belongs to another request.\n\nSide Effects:\n    Atomically persists the queued run, region reservation, idempotency\n    record, and outbox intent for independent delivery to the cloud queue.",
         "operationId": "create_simulation_run_api_v1_simulation_runs_post",
         "parameters": [
           {
@@ -6023,7 +6023,7 @@
     },
     "/api/v1/simulation-runs/{run_id}/events": {
       "get": {
-        "description": "Stream replayable progress until one simulation run becomes terminal.\n\nArgs:\n    run_id: Stable public execution identifier selected by the browser.\n    context: Prevalidated lifecycle record, progress store, and optional\n        browser reconnection cursor.\n\nReturns:\n    Async iterator containing a current snapshot or replayed events\n    followed by live progress. FastAPI wraps it in the declared native SSE\n    response, and the iterator exits after a terminal event.\n\nRaises:\n    HTTPException: If the run does not exist or the supplied cursor is\n        malformed.\n\nSide Effects:\n    Reads durable run/progress state, performs bounded blocking Redis reads,\n    and holds one HTTP connection until terminal state or disconnection.",
+        "description": "Stream replayable progress until one simulation run becomes terminal.\n\nArgs:\n    run_id: Stable public execution identifier selected by the browser.\n    context: Prevalidated lifecycle record, progress store, and optional\n        browser reconnection cursor.\n\nReturns:\n    Async iterator containing a current snapshot or replayed events\n    followed by live progress. FastAPI wraps it in the declared native SSE\n    response, and the iterator exits after a terminal event.\n\nRaises:\n    HTTPException: If the run does not exist or the supplied cursor is\n        malformed.\n\nSide Effects:\n    Reads durable run/progress state, performs bounded cloud journal polling,\n    and holds one HTTP connection until terminal state or disconnection.",
         "operationId": "stream_simulation_run_events_api_v1_simulation_runs__run_id__events_get",
         "parameters": [
           {
@@ -6189,7 +6189,7 @@
     }
   },
   "x-engine-contract": {
-    "revision": "c4f3df8456f88f3ac22c25343a6ecb259eb3d284",
-    "schema_sha256": "33bb905eaaf0c7f776b2dc853bdbcf2437428db572c13f24236673ff12ef5299"
+    "revision": "e2496a5be6e2001772886881d700a3eb7fcc65c3",
+    "schema_sha256": "7675dc074f39e8a1ce371152ab2f842b7d9ab7e3dc35d8d01aece130fc9c7d9f"
   }
 }
