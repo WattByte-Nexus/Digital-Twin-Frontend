@@ -1,4 +1,4 @@
-import { MapboxOverlay } from "@deck.gl/mapbox";
+import { MapLibreOverlay } from "@deck.gl/maplibre";
 import { memo, useEffect, useMemo, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -82,7 +82,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
   const deckLayers = composedSurface.layers;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const deckOverlayRef = useRef<MapboxOverlay | null>(null);
+  const deckOverlayRef = useRef<MapLibreOverlay | null>(null);
   const deckLayersRef = useRef(deckLayers);
   const referenceOverlayVisibilityRef = useRef(referenceOverlayVisibility);
   const satelliteVisibleRef = useRef(satelliteVisible);
@@ -164,7 +164,7 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
     map.once("idle", applyInitialView);
 
     const handleLoad = () => {
-      const deckOverlay = new MapboxOverlay({
+      const deckOverlay = new MapLibreOverlay({
         // Terrain and every 3D capability must share the same depth buffer.
         interleaved: true,
         layers: deckLayersRef.current,
@@ -189,10 +189,11 @@ export const SatelliteTerrainMap = memo(function SatelliteTerrainMap({
         elevationEnabledRef.current
       );
     };
-    // Analytical layers only require the style graph. Waiting for MapLibre's
-    // full load event also waits on remote raster tiles, so a basemap outage
-    // would otherwise prevent power lines and point clouds from mounting.
-    map.once("style.load", handleLoad);
+    // The inline style graph already exists after MapLibre construction.
+    // Mount now: its style.load event may already have fired, and analytical
+    // layers must not wait for remote basemap tiles. The adapter handles later
+    // style changes and inserts its shared depth-tested layer groups itself.
+    handleLoad();
 
     resizeObserver = new ResizeObserver(() => {
       if (resizeTimer !== null) clearTimeout(resizeTimer);

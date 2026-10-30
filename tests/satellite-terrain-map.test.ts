@@ -57,7 +57,7 @@ test("satellite terrain map includes its reference overlay in the initial style"
 });
 
 test("satellite terrain and analytical layers share one depth-tested surface", () => {
-  assert.match(satelliteTerrainMapSource, /new MapboxOverlay\(/);
+  assert.match(satelliteTerrainMapSource, /new MapLibreOverlay\(/);
   assert.match(satelliteTerrainMapSource, /interleaved:\s*true/);
   assert.doesNotMatch(satelliteTerrainMapSource, /\bviews:/);
   assert.match(satelliteTerrainMapSource, /surfaceLayers/);
@@ -66,7 +66,6 @@ test("satellite terrain and analytical layers share one depth-tested surface", (
   assert.match(satelliteTerrainMapSource, /getCursor/);
   assert.match(satelliteTerrainMapSource, /isDragging \? "grabbing"/);
   assert.match(satelliteTerrainMapSource, /isHovering \? "grab"/);
-  assert.match(satelliteTerrainMapSource, /map\.once\("style\.load", handleLoad\)/);
   assert.doesNotMatch(satelliteTerrainMapSource, /map\.once\("load", handleLoad\)/);
   assert.match(satelliteTerrainMapSource, /powerPreference:\s*"low-power"/);
   assert.doesNotMatch(

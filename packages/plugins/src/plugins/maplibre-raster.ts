@@ -94,7 +94,7 @@ type OverlayLike = {
 type MapControlHost = {
   addControl: (control: unknown) => void;
 };
-type MapboxOverlayConstructor = new (props: Record<string, unknown>) => OverlayLike;
+type MapLibreOverlayConstructor = new (props: Record<string, unknown>) => OverlayLike;
 type RasterLayerManagerInternals = {
   /** The currently selected raster id (read to restore it after inspect). */
   selectedId?: string | null;
@@ -124,7 +124,7 @@ type GeoTiffWithOverviews = TiledRasterSource & {
 };
 
 let rasterControlClassPromise: Promise<RasterControlConstructor> | null = null;
-let mapboxOverlayClassPromise: Promise<MapboxOverlayConstructor> | null = null;
+let maplibreOverlayClassPromise: Promise<MapLibreOverlayConstructor> | null = null;
 let rasterControl: RasterControl | null = null;
 let rasterControlMounted = false;
 let restorePanelExpandTimeout: number | null = null;
@@ -485,11 +485,11 @@ function getRasterControlClass(): Promise<RasterControlConstructor> {
   return rasterControlClassPromise;
 }
 
-function getMapboxOverlayClass(): Promise<MapboxOverlayConstructor> {
-  mapboxOverlayClassPromise ??= import("@deck.gl/mapbox").then(
-    (module) => module.MapboxOverlay as unknown as MapboxOverlayConstructor,
+function getMapLibreOverlayClass(): Promise<MapLibreOverlayConstructor> {
+  maplibreOverlayClassPromise ??= import("@deck.gl/maplibre").then(
+    (module) => module.MapLibreOverlay as unknown as MapLibreOverlayConstructor,
   );
-  return mapboxOverlayClassPromise;
+  return maplibreOverlayClassPromise;
 }
 
 function createRasterControl(RasterControlClass: RasterControlConstructor): RasterControl {
@@ -619,9 +619,9 @@ async function patchTauriRasterOverlayFactory(control: RasterControl): Promise<v
   if (!deps) return;
 
   if (deps.createOverlay && !deps.geolibreTransparentOverlayPatched) {
-    const MapboxOverlayClass = await getMapboxOverlayClass();
+    const MapLibreOverlayClass = await getMapLibreOverlayClass();
     deps.createOverlay = (map, options) => {
-      const overlay = new MapboxOverlayClass({
+      const overlay = new MapLibreOverlayClass({
         deviceProps: {
           createCanvasContext: { alphaMode: "premultiplied" },
           webgl: {
@@ -650,10 +650,9 @@ async function patchTauriRasterOverlayFactory(control: RasterControl): Promise<v
 }
 
 /**
- * On web the raster control renders interleaved, so its deck.gl overlay reuses
- * deck.gl's single per-map Deck (`map.__deck`) -- and each interleaved overlay's
- * setProps overwrites that Deck's whole layer list with only its own layers, so
- * a raster and a Google/deckgl-viz overlay silently erase each other
+ * The native MapLibre adapter permits one interleaved overlay per map.
+ * Route the web raster control's layers through the existing GIS overlay so
+ * raster, Google tiles, and deckgl-viz layers retain one ordered layer list
  * (opengeos/GeoLibre#1149). This routes the control's interleaved layers through
  * the single shared deck overlay (./shared-deck-overlay.ts) instead: createOverlay
  * returns a lightweight proxy whose only job is to forward the control's setProps

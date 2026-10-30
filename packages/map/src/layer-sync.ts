@@ -68,7 +68,7 @@ import {
 /**
  * Notified of the computed `beforeId` for a deck.gl-backed external custom layer
  * (a `maplibre-gl-raster` COG) whenever layers are synced. Such a layer is not a
- * real MapLibre style layer — `@deck.gl/mapbox` groups it by a `beforeId` prop —
+ * real MapLibre style layer — `@deck.gl/maplibre` groups it by a `beforeId` prop —
  * so `moveLayer` cannot reorder it; the host registers a handler that pushes the
  * `beforeId` into the owning control instead. See issue #393 follow-up.
  */
@@ -431,7 +431,7 @@ function syncExternalNativeLayer(
     }
     syncVectorControlPointSymbology(map, layer, beforeId);
     // A deck.gl raster has no real MapLibre style layer to move (it renders in a
-    // `deck-layer-group-*` keyed by its beforeId prop), so forward the computed
+    // a layer group keyed by its beforeId prop), so forward the computed
     // beforeId to the control that owns it.
     if (layer.metadata.externalDeckLayer === true) {
       externalDeckLayerOrderHandler?.(layer.id, beforeId);

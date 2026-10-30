@@ -1,6 +1,6 @@
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
-import type { MapboxOverlay } from "@deck.gl/mapbox";
+import type { MapLibreOverlay } from "@deck.gl/maplibre";
 import { RasterLayer, type RasterLayerProps } from "@developmentseed/deck.gl-raster";
 import { fromArrayBuffer } from "geotiff";
 import type * as maplibregl from "maplibre-gl";
@@ -666,7 +666,7 @@ let lidarControl: LidarControl | null = null;
 let lidarLayerAdapter: LidarLayerAdapter | null = null;
 let splattingControl: GaussianSplatControl | null = null;
 let splattingLayerAdapter: GaussianSplatLayerAdapter | null = null;
-let geoTiffRasterOverlay: MapboxOverlay | null = null;
+let geoTiffRasterOverlay: MapLibreOverlay | null = null;
 let flatGeobufControlMounted = false;
 let cogRasterControlMounted = false;
 let geoTiffRasterOverlayMounted = false;
@@ -999,7 +999,7 @@ interface MutableStacSearchControl {
   _addCogLayer?: (url: string, item: StacSearchItem, assetKey: string) => Promise<void>;
   _cogLayers?: Map<string, StacSearchRenderableLayer>;
   _convertS3ToHttps?: (url: string) => string;
-  _deckOverlay?: MapboxOverlay | null;
+  _deckOverlay?: MapLibreOverlay | null;
   _ensureOverlay?: () => Promise<void>;
   _emit?: (type: string, detail?: Record<string, unknown>) => void;
   _layerCounter?: number;
@@ -4083,9 +4083,9 @@ async function addGeoTiffRasterLayer(
   return id;
 }
 
-async function ensureGeoTiffRasterOverlay(app: GeoLibreAppAPI): Promise<MapboxOverlay | null> {
-  const { MapboxOverlay: MapboxOverlayClass } = await import("@deck.gl/mapbox");
-  geoTiffRasterOverlay ??= new MapboxOverlayClass({
+async function ensureGeoTiffRasterOverlay(app: GeoLibreAppAPI): Promise<MapLibreOverlay | null> {
+  const { MapLibreOverlay: MapLibreOverlayClass } = await import("@deck.gl/maplibre");
+  geoTiffRasterOverlay ??= new MapLibreOverlayClass({
     interleaved: false,
     layers: [],
   });

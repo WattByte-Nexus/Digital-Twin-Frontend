@@ -869,14 +869,14 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
           import("@deck.gl/aggregation-layers"),
           import("@deck.gl/geo-layers"),
           import("@deck.gl/mesh-layers"),
-          import("@deck.gl/mapbox"),
-        ]).then(([core, layers, aggregationLayers, geoLayers, meshLayers, mapbox]) => ({
+          import("@deck.gl/maplibre"),
+        ]).then(([core, layers, aggregationLayers, geoLayers, meshLayers, maplibre]) => ({
           core,
           layers,
           aggregationLayers,
           geoLayers,
           meshLayers,
-          mapbox,
+          maplibre,
         })));
     })(),
     // Hand external plugins GeoLibre's own maplibre-gl-raster module so they

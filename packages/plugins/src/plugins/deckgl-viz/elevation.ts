@@ -154,7 +154,7 @@ function splitPointFeatures(data: FeatureCollection): {
  * lines/points are billboarded so they stay readable from tilted 3D views.
  * Points use an IconLayer dot instead of GeoJsonLayer's ScatterplotLayer
  * sublayer because ScatterplotLayer can lose its fill at real GPS altitudes in
- * an interleaved MapboxOverlay, leaving only hollow rings.
+ * an interleaved MapLibreOverlay, leaving only hollow rings.
  *
  * @param deckGL - The host's deck.gl module bundle.
  * @param layer - The store layer to render (must satisfy

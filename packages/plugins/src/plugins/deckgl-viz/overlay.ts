@@ -15,7 +15,7 @@ import { deckVizRows, isDeckVizLayer, readDeckVizConfig } from "./store-layer";
  * source. The store is the source of truth: this module rebuilds its layer list
  * whenever the layer set, visibility, or opacity changes, and drives an
  * animation clock for animated layer types (Trips). The shared overlay owns the
- * single MapboxOverlay so these layers coexist with Google 3D Tiles and the COG
+ * single MapLibreOverlay so these layers coexist with Google 3D Tiles and the COG
  * raster overlay instead of clobbering deck.gl's per-map Deck (see #1149).
  */
 
@@ -81,7 +81,7 @@ async function runEnsureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
   if (!app.getDeckGL) return;
   deckGL ??= await app.getDeckGL();
 
-  // The shared overlay owns the single interleaved MapboxOverlay and its map
+  // The shared overlay owns the single interleaved MapLibreOverlay and its map
   // binding (including rebind on a globe/projection toggle); this module only
   // supplies the "deckviz" layer list.
   await ensureSharedDeckOverlay(app);
@@ -97,7 +97,7 @@ async function runEnsureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
  * project still holding them) re-renders.
  *
  * @param _app - The host application API (unused; the shared overlay owns the
- *   MapboxOverlay lifecycle).
+ *   MapLibreOverlay lifecycle).
  */
 export function deactivateDeckViz(_app: GeoLibreAppAPI): void {
   storeUnsubscribe?.();

@@ -199,7 +199,7 @@ describe("Digital Twin frontend composition", () => {
     assert.doesNotMatch(workspaceSource, /createDigitalTwinPowerLineLayers/);
     assert.doesNotMatch(workspaceSource, /createDigitalTwinPointCloudLayer/);
     assert.doesNotMatch(workspaceSource, /fetchDigitalTwinPowerLines/);
-    assert.doesNotMatch(workspaceSource, /new MapboxOverlay/);
+    assert.doesNotMatch(workspaceSource, /new MapLibreOverlay/);
   });
 
   it("opens an API-backed asset catalog from its own workspace destination", () => {

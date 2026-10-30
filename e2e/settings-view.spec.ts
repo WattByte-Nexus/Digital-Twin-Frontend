@@ -166,12 +166,32 @@ test.describe("Digital Twin settings", () => {
       localStorage.setItem(key, JSON.stringify(settings));
       Object.assign(window, { __GEOLIBRE_RUNTIME_ENV__: settings.aiProviderEnv });
     });
-    await page.route("https://api.mapbox.com/**", route => route.fulfill({ json: {
-      tilejson: "3.0.0", tiles: [], vector_layers: [],
-    } }));
-    await page.route("https://tiles.mapterhorn.com/**", route => route.fulfill({ json: {
-      tilejson: "3.0.0", tiles: [],
-    } }));
+    // Serve actual raster/DEM pixels and a valid empty vector tile. Empty
+    // TileJSON URLs or JSON image responses prevent MapLibre from settling.
+    const flatTile = Buffer.from(await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 512;
+      const context = canvas.getContext("2d")!;
+      // Terrarium encodes zero metres as RGB(128, 0, 0).
+      context.fillStyle = "rgb(128, 0, 0)";
+      context.fillRect(0, 0, 512, 512);
+      return canvas.toDataURL("image/png").split(",")[1];
+    }), "base64");
+    await page.route("https://api.mapbox.com/**", route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith(".json")) return route.fulfill({ json: {
+        tilejson: "3.0.0", minzoom: 0, maxzoom: 0,
+        tiles: ["https://api.mapbox.com/e2e/{z}/{x}/{y}.pbf"],
+        vector_layers: ["water", "waterway", "landuse", "admin", "building", "road", "place_label", "poi_label", "natural_label"].map(id => ({ id, fields: {} })),
+      } });
+      if (path.endsWith(".pbf")) return route.fulfill({ contentType: "application/x-protobuf", body: Buffer.alloc(0) });
+      return route.fulfill({ contentType: "image/png", body: flatTile });
+    });
+    await page.route("https://tiles.mapterhorn.com/**", route =>
+      new URL(route.request().url()).pathname.endsWith(".json")
+        ? route.fulfill({ json: { tilejson: "3.0.0", minzoom: 0, maxzoom: 0, tiles: ["https://tiles.mapterhorn.com/e2e/{z}/{x}/{y}.png"] } })
+        : route.fulfill({ contentType: "image/png", body: flatTile }),
+    );
     const dataset = { ...fixtures.point_cloud_ready, region_id: fixtures.region.region_id, point_count: 0 };
     await page.route("**/point-cloud-datasets", route => route.fulfill({ json: {
       active_dataset_id: dataset.dataset_id, items: [dataset],

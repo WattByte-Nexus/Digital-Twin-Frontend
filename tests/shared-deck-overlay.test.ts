@@ -12,15 +12,15 @@ type FakeLayer = { id: string };
 const layer = (id: string): FakeLayer => ({ id });
 const ids = (layers: unknown): string[] => (layers as FakeLayer[]).map((l) => l.id);
 
-// Captures the props handed to the single shared MapboxOverlay so a test can
+// Captures the props handed to the single shared MapLibreOverlay so a test can
 // read back the aggregated layer list and drive the device callback.
-class FakeMapboxOverlay {
-  static instances: FakeMapboxOverlay[] = [];
+class FakeMapLibreOverlay {
+  static instances: FakeMapLibreOverlay[] = [];
   props: { layers?: FakeLayer[] } = {};
   onDeviceInitialized?: (device: unknown) => void;
   constructor(props: { layers?: FakeLayer[]; onDeviceInitialized?: (device: unknown) => void }) {
     this.onDeviceInitialized = props.onDeviceInitialized;
-    FakeMapboxOverlay.instances.push(this);
+    FakeMapLibreOverlay.instances.push(this);
   }
   setProps(props: { layers?: FakeLayer[] }): void {
     this.props = { ...this.props, ...props };
@@ -32,7 +32,7 @@ class FakeMapboxOverlay {
 }
 
 const fakeDeckGL = {
-  mapbox: { MapboxOverlay: FakeMapboxOverlay },
+  maplibre: { MapLibreOverlay: FakeMapLibreOverlay },
 } as unknown as GeoLibreDeckGL;
 
 // A minimal host: records addMapControl/removeMapControl and hands back a stable
@@ -66,10 +66,10 @@ const { app } = makeApp(map1);
 
 describe("shared-deck-overlay", () => {
   it("mounts lazily and aggregates sources bottom-to-top", async () => {
-    FakeMapboxOverlay.instances.length = 0;
+    FakeMapLibreOverlay.instances.length = 0;
     await ensureSharedDeckOverlay(app);
     // No layers yet: the overlay exists but is not mounted (nothing to draw).
-    const overlay = FakeMapboxOverlay.instances.at(-1);
+    const overlay = FakeMapLibreOverlay.instances.at(-1);
     assert.ok(overlay, "overlay is created on ensure");
     assert.deepEqual(overlay?.layerIds(), []);
 
@@ -94,7 +94,7 @@ describe("shared-deck-overlay", () => {
   });
 
   it("keeps each source's own order and drops a source when set empty", () => {
-    const overlay = FakeMapboxOverlay.instances.at(-1);
+    const overlay = FakeMapLibreOverlay.instances.at(-1);
     setSharedDeckLayers("raster", [layer("r1"), layer("r2")] as never);
     assert.deepEqual(overlay?.layerIds(), ["r1", "r2"]);
 
@@ -108,7 +108,7 @@ describe("shared-deck-overlay", () => {
   });
 
   it("forwards the shared Deck device to registered listeners", () => {
-    const overlay = FakeMapboxOverlay.instances.at(-1);
+    const overlay = FakeMapLibreOverlay.instances.at(-1);
     const seen: unknown[] = [];
     const unsubscribe = onSharedDeckDevice((device) => seen.push(device));
     // Device is not ready yet, so nothing fires until the Deck initializes.
@@ -129,7 +129,7 @@ describe("shared-deck-overlay", () => {
 
   it("rebinds to a fresh overlay on a new map and re-applies live layers", async () => {
     setSharedDeckLayers("google-3d-tiles", [layer("g1")] as never);
-    const before = FakeMapboxOverlay.instances.length;
+    const before = FakeMapLibreOverlay.instances.length;
 
     // A projection/globe toggle swaps the map: ensure() must build a new overlay
     // and replay the still-registered sources into it.
@@ -138,11 +138,11 @@ describe("shared-deck-overlay", () => {
     await ensureSharedDeckOverlay(app2);
 
     assert.equal(
-      FakeMapboxOverlay.instances.length,
+      FakeMapLibreOverlay.instances.length,
       before + 1,
       "a fresh overlay is created for the new map",
     );
-    const fresh = FakeMapboxOverlay.instances.at(-1);
+    const fresh = FakeMapLibreOverlay.instances.at(-1);
     assert.deepEqual(
       fresh?.layerIds(),
       ["g1"],
