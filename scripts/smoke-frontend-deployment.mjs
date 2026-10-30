@@ -7,9 +7,17 @@ const get = (path, init = {}) => fetch(new URL(path, origin), { redirect: 'manua
 const release = await get(`/deployment.json?run=${process.env.GITHUB_RUN_ID ?? Date.now()}`);
 assert.equal(release.status, 200);
 assert.equal((await release.json()).commit, process.env.GITHUB_SHA);
-const deepLink = await get('/regions/golden-co/live');
-assert.equal(deepLink.status, 200);
-assert.match(deepLink.headers.get('content-type') ?? '', /text\/html/);
+for (const path of ['/regions/golden-co/live', '/regions/route.with.period/live', '/workspace', '/admin', '/diagnostics']) {
+  const deepLink = await get(path);
+  assert.equal(deepLink.status, 200, `${path} must load the application shell`);
+  assert.match(deepLink.headers.get('content-type') ?? '', /text\/html/);
+}
+const manifest = await get('/manifest.webmanifest');
+assert.equal(manifest.status, 200);
+assert.equal((await manifest.json()).name, 'WattByte Nexus');
+const notebook = await get('/jupyterlite/lab/index.html');
+assert.equal(notebook.status, 200);
+assert.match(await notebook.text(), /<title>JupyterLite<\/title>/);
 const poleModel = await get('/assets/digital-twin/13.8kv_power_pole.glb');
 assert.equal(poleModel.status, 200);
 const modelBytes = new Uint8Array(await poleModel.arrayBuffer());

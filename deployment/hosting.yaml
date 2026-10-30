@@ -28,7 +28,12 @@ Resources:
             Target: !Sub ${ApiOrigin}/api/<*>
             Status: '200'
           - !Ref AWS::NoValue
-        - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|jpeg|js|json|png|svg|txt|webp|woff|woff2|wasm|tif|pnts|bin|glb|gltf|map)$)([^.]+$)/>'
+        # Region identifiers can contain periods; static files live outside this route.
+        - Source: /regions/<*>
+          Target: /index.html
+          Status: '200'
+        # Other SPA routes are extensionless. Serve files of every type directly.
+        - Source: '</^[^.]+$/>'
           Target: /index.html
           Status: '200'
       CustomHeaders: |
