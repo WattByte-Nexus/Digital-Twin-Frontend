@@ -3,27 +3,13 @@ import type * as maplibregl from "maplibre-gl";
 /** JS-observable marker for occluded popups; visual hiding is applied inline. */
 export const GLOBE_POPUP_OCCLUDED_CLASS = "geolibre-globe-popup-occluded";
 
-const PATCHED_POPUP_MARKER = "__geolibreGlobePopupOcclusionPatched";
 const DEFAULT_OCCLUDED_OPACITY = 0;
 const ZERO_OPACITY_STRING = /^[+-]?(?:0+(?:\.0*)?|\.(?:0+))$/;
-
-type PopupConstructor = new (options?: maplibregl.PopupOptions) => maplibregl.Popup;
-
-type PatchablePopupConstructor = PopupConstructor & {
-  [PATCHED_POPUP_MARKER]?: true;
-};
-
-interface PatchableMapLibre {
-  Popup: PatchablePopupConstructor;
-}
+const patchedPopupPrototypes = new WeakSet<object>();
+const configuredPopups = new WeakSet<maplibregl.Popup>();
 
 interface PopupInternals {
   _container?: HTMLElement;
-  _map?: {
-    transform?: {
-      isLocationOccluded?: (lngLat: unknown) => boolean;
-    };
-  };
   _updateOpacity?: () => void;
   getLngLat: () => unknown;
   options?: {
@@ -77,43 +63,34 @@ function setPopupOccluded(container: HTMLElement, occluded: boolean): void {
 export function syncPopupGlobeOcclusion(popup: maplibregl.Popup): boolean {
   const popupInternals = popup as unknown as PopupInternals;
   const container = popupInternals._container;
-  const opacity = popupInternals.options?.locationOccludedOpacity;
-  const transform = popupInternals._map?.transform;
-  const isLocationOccluded = transform?.isLocationOccluded;
+  if (!container) return false;
 
-  if (!container || opacity === undefined || opacity === null) {
-    if (container) setPopupOccluded(container, false);
-    return false;
-  }
-
-  const lngLat = popupInternals.getLngLat();
-  const occluded = Boolean(lngLat) && Boolean(isLocationOccluded?.call(transform, lngLat));
-  container.style.opacity = occluded ? `${opacity}` : "";
+  // MapLibre's opacity update owns projection/occlusion detection. Use its
+  // result instead of reaching into MapLibre's private camera transform.
+  const occluded = Boolean(popupInternals.getLngLat()) && container.style.opacity !== "";
   setPopupOccluded(container, occluded && shouldSuppressInteraction(popupInternals));
   return occluded;
 }
 
 export function installGlobePopupOcclusion(maplibre: typeof maplibregl): void {
-  const api = maplibre as unknown as PatchableMapLibre;
-  const OriginalPopup = api.Popup;
-  if (OriginalPopup[PATCHED_POPUP_MARKER]) return;
+  const prototype = maplibre.Popup.prototype;
+  if (patchedPopupPrototypes.has(prototype)) return;
+  const addTo = prototype.addTo;
 
-  class GeoLibrePopup extends OriginalPopup {
-    constructor(options: maplibregl.PopupOptions = {}) {
-      super({
-        ...options,
-        locationOccludedOpacity: options.locationOccludedOpacity ?? DEFAULT_OCCLUDED_OPACITY,
-      });
-
+  // ES module exports are read-only. Configure each popup at its public mount
+  // boundary, preserving the shared constructor used by third-party controls.
+  prototype.addTo = function (map: maplibregl.Map) {
+    if (!configuredPopups.has(this)) {
       const popup = this as unknown as PopupInternals;
+      if (popup.options) popup.options.locationOccludedOpacity ??= DEFAULT_OCCLUDED_OPACITY;
       const updateOpacity = popup._updateOpacity;
       popup._updateOpacity = () => {
         if (popup.getLngLat()) updateOpacity?.call(this);
         syncPopupGlobeOcclusion(this);
       };
+      configuredPopups.add(this);
     }
-  }
-
-  GeoLibrePopup[PATCHED_POPUP_MARKER] = true;
-  api.Popup = GeoLibrePopup;
+    return addTo.call(this, map);
+  };
+  patchedPopupPrototypes.add(prototype);
 }

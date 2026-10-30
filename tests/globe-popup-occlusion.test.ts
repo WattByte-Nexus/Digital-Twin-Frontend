@@ -71,14 +71,18 @@ function createMaplibreStub(): typeof maplibregl {
       };
     }
 
+    addTo() {
+      return this;
+    }
+
     getLngLat() {
       return { lng: 0, lat: 0 };
     }
   }
 
-  return {
+  return Object.freeze({
     Popup: FakePopup,
-  } as unknown as typeof maplibregl;
+  }) as unknown as typeof maplibregl;
 }
 
 describe("installGlobePopupOcclusion", () => {
@@ -86,7 +90,7 @@ describe("installGlobePopupOcclusion", () => {
     const maplibre = createMaplibreStub();
     installGlobePopupOcclusion(maplibre);
 
-    const popup = new maplibre.Popup() as maplibregl.Popup & {
+    const popup = new maplibre.Popup().addTo({} as maplibregl.Map) as maplibregl.Popup & {
       _container: HTMLElement;
       _map: { transform: { isLocationOccluded: () => boolean } };
       _updateOpacity: () => void;
@@ -117,7 +121,7 @@ describe("installGlobePopupOcclusion", () => {
 
     const popup = new maplibre.Popup({
       locationOccludedOpacity: 0.35,
-    }) as maplibregl.Popup & {
+    }).addTo({} as maplibregl.Map) as & {
       _container: HTMLElement;
       _map: { transform: { isLocationOccluded: () => boolean } };
       _updateOpacity: () => void;
@@ -142,7 +146,7 @@ describe("installGlobePopupOcclusion", () => {
 
       const popup = new maplibre.Popup({
         locationOccludedOpacity: opacity,
-      }) as maplibregl.Popup & {
+      }).addTo({} as maplibregl.Map) as & {
         _container: HTMLElement;
         _map: { transform: { isLocationOccluded: () => boolean } };
         _updateOpacity: () => void;
@@ -166,7 +170,7 @@ describe("installGlobePopupOcclusion", () => {
 
       const popup = new maplibre.Popup({
         locationOccludedOpacity: opacity,
-      }) as maplibregl.Popup & {
+      }).addTo({} as maplibregl.Map) as & {
         _container: HTMLElement;
         _map: { transform: { isLocationOccluded: () => boolean } };
         _updateOpacity: () => void;
@@ -188,7 +192,7 @@ describe("installGlobePopupOcclusion", () => {
 
     const popup = new maplibre.Popup({
       locationOccludedOpacity: "0e0",
-    }) as maplibregl.Popup & {
+    }).addTo({} as maplibregl.Map) as & {
       _container: HTMLElement;
       _map: { transform: { isLocationOccluded: () => boolean } };
       _updateOpacity: () => void;
@@ -207,7 +211,7 @@ describe("installGlobePopupOcclusion", () => {
     const maplibre = createMaplibreStub();
     installGlobePopupOcclusion(maplibre);
 
-    const popup = new maplibre.Popup() as maplibregl.Popup & {
+    const popup = new maplibre.Popup().addTo({} as maplibregl.Map) as maplibregl.Popup & {
       _container: HTMLElement;
       _map: {
         transform: {
@@ -234,7 +238,7 @@ describe("installGlobePopupOcclusion", () => {
     const maplibre = createMaplibreStub();
     installGlobePopupOcclusion(maplibre);
 
-    const popup = new maplibre.Popup() as maplibregl.Popup & {
+    const popup = new maplibre.Popup().addTo({} as maplibregl.Map) as maplibregl.Popup & {
       _container: HTMLElement;
       _map: { transform: { isLocationOccluded: () => boolean } };
       _updateOpacity: () => void;

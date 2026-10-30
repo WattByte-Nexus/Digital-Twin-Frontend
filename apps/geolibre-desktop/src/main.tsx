@@ -1,4 +1,5 @@
 import "./lib/symbol-dispose-polyfill";
+import "./lib/maplibre-worker";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "@fontsource-variable/inter";
