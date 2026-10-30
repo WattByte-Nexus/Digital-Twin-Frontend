@@ -143,3 +143,25 @@ The API's runtime authentication configuration is installed in
 `/opt/digital-twin/app.before-hosting-20261009.yaml`. Infrastructure's ignored
 `engine/frontend.auto.tfvars.json` preserves the enabled load-balancer ingress
 on future Terraform plans. Never commit initial user passwords or session keys.
+
+## Independent Fargate API preparation
+
+Infrastructure's Engine stack owns the independent ECS service, private task
+network, task security group and IP target group. This frontend stack continues
+to own the existing ALB/listener/DNS/certificate and every ALB egress rule.
+
+First provision the target group and API security group in Infrastructure. Set
+`FargateTargetGroupArn` and `FargateSecurityGroupId` to its `independent_api`
+output while retaining `UseFargateApi=false` and `EnableApi=true`. Both inputs
+must be supplied together. This adds ALB egress and a temporary verification
+rule matching `X-Digital-Twin-Api-Target: fargate`; API authentication is still
+required. The target association permits ECS startup before the normal traffic
+switch. Requests without that header continue using the active instance target.
+
+Start and validate the API tasks, including the actual Amplify streaming and
+cross-replica session paths, before setting `UseFargateApi=true`. The verification
+rule is removed automatically on switch. Keep `api.nexus.ipss.ai` and Amplify's
+`/api/*` forwarding unchanged. Remove the EC2 target only after acceptance;
+never create a Terraform listener or Terraform ALB egress for this migration.
+The Infrastructure `engine/independent-api.md` documents the staged procedure,
+quota/cost estimates and release ownership.

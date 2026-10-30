@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: HTTPS load balancer connecting Amplify to the existing Digital Twin Engine.
+Description: HTTPS API edge owned by the frontend; supports independently verified Fargate targets.
 Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -20,7 +20,44 @@ Parameters:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'false'
+  FargateTargetGroupArn:
+    Type: String
+    Default: ''
+    Description: Terraform-owned IP target group; set during preparation without switching ordinary traffic.
+    AllowedPattern: '^$|^arn:aws:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:targetgroup/.+$'
+  FargateSecurityGroupId:
+    Type: String
+    Default: ''
+    Description: Terraform-owned API task security group; CloudFormation owns ALB egress to it.
+    AllowedPattern: '^$|^sg-([0-9a-f]{8}|[0-9a-f]{17})$'
+  UseFargateApi:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+    Description: Switch ordinary authenticated API requests only after independent acceptance checks pass.
+Rules:
+  FargateInputsTogether:
+    Assertions:
+      - Assert: !Or
+          - !And
+            - !Equals [!Ref FargateTargetGroupArn, '']
+            - !Equals [!Ref FargateSecurityGroupId, '']
+          - !And
+            - !Not [!Equals [!Ref FargateTargetGroupArn, '']]
+            - !Not [!Equals [!Ref FargateSecurityGroupId, '']]
+        AssertDescription: Supply both Fargate target group and task security group together.
+  FargateSwitchRequiresTarget:
+    RuleCondition: !Equals [!Ref UseFargateApi, 'true']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref FargateTargetGroupArn, '']]
+        AssertDescription: Prepare Fargate before switching ordinary traffic.
 Conditions:
+  FargatePrepared: !Not [!Equals [!Ref FargateTargetGroupArn, '']]
+  FargateActive: !Equals [!Ref UseFargateApi, 'true']
+  FargateVerification: !And
+    - !Not [!Equals [!Ref FargateTargetGroupArn, '']]
+    - !Equals [!Ref UseFargateApi, 'false']
+    - !Equals [!Ref EnableApi, 'true']
   ApiEnabled: !Equals [!Ref EnableApi, 'true']
 Resources:
   SecondSubnet:
@@ -53,6 +90,21 @@ Resources:
           FromPort: 8000
           ToPort: 8000
           DestinationSecurityGroupId: !Ref EngineSecurityGroupId
+  # This stack remains the sole owner of every ALB security-group egress rule.
+  FargateEgress:
+    # W1030 cannot infer nonempty paired parameters from the CloudFormation Rules.
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks: [W1030]
+    Type: AWS::EC2::SecurityGroupEgress
+    Condition: FargatePrepared
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      DestinationSecurityGroupId: !Ref FargateSecurityGroupId
   Certificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
@@ -103,12 +155,28 @@ Resources:
         - !If
           - ApiEnabled
           - Type: forward
-            TargetGroupArn: !Ref TargetGroup
+            TargetGroupArn: !If [FargateActive, !Ref FargateTargetGroupArn, !Ref TargetGroup]
           - Type: fixed-response
             FixedResponseConfig:
               StatusCode: '503'
               ContentType: text/plain
               MessageBody: Authenticated API deployment is being configured.
+  # Association permits ECS startup before cutover. This opt-in diagnostic route
+  # uses the same API authentication and disappears when normal traffic switches.
+  FargateVerificationRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: FargateVerification
+    Properties:
+      ListenerArn: !Ref Listener
+      Priority: 49000
+      Conditions:
+        - Field: http-header
+          HttpHeaderConfig:
+            HttpHeaderName: X-Digital-Twin-Api-Target
+            Values: [fargate]
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref FargateTargetGroupArn
   Dns:
     Type: AWS::Route53::RecordSet
     Properties:
@@ -125,5 +193,8 @@ Outputs:
     Value: !Ref SecurityGroup
   TargetGroupArn:
     Value: !Ref TargetGroup
+  FargateTargetGroupArn:
+    Condition: FargatePrepared
+    Value: !Ref FargateTargetGroupArn
   LoadBalancerArn:
     Value: !Ref LoadBalancer
