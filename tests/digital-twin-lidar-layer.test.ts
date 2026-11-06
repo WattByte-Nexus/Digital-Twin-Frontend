@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { WebMercatorViewport } from "@deck.gl/core";
+import { LayerManager, WebMercatorViewport } from "@deck.gl/core";
 import { PointCloudLayer } from "@deck.gl/layers";
 import {
   createDigitalTwinPointCloudTraversalViewport,
@@ -52,7 +52,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
       onReady: () => {},
     });
 
-    assert.equal(layer.props.id, "digital-twin-point-cloud-golden-lidar-full");
+    assert.equal(layer.props.id, "digital-twin-point-cloud-golden-lidar-sha256-a1-full");
     assert.equal(layer.props.data, "https://cdn.example.com/golden/sha256-a1/full/tileset.json");
     assert.equal(layer.props.pointSize, 1);
     assert.equal(layer.props.opacity, 1);
@@ -145,7 +145,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
     assert.deepEqual(traversalViewport.position, [0, 0, 1_617.69]);
   });
 
-  it("reports ready only after selected points are visible", () => {
+  it("reports ready only after selected points are visible", (context) => {
     let readyCount = 0;
     const errors: Error[] = [];
     const layer = createDigitalTwinPointCloudLayer(DATASET, {
@@ -154,6 +154,11 @@ describe("Digital Twin LiDAR fusion layer", () => {
         readyCount += 1;
       },
     });
+
+    const manager = new LayerManager(null as never, {});
+    context.mock.method(layer, "_loadTileset" as never, () => {});
+    manager.setLayers([layer]);
+    context.after(() => manager.finalize());
 
     layer.props.onTileError({} as never, "request failed", "/points/r0.pnts");
     assert.equal(errors.length, 1);
@@ -182,7 +187,7 @@ describe("Digital Twin LiDAR fusion layer", () => {
     assert.equal(readyCount, 1);
   });
 
-  it("exposes loaders.gl scene diagnostics at tile lifecycle boundaries", () => {
+  it("exposes loaders.gl scene diagnostics at tile lifecycle boundaries", (context) => {
     const diagnostics: unknown[] = [];
     const counters = new Map([
       ["Tiles In Memory", 12],
@@ -203,13 +208,22 @@ describe("Digital Twin LiDAR fusion layer", () => {
       onDiagnostics: (snapshot) => diagnostics.push(snapshot),
     });
 
+    const manager = new LayerManager(null as never, {});
+    context.mock.method(layer, "_loadTileset" as never, () => {});
+    manager.setLayers([layer]);
+    layer.state.tileset3d = tileset as never;
+    // Tile3DLayer installs the tileset in state before invoking this callback.
     layer.props.onTilesetLoad(tileset as never);
     layer.props.onTileLoad({} as never);
     layer.props.onTileUnload({} as never);
 
     assert.equal(diagnostics.length, 3);
     assert.ok(layer instanceof DigitalTwinPointCloudTileLayer);
-    assert.equal(layer.props.getTraversalElevationMeters?.(), 1_617.69);
+    const viewport = new WebMercatorViewport({ id: "test", width: 100, height: 100 });
+    layer.activateViewport(viewport);
+    assert.deepEqual((layer.state.activeViewports as Record<string, WebMercatorViewport>).test.position, [0, 0, 1_617.69]);
+    layer.state.tileset3d = null;
+    manager.finalize();
     assert.deepEqual(diagnostics.at(-1), {
       datasetId: "golden-lidar",
       residentTileCount: 12,
@@ -220,4 +234,187 @@ describe("Digital Twin LiDAR fusion layer", () => {
       settled: false,
     });
   });
+
+  it("reads installed state during the real initial tileset-load callback", { timeout: 3_000 }, async (context) => {
+    const tilesetJson = {
+      asset: { version: "1.0" },
+      geometricError: 0,
+      root: {
+        boundingVolume: { region: [-1.9, 0.6, -1.899999, 0.600001, 1_700, 1_700] },
+        geometricError: 0,
+        refine: "REPLACE",
+        children: [],
+      },
+    };
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    context.mock.method(globalThis, "fetch", async (input) => {
+      assert.equal(String(input), DATASET.tilesetUrl);
+      const response = new Response(JSON.stringify(tilesetJson), {
+        headers: { "Content-Type": "application/json" },
+      });
+      Object.defineProperty(response, "url", { value: String(input) });
+      return response;
+    });
+    const layer = createDigitalTwinPointCloudLayer(DATASET, {
+      view: "crowns",
+      onError: reject,
+      onDiagnostics: (snapshot) => {
+        try {
+          assert.ok(layer.state.tileset3d);
+          assert.equal(snapshot.datasetId, DATASET.datasetId);
+          assert.ok(Math.abs(layer.state.tileset3d.cartographicCenter![2] - 1_700) < 0.01);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      },
+    });
+    const manager = new LayerManager(null as never, {});
+    context.after(() => manager.finalize());
+    manager.setLayers([layer]);
+    await promise;
+  });
+
+  it("retains LOD state and dispatches captured callbacks to the current layer after catalog refreshes", async (context) => {
+    const oldEvents: string[] = [];
+    const currentEvents: string[] = [];
+    let loads = 0;
+    let destroyed = 0;
+    const tileset = {
+      cartographicCenter: [-105, 40, 1_700],
+      stats: { get: () => ({ count: 42 }) },
+      selectedTiles: [],
+      tiles: [],
+      gpuMemoryUsageInBytes: 1_024,
+      memoryAdjustedScreenSpaceError: 8,
+      isLoaded: () => false,
+      destroy: () => { destroyed += 1; },
+    };
+    const first = createDigitalTwinPointCloudLayer(DATASET, {
+      onError: () => oldEvents.push("error"),
+      onReady: () => oldEvents.push("ready"),
+      onDiagnostics: () => oldEvents.push("diagnostics"),
+    });
+    context.mock.method(first, "_loadTileset" as never, () => { loads += 1; });
+    const manager = new LayerManager(null as never, {});
+    context.after(() => manager.finalize());
+    manager.setLayers([first]);
+    first.state.tileset3d = tileset as never;
+    first.props.onTilesetLoad(tileset as never);
+    assert.deepEqual(oldEvents, ["diagnostics"]);
+
+    // These are the callbacks retained by the original Tileset3D instance.
+    const traversal = first.props.loadOptions!.tileset.onTraversalComplete;
+    const tileError = first.props.onTileError;
+    const tileLoaded = Reflect.get(first, "_onTileLoad").bind(first);
+    const tileUnloaded = Reflect.get(first, "_onTileUnload").bind(first);
+    const replacement = createDigitalTwinPointCloudLayer({ ...DATASET }, {
+      onError: () => currentEvents.push("error"),
+      onReady: () => currentEvents.push("ready"),
+      onDiagnostics: () => currentEvents.push("diagnostics"),
+    });
+    context.mock.method(replacement, "_loadTileset" as never, () => { loads += 1; });
+    manager.setLayers([replacement]);
+    assert.equal(replacement.state, first.state);
+    assert.equal(replacement.state.tileset3d, tileset);
+    assert.equal(first.getCurrentLayer(), replacement);
+    assert.equal(loads, 1, "unchanged immutable URL must not reload");
+
+    const viewport = new WebMercatorViewport({ id: "map", width: 800, height: 600, zoom: 14 });
+    const projection = [...viewport.viewProjectionMatrix];
+    replacement.activateViewport(viewport);
+    const traversalViewport = (replacement.state.activeViewports as Record<string, WebMercatorViewport>).map;
+    assert.deepEqual(traversalViewport.position, [0, 0, 1_700]);
+    assert.equal(replacement.internalState?.viewport, viewport);
+    assert.deepEqual(viewport.viewProjectionMatrix, projection);
+
+    tileError({} as never, "failed", "r0.pnts");
+    first.props.onError?.(new Error("initial load failed"), first);
+    const tile = { id: "r0", tileDrawn: true };
+    tileLoaded(tile);
+    tileUnloaded(tile);
+    assert.equal(tile.tileDrawn, false, "native tile-draw handshake remains intact");
+    assert.deepEqual(currentEvents, ["error", "error", "diagnostics", "diagnostics"]);
+    traversal([{ contentAvailable: false, content: { pointCount: 100 } }]);
+    assert.equal(currentEvents.includes("ready"), false);
+    traversal([{ contentAvailable: true, content: { pointCount: 100 } }]);
+    assert.equal(currentEvents.filter((event) => event === "ready").length, 1);
+
+    // A second refresh happens before queued traversal diagnostics run.
+    const refreshedEvents: string[] = [];
+    const refreshed = createDigitalTwinPointCloudLayer(DATASET, {
+      onError: () => refreshedEvents.push("error"),
+      onReady: () => refreshedEvents.push("ready"),
+      onDiagnostics: () => refreshedEvents.push("diagnostics"),
+    });
+    context.mock.method(refreshed, "_loadTileset" as never, () => { loads += 1; });
+    // The test has no live tileset selector; clear the activated viewport before
+    // allowing deck's next update to advance its real selection machinery.
+    replacement.state.activeViewports = {};
+    manager.setLayers([refreshed]);
+    traversal([{ contentAvailable: true, content: { pointCount: 100 } }]);
+    tileError({} as never, "late failure", "r1.pnts");
+    await Promise.resolve();
+    assert.deepEqual(refreshedEvents, ["diagnostics", "diagnostics", "diagnostics"]);
+    assert.deepEqual(oldEvents, ["diagnostics"]);
+    assert.equal(loads, 1);
+    assert.equal(destroyed, 0);
+  });
+
+  for (const change of ["version", "view"] as const) {
+    it(`disposes the old tileset and resets readiness when the ${change} changes`, async (context) => {
+      let oldReady = 0;
+      let newReady = 0;
+      let errors = 0;
+      let destroyed = 0;
+      let loads = 0;
+      const first = createDigitalTwinPointCloudLayer(DATASET, {
+        onError: () => {},
+        onReady: () => { oldReady += 1; },
+      });
+      context.mock.method(first, "_loadTileset" as never, () => { loads += 1; });
+      const manager = new LayerManager(null as never, {});
+      context.after(() => manager.finalize());
+      manager.setLayers([first]);
+      first.state.tileset3d = {
+        cartographicCenter: [-105, 40, 1_700],
+        selectedTiles: [],
+      tiles: [],
+        destroy: () => { destroyed += 1; },
+      } as never;
+      const selection = [{ contentAvailable: true, content: { pointCount: 100 } }];
+      const oldTraversal = first.props.loadOptions!.tileset.onTraversalComplete;
+      oldTraversal(selection);
+      assert.equal(oldReady, 1);
+      const next = createDigitalTwinPointCloudLayer(
+        change === "version"
+          ? { ...DATASET, version: "sha256-b2", tilesetUrl: DATASET.tilesetUrl.replace("sha256-a1", "sha256-b2") }
+          : DATASET,
+        {
+          view: change === "view" ? "crowns" : "full",
+          onError: () => { errors += 1; },
+          onReady: () => { newReady += 1; },
+        }
+      );
+      context.mock.method(next, "_loadTileset" as never, () => { loads += 1; });
+      manager.setLayers([next]);
+      assert.notEqual(first.id, next.id);
+      assert.notEqual(first.state, next.state);
+      assert.equal(next.state.tileset3d, null);
+      assert.equal(next.state.visiblePointsReported, false);
+      assert.equal(destroyed, 1);
+      assert.equal(loads, 2);
+      next.props.onTileError({} as never, "failed", "r0.pnts");
+      assert.equal(errors, 1);
+      const nextTraversal = next.props.loadOptions!.tileset.onTraversalComplete;
+      nextTraversal(selection);
+      nextTraversal(selection);
+      oldTraversal(selection);
+      await Promise.resolve();
+      assert.equal(newReady, 1);
+      assert.equal(oldReady, 1);
+      assert.equal(first.getCurrentLayer(), null);
+    });
+  }
+
 });

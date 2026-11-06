@@ -17,6 +17,7 @@ COPY packages/plugins/package.json packages/plugins/package.json
 COPY packages/processing/package.json packages/processing/package.json
 COPY packages/ui/package.json packages/ui/package.json
 COPY scripts/patch-maplibre-time-slider.mjs scripts/patch-maplibre-time-slider.mjs
+COPY scripts/patch-loaders-gl-traversal.mjs scripts/patch-loaders-gl-traversal.mjs
 
 RUN npm ci
 

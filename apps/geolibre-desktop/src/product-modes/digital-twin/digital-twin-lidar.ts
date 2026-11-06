@@ -10,7 +10,11 @@ export const MISSING_POINT_RGB_VERTEX_INJECTION = `
 `;
 
 interface DigitalTwinPointCloudTileLayerProps {
-  getTraversalElevationMeters?: () => number | undefined;
+  datasetId: string;
+  datasetName: string;
+  onCloudError: (error: Error) => void;
+  onReady?: () => void;
+  onDiagnostics?: (snapshot: DigitalTwinPointCloudDiagnostics) => void;
   beforeId?: string;
 }
 
@@ -55,11 +59,64 @@ export class DigitalTwinPointCloudTileLayer extends Tile3DLayer<
 > {
   static layerName = "DigitalTwinPointCloudTileLayer";
 
+  declare state: Tile3DLayer["state"] & { visiblePointsReported: boolean };
+
+  override initializeState(): void {
+    super.initializeState();
+    this.state.visiblePointsReported = false;
+  }
+
+  reportError(error: Error): void {
+    if (!this.state.visiblePointsReported) this.props.onCloudError(error);
+  }
+
+  reportDiagnostics(): void {
+    const tileset = this.state.tileset3d;
+    if (!tileset || !this.props.onDiagnostics) return;
+    this.props.onDiagnostics({
+      datasetId: this.props.datasetId,
+      residentTileCount: tileset.stats.get("Tiles In Memory").count,
+      selectedTileCount: tileset.selectedTiles.length,
+      visiblePointCount: tileset.stats.get("Points/Vertices").count,
+      gpuMemoryUsageBytes: tileset.gpuMemoryUsageInBytes,
+      screenSpaceError: tileset.memoryAdjustedScreenSpaceError,
+      settled: tileset.isLoaded(),
+    });
+  }
+
+  handleTraversalComplete<Tile extends SelectedPointCloudTile>(
+    selectedTiles: Tile[]
+  ): Tile[] {
+    if (!this.state.visiblePointsReported) {
+      const hasVisiblePoints = selectedTiles.some((tile) => {
+        const count = tile.content?.pointCount;
+        return tile.contentAvailable &&
+          typeof count === "number" &&
+          Number.isFinite(count) && count > 0;
+      });
+      if (hasVisiblePoints) {
+        this.state.visiblePointsReported = true;
+        this.props.onReady?.();
+      }
+    }
+    // loaders.gl updates selectedTiles and stats after its traversal callback.
+    // Resolve again in the microtask in case a UI refresh replaced this layer.
+    if (this.props.onDiagnostics) {
+      queueMicrotask(() => {
+        const current = this.getCurrentLayer();
+        if (current instanceof DigitalTwinPointCloudTileLayer) {
+          current.reportDiagnostics();
+        }
+      });
+    }
+    return selectedTiles;
+  }
+
   override activateViewport(renderViewport: Viewport): void {
     this.internalState!.viewport = renderViewport;
     const traversalViewport = createDigitalTwinPointCloudTraversalViewport(
       renderViewport,
-      this.props.getTraversalElevationMeters?.()
+      this.state.tileset3d?.cartographicCenter?.[2]
     );
     const activeViewports = this.state.activeViewports as Record<string, Viewport>;
     const lastUpdatedViewports = this.state.lastUpdatedViewports as Record<
@@ -131,17 +188,6 @@ export interface DigitalTwinPointCloudDiagnostics {
   settled: boolean;
 }
 
-interface PointCloudTilesetDiagnosticsSource {
-  cartographicCenter: ArrayLike<number> | null;
-  stats: {
-    get: (name: string) => { count: number };
-  };
-  gpuMemoryUsageInBytes: number;
-  memoryAdjustedScreenSpaceError: number;
-  selectedTiles: unknown[];
-  isLoaded: () => boolean;
-}
-
 interface SelectedPointCloudTile {
   contentAvailable: boolean;
   content?: { pointCount?: number };
@@ -172,55 +218,21 @@ export function createDigitalTwinPointCloudLayer(
     view = "full",
   }: DigitalTwinPointCloudLayerCallbacks
 ): DigitalTwinPointCloudTileLayer {
-  let visiblePointsReported = false;
-  let tileset: PointCloudTilesetDiagnosticsSource | null = null;
-  let traversalElevationMeters: number | undefined;
-
-  const reportError = (error: Error) => {
-    if (!visiblePointsReported) onError(error);
+  // Tileset callbacks live longer than a factory invocation. deck.gl transfers
+  // state by ID, so resolve their current owner before reading props or state.
+  const currentLayer = (): DigitalTwinPointCloudTileLayer | null => {
+    const current = layer.getCurrentLayer();
+    return current instanceof DigitalTwinPointCloudTileLayer ? current : null;
   };
-
-  const reportDiagnostics = () => {
-    if (!tileset) return;
-    const visiblePointCount = tileset.stats.get("Points/Vertices").count;
-    if (!onDiagnostics) return;
-
-    onDiagnostics({
-      datasetId: dataset.datasetId,
-      residentTileCount: tileset.stats.get("Tiles In Memory").count,
-      selectedTileCount: tileset.selectedTiles.length,
-      visiblePointCount,
-      gpuMemoryUsageBytes: tileset.gpuMemoryUsageInBytes,
-      screenSpaceError: tileset.memoryAdjustedScreenSpaceError,
-      settled: tileset.isLoaded(),
-    });
-  };
-
-  const handleTraversalComplete = <Tile extends SelectedPointCloudTile>(
-    selectedTiles: Tile[]
-  ): Tile[] => {
-    if (!visiblePointsReported) {
-      const visiblePointCount = selectedTiles.reduce((count, tile) => {
-        const pointCount = tile.content?.pointCount;
-        return tile.contentAvailable &&
-          typeof pointCount === "number" &&
-          Number.isFinite(pointCount)
-          ? count + pointCount
-          : count;
-      }, 0);
-      if (visiblePointCount > 0) {
-        visiblePointsReported = true;
-        onReady?.();
-      }
-    }
-    if (onDiagnostics) queueMicrotask(reportDiagnostics);
-    return selectedTiles;
-  };
-
-  return new DigitalTwinPointCloudTileLayer({
-    id: `digital-twin-point-cloud-${dataset.datasetId}-${view}`,
+  const reportDiagnostics = () => currentLayer()?.reportDiagnostics();
+  const layer: DigitalTwinPointCloudTileLayer = new DigitalTwinPointCloudTileLayer({
+    id: `digital-twin-point-cloud-${dataset.datasetId}-${dataset.version}-${view}`,
     data: view === "full" ? new URL("full/tileset.json", dataset.tilesetUrl).href : dataset.tilesetUrl,
-    getTraversalElevationMeters: () => traversalElevationMeters,
+    datasetId: dataset.datasetId,
+    datasetName: dataset.name,
+    onCloudError: onError,
+    onReady,
+    onDiagnostics,
     // LOD controls density; a stable pixel footprint keeps close views crisp
     // and prevents coarse preview points from becoming metre-wide bubbles.
     pointSize: 1,
@@ -231,7 +243,8 @@ export function createDigitalTwinPointCloudLayer(
       ...POINT_CLOUD_TILESET_LOAD_OPTIONS,
       tileset: {
         ...POINT_CLOUD_TILESET_LOAD_OPTIONS.tileset,
-        onTraversalComplete: handleTraversalComplete,
+        onTraversalComplete: (selectedTiles: SelectedPointCloudTile[]) =>
+          currentLayer()?.handleTraversalComplete(selectedTiles) ?? selectedTiles,
       },
     },
     _subLayerProps: {
@@ -243,29 +256,21 @@ export function createDigitalTwinPointCloudLayer(
         material: false,
       },
     },
-    onTilesetLoad: (loadedTileset) => {
-      tileset = loadedTileset;
-      const referenceElevation = loadedTileset.cartographicCenter?.[2];
-      if (
-        typeof referenceElevation === "number" &&
-        Number.isFinite(referenceElevation)
-      ) {
-        traversalElevationMeters = referenceElevation;
-      }
-      reportDiagnostics();
-    },
+    onTilesetLoad: reportDiagnostics,
     onTileLoad: reportDiagnostics,
     onTileUnload: reportDiagnostics,
     // @loaders.gl calls this as (tile, message, url), despite deck.gl's type
     // declaration naming the string arguments in the opposite order.
     onTileError: (_tile, message, url) => {
-      reportError(
-        new Error(`${dataset.name} tile failed to load: ${message} (${url})`)
+      const current = currentLayer();
+      current?.reportError(
+        new Error(`${current.props.datasetName} tile failed to load: ${message} (${url})`)
       );
     },
     onError: (error) => {
-      reportError(error);
+      currentLayer()?.reportError(error);
       return true;
     },
   });
+  return layer;
 }
