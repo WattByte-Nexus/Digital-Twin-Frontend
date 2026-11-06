@@ -61,6 +61,7 @@ function signInLocation(): string {
   // state is omitted at the unauthenticated boundary to avoid forwarding
   // arbitrary or stale values to the identity provider.
   url.searchParams.set("returnTo", window.location.pathname);
+  url.searchParams.set("frontendOrigin", window.location.origin);
   return url.href;
 }
 

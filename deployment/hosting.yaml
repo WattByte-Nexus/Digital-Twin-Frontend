@@ -5,9 +5,11 @@ Parameters:
     Type: String
     Default: ''
     AllowedPattern: '(^$|https://[a-z0-9.-]+)'
-  EngineRoleName:
+  DevelopApiOrigin:
     Type: String
-    Default: digital-twin-golden-engine-host
+    Default: https://api.nexus.ipss.ai
+    AllowedPattern: 'https://[a-z0-9.-]+'
+    Description: API origin for develop; currently shares production, independently switchable later.
   PublicOrigin:
     Type: String
     Default: ''
@@ -65,6 +67,50 @@ Resources:
       BranchName: main
       Stage: PRODUCTION
       EnableAutoBuild: false
+  Develop:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt DevelopApp.AppId
+      BranchName: develop
+      Stage: DEVELOPMENT
+      EnableAutoBuild: false
+  DevelopApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: wattbyte-nexus-development
+      Platform: WEB
+      CustomRules:
+        - Source: /api/<*>
+          Target: !Sub ${DevelopApiOrigin}/api/<*>
+          Status: '200'
+        - Source: '</^\/[Rr][Ee][Gg][Ii][Oo][Nn][Ss]\/.*$/>'
+          Target: /index.html
+          Status: '200'
+        - Source: '</^[^.]+$/>'
+          Target: /index.html
+          Status: '200'
+      CustomHeaders: |
+        customHeaders:
+          - pattern: '**'
+            headers:
+              - key: X-Content-Type-Options
+                value: nosniff
+              - key: Referrer-Policy
+                value: strict-origin-when-cross-origin
+              - key: X-Frame-Options
+                value: SAMEORIGIN
+          - pattern: '/api/**'
+            headers:
+              - key: Cache-Control
+                value: private, no-store
+          - pattern: '/index.html'
+            headers:
+              - key: Cache-Control
+                value: no-cache
+          - pattern: '/sw.js'
+            headers:
+              - key: Cache-Control
+                value: no-cache
   PublicDomain:
     Type: AWS::Amplify::Domain
     Condition: CustomOrigin
@@ -121,8 +167,10 @@ Resources:
           - CustomOrigin
           - !Sub ${PublicOrigin}/api/digital-twin/callback
           - !Sub https://main.${App.DefaultDomain}/api/digital-twin/callback
+        - !Sub https://develop.${DevelopApp.DefaultDomain}/api/digital-twin/callback
       LogoutURLs:
         - !If [CustomOrigin, !Sub '${PublicOrigin}/', !Sub 'https://main.${App.DefaultDomain}/']
+        - !Sub https://develop.${DevelopApp.DefaultDomain}/
       PreventUserExistenceErrors: ENABLED
       EnableTokenRevocation: true
       ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
@@ -146,20 +194,6 @@ Resources:
       GenerateSecretString:
         PasswordLength: 64
         ExcludePunctuation: true
-  EngineAuthenticationPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: nexus-hosted-authentication
-      Roles: [!Ref EngineRoleName]
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action: secretsmanager:GetSecretValue
-            Resource: !Ref SessionSecret
-          - Effect: Allow
-            Action: cognito-idp:DescribeUserPoolClient
-            Resource: !GetAtt UserPool.Arn
   DeployRole:
     Type: AWS::IAM::Role
     Properties:
@@ -174,7 +208,7 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: repo:WattByte-Nexus/Digital-Twin-Frontend:ref:refs/heads/main
+                token.actions.githubusercontent.com:sub: repo:WattByte-Nexus/Digital-Twin-Frontend:environment:production
       Policies:
         - PolicyName: deploy-main-only
           PolicyDocument:
@@ -188,6 +222,34 @@ Resources:
               - Effect: Allow
                 Action: [amplify:GetJob, amplify:StopJob]
                 Resource: !Sub ${App.Arn}/branches/main/jobs/*
+  DevelopDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: digital-twin-frontend-develop-github-deploy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: repo:WattByte-Nexus/Digital-Twin-Frontend:environment:development
+      Policies:
+        - PolicyName: deploy-develop-only
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [amplify:CreateDeployment, amplify:StartDeployment]
+                Resource:
+                  - !Sub ${DevelopApp.Arn}/branches/develop
+                  - !Sub ${DevelopApp.Arn}/branches/develop/deployments/*
+              - Effect: Allow
+                Action: [amplify:GetJob, amplify:StopJob]
+                Resource: !Sub ${DevelopApp.Arn}/branches/develop/jobs/*
 Outputs:
   AppId:
     Value: !GetAtt App.AppId
@@ -195,8 +257,14 @@ Outputs:
     Value: !If [CustomOrigin, !Ref PublicOrigin, !Sub 'https://main.${App.DefaultDomain}']
   AmplifyUrl:
     Value: !Sub https://main.${App.DefaultDomain}
+  DevelopAppId:
+    Value: !GetAtt DevelopApp.AppId
+  DevelopFrontendUrl:
+    Value: !Sub https://develop.${DevelopApp.DefaultDomain}
   DeployRoleArn:
     Value: !GetAtt DeployRole.Arn
+  DevelopDeployRoleArn:
+    Value: !GetAtt DevelopDeployRole.Arn
   UserPoolId:
     Value: !Ref UserPool
   ClientId:
