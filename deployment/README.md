@@ -1,145 +1,235 @@
 # AWS frontend deployment
 
-GitHub Actions builds and tests the web application, retains the exact artifact,
-then deploys that artifact to Amplify Hosting. PRs build/test without AWS access.
-Pushes and manual runs on `main` deploy through an exact-repository/main GitHub
-OIDC role. There are no long-lived AWS credentials in GitHub.
-The inherited GitHub Pages/demo and Cloudflare preview deployment workflows
-have been removed; this is the frontend's deployment path.
+The frontend's CloudFormation templates support independently selected `dev`
+and stable `golden` accounts. GitHub Actions currently builds/tests/releases the
+main artifact through the stable repository/main OIDC role; dev release workflow
+and exact-artifact promotion changes remain a separate phase. PR builds need no
+AWS credentials. Ordinary release jobs cannot provision infrastructure.
 
 ## Resource ownership
 
-- `hosting.yaml`: Amplify application and main branch, invitation-only Cognito
-  pool/client/group, Secrets Manager session signing key, exact-resource Engine
-  authentication permissions, and the narrow GitHub deployment role.
-- `api-edge.yaml`: HTTPS Application Load Balancer, ACM certificate, DNS and a second subnet.
-  The listener starts with a fixed 503 response and is enabled only after protected
-  Engine startup and network configuration have been verified.
-- The sibling Infrastructure repository's Engine stack owns EC2 and its security
-  group. Allow port 8000 from the load balancer security
-  group. Never open port 8000 to the Internet. The load balancer accepts public
-  HTTPS; the Engine requires Cognito sessions for every non-health API route.
-  Amplify's managed reverse proxy must be able to reach this HTTPS endpoint.
-- The Engine repository owns Cognito session validation and authorization.
-  Enable `application.api_access.mode: verified_host` and configure `cognito`
-  using this stack's public output identifiers. AWS credentials retrieve secret
-  values inside the Engine. The frontend never receives OAuth tokens or secrets.
+- `hosting.yaml` owns Amplify and its selected artifact branch, invitation-only
+  Cognito pool/client/group, a generated session-signing secret, scoped API
+  authentication permissions and the GitHub deployment role.
+- `api-edge.yaml` owns the HTTPS ALB/listener, ALB security group and every ALB
+  egress rule, ACM certificate, DNS and second public subnet/route association.
+- Infrastructure owns the Engine network, independent API IP target group,
+  Fargate service/task roles/security group and task ingress from the ALB.
+  It owns the EC2 simulation worker; EC2 is not an API routing target.
+- Engine owns authentication/authorization and its DynamoDB session store.
+  Configure `verified_host` with the selected Cognito identifiers, exact browser
+  origin and secret ARN. Runtime credentials retrieve secrets inside the API;
+  OAuth tokens and secret values never enter frontend build variables.
 
-Amplify proxies `/api/*` to the HTTPS API origin. The load balancer forwards to the instance's private IP and survives public-IP
-changes. API cookies and query strings are forwarded, and protected
-responses specify `private, no-store`. The service worker excludes `/api/*`
-navigation so OAuth callbacks reach the server. SPA deep links serve index.html.
+Amplify proxies same-origin `/api/*` to the explicit HTTPS API origin. API cookies
+and query strings are forwarded, and protected responses use `private, no-store`.
+The service worker excludes API navigation so OAuth callbacks reach the server;
+other SPA deep links serve index.html. Only the ALB security group reaches the
+private Fargate API port 8000. Do not add a public task IP, EC2 API target or a
+Terraform-owned listener/ALB egress rule.
 
-## Provisioning
+## Inputs and isolation
 
-Use AWS region `us-east-1` and account `078183419290`. Review CloudFormation
-changes before updating an existing deployment. Neither ordinary GitHub release
-job has permission to create or change infrastructure.
+Both templates require `Environment` (`dev` or `golden`) and `ExpectedAccountId`.
+The templates compare that ID to the actual caller account and reject the known
+stable account for dev. Deploy each environment under its own stack in its own
+account; never change an existing stack's environment.
 
-```sh
-aws cloudformation deploy --stack-name digital-twin-api-load-balancer \
-  --template-file deployment/api-edge.yaml \
-  --parameter-overrides EngineInstanceId=i-03c49c9209662ec1b \
-    VpcId=vpc-05fee57a83f4119ca EngineSecurityGroupId=sg-0d0cf13de742ded3a \
-    EngineSubnetId=subnet-004a52aa9c89f52ce PublicRouteTableId=rtb-08a0ad21251c4f05e \
-    HostedZoneId=Z02611002UN2XT68XWGT0 \
-    ApiDomain=api.nexus.ipss.ai EnableApi=false \
-  --region us-east-1 --disable-rollback
+Hosting also requires `ApiOrigin`, `PublicOrigin`, `EngineRoleName`,
+`TransactionalEmailSender` and `TransactionalEmailIdentityArn`. The email
+identity must be verified in the selected API region/account; its policy permits
+SES sends only from that mailbox. Set the same mailbox as `cognito.email_sender`
+in the Engine hosting configuration. The role
+is Infrastructure's API **task role**, not the execution role or EC2 worker role.
+Origins are exact HTTPS origins without paths, trailing slashes or wildcards;
+Cognito registers only the selected browser callback/logout URLs. There is no
+default API origin or runtime role. Amplify uses `BranchName` (default `main`) as
+the artifact destination independently of the candidate source commit.
 
-aws cloudformation deploy --stack-name digital-twin-frontend \
-  --template-file deployment/hosting.yaml \
-  --capabilities CAPABILITY_NAMED_IAM --region us-east-1
+Dev requires `GitHubOidcSubject` equal to
+`repo:WattByte-Nexus/Digital-Twin-Frontend:environment:dev`. Configure that GitHub
+environment and its release job before attempting OIDC deployment. Golden's
+default remains its deployed exact repository/main subject. No wildcard trust
+is introduced.
+
+Edge additionally requires network/DNS identifiers and `SecondSubnetCidr`.
+`EngineSubnetId` retains its deployed parameter name and means the first public
+subnet; it does not select an EC2 API. The second subnet uses the region's second
+AZ, so the first subnet must use another AZ. Its CIDR must not overlap the VPC's
+other subnets. `FargateTargetGroupArn` and `FargateSecurityGroupId` are optional
+only during the initial fixed-503 bootstrap, and must be supplied together.
+`EnableApi=true` requires them. There is one route target: Fargate.
+
+## Fresh dev bootstrap order
+
+Account creation, operator access, OIDC provider setup, spending approval and DNS
+delegation are prerequisites. The proposed browser/API names
+`dev.digital-twin.wattbyte-nexus.com` and `api-dev.nexus.ipss.ai` remain unconfirmed.
+No dev account or hosted-zone IDs are invented here. Verify the approved zone's
+access/delegation and ACM/Amplify certificate validation records in that account.
+
+1. Initialize the selected account's assets/weather and Engine network using the
+   owning repositories. Keep `enable_independent_api`, `activate_independent_api`
+   and other activation switches false. Export Engine `frontend_network`.
+2. Create only the edge stack with that network, approved DNS, explicit account,
+   environment and free second-subnet CIDR. Use `EnableApi=false` and leave both
+   Fargate inputs empty. The listener returns 503. A bootstrap-only sink egress
+   rule suppresses AWS's default allow-all outbound rule. Export `SecurityGroupId`,
+   `SecondSubnetId`, `LoadBalancerArn` and `ApiOrigin`.
+3. Feed the edge SG/subnet into Engine's `api_alb_security_group_id` and
+   `api_second_public_subnet_id`; enable API resources with
+   `enable_independent_api=true`, keeping `activate_independent_api=false`.
+   This creates its target group, task security group and task role without ECS
+   tasks. Export the updated `frontend_network` and `independent_api`.
+4. Deploy hosting/auth using `frontend_network.api_task_role_name`, the selected
+   API/browser origins and approved OIDC subject. Export the Cognito identifiers,
+   session-secret ARN and exact `FrontendUrl`. Create dev users/grants explicitly.
+5. Update the edge with `independent_api.target_group_arn` and
+   `independent_api.security_group_id`, setting `EnableApi=true`. The listener
+   associates the IP target group before ECS service creation. It returns 503
+   until healthy tasks exist; the API remains authenticated. CloudFormation alone
+   adds the task egress rule and removes its bootstrap sink.
+6. Publish the account-local digest-pinned API image. Supply hosted-auth runtime
+   settings, scoped secret/Cognito permissions, dev DynamoDB session/runtime
+   resources and immutable dev static inputs to Engine; then set
+   `activate_independent_api=true`. Complete readiness, TLS, login/logout,
+   browser/API, streaming and cross-environment denial acceptance before release.
+   Activate relay/point-cloud processing only after their independent readiness.
+
+This order avoids a dependency cycle: edge/network first, inactive API role and
+target next, hosting/auth next, target association next, tasks last. Passing an
+offline template check does not provision or validate that deployment.
+
+## Preserve the active Golden deployment
+
+Golden's recorded account/region are `078183419290` / `us-east-1`; its browser and
+API origins are `https://digital-twin.wattbyte-nexus.com` and
+`https://api.nexus.ipss.ai`. The live edge audit on 2026-11-05 confirmed the
+Fargate-only topology and Terraform-owned target group:
+
+```text
+arn:aws:elasticloadbalancing:us-east-1:078183419290:targetgroup/digital-twin-independent-api/b4f0a80243ee27cb
 ```
 
-`ApiOrigin` may be omitted during bootstrap. Set it to the API-edge stack's
-`ApiOrigin` output after authentication is installed. If using a custom domain,
-set `PublicOrigin` to its HTTPS origin. The stack associates that hostname with
-the Amplify `main` branch and provisions an Amplify-managed TLS certificate.
-Amplify creates routing and certificate validation records automatically when
-the parent domain is in Route 53 in the same AWS account. Register only that
-origin in Cognito and the Engine CSRF policy.
+Keep `EnableApi=true`, that verified target ARN and its actual task security
+group on any Golden update. Do not replay the fresh-dev fixed-503 bootstrap
+against the active stack. Supply `Environment=golden`,
+`ExpectedAccountId=078183419290` and `SecondSubnetCidr=10.82.2.0/24` alongside its
+existing network/DNS/Fargate values. Hosting must retain its actual API task-role
+input and current origins. Review the change set before updating infrastructure.
 
-The production frontend is `https://digital-twin.wattbyte-nexus.com`:
+The templates retain every deployed edge logical ID and Golden resource property,
+plus Golden hosting resource names, default branch and role trust. Golden's
+existing empty inline ALB egress list and separately owned Fargate egress remain
+unchanged. The checked-in live template fixture verifies these identities;
+no legacy EC2 target or diagnostic header route remains.
 
-```sh
-aws cloudformation deploy --stack-name digital-twin-frontend \
-  --template-file deployment/hosting.yaml \
-  --parameter-overrides ApiOrigin=https://api.nexus.ipss.ai \
-    PublicOrigin=https://digital-twin.wattbyte-nexus.com \
-  --capabilities CAPABILITY_NAMED_IAM --region us-east-1
-```
+## Outputs and cross-repository wiring
 
-When changing its hostname, also update the Cognito `frontend_origin` in the
-Engine's deployed `config/app.yaml`, restart the API, and set the repository's
-`FRONTEND_URL` Actions variable to the same origin. The deployment smoke check
-verifies that Cognito redirects back to that origin.
+Both stacks export actual `DeploymentAccountId`, `DeploymentRegion` and selected
+`DeploymentEnvironment` for the Engine identity preflight. Export
+`aws cloudformation describe-stacks --stack-name <selected-stack> --query
+'Stacks[0].Outputs'` as JSON. Identity agreement does not prove IAM isolation or
+validate every supplied external resource's ownership.
 
-## GitHub configuration
-
-Set repository Actions variables from the hosting stack outputs:
-
-| Variable | Source |
+| Stack/output | Consumer |
 | --- | --- |
-| `FRONTEND_AWS_REGION` | `us-east-1` |
-| `FRONTEND_AMPLIFY_APP_ID` | `AppId` |
-| `FRONTEND_DEPLOY_ROLE_ARN` | `DeployRoleArn` |
-| `FRONTEND_URL` | `FrontendUrl` |
+| Hosting `AppId`, `DeployRoleArn`, `BranchName`, `FrontendUrl` | Selected GitHub deployment destination and smoke checks |
+| Hosting `UserPoolId`, `ClientId`, `CognitoDomain`, `SessionSecretArn`, `FrontendUrl`, `ApiOrigin` | Selected Engine verified-host configuration and scoped authentication policy |
+| Edge `SecurityGroupId`, `SecondSubnetId`, `LoadBalancerArn` | Infrastructure API network/monitoring inputs |
+| Edge `ApiOrigin` | Hosting API proxy origin |
+| Edge `TargetGroupArn` (when prepared) | Reports Infrastructure's serving Fargate target; does not create one |
 
-Browser mapping integrations use the existing `VITE_MAPBOX_ACCESS_TOKEN`,
-`VITE_GOOGLE_MAPS_API_KEY`, `VITE_CESIUM_TOKEN`, `VITE_GEE_OAUTH_CLIENT_ID`,
-`VITE_PROTOMAPS_API_KEY` and `VITE_MAPILLARY_ACCESS_TOKEN` repository secrets.
-They are public browser credentials once bundled; restrict their provider-side
-origins appropriately. Never add Engine credentials to Vite variables.
+Sessions use the selected API's own DynamoDB table. Do not copy stable sessions
+or users into dev. Feed the exact browser origin into Engine CSRF and the source
+bucket owner's upload CORS rules. Infrastructure owns upload bucket IAM/lifecycle;
+the existing upload workflow below retains its API contract.
 
-The deployment workflow runs the pinned Engine contract check, lint, frontend
-tests, worker type checks, and TypeScript/Vite production build with JupyterLite.
-It records the commit and workflow run in `/deployment.json`, waits for Amplify
-success, then verifies the deployed revision, SPA route, Engine readiness,
-unauthenticated denial and Cognito code/PKCE redirect. A job that fails any
-check is not reported as a successful release.
+GitHub uses `FRONTEND_AWS_REGION`, `FRONTEND_AMPLIFY_APP_ID`,
+`FRONTEND_DEPLOY_ROLE_ARN` and `FRONTEND_URL` from the selected hosting outputs.
+Existing browser mapping credentials remain public browser credentials once
+bundled; restrict provider origins. Never put Engine secrets into Vite variables.
+Current workflow checks the Engine contract, lint/tests/type checks/build, records
+`deployment.json`, and checks revision, SPA, readiness and Cognito redirects.
+Workflow/environment selection and exact-artifact promotion remain separate work.
 
-## Login and operations
+There is no self-registration. Explicitly bootstrap a managed platform account,
+then invite staff and customer administrators through the management workspace.
+The retired `nexus-administrators` group grants no application access. Cognito
+requires authenticator-app MFA; application management writes additionally use
+single-use email verification. Account state, plan features, organization validity
+and exact region ownership are resolved on protected requests. Staff and tenant
+administrators receive no product grants. Private datasets also require their
+existing Engine grants. Logout revokes the session. Application release/rollback must preserve hosted configuration and
+cloud storage authority. A code rollback does not restore retired Redis sessions.
 
-There is no self-registration. Create Cognito users explicitly and assign the
-`nexus-administrators` group for this single-organization deployment. The Engine
-returns the current region catalog as the user's authorized scope. Private
-point-cloud datasets additionally need an Engine permission for the Cognito
-subject; the group never bypasses dataset authorization.
+The account feature requires the matching Engine schema and account-management
+release. Install the account schema with the explicit `digital-twin-accounts`
+operator command before enabling the new API, and bind the intended existing
+Cognito administrator by issuer and subject. Do not infer identity from email or
+bulk-enable the previous group. The API checks mandatory TOTP configuration at
+startup. Its runtime role needs the pool-scoped provisioning/MFA permissions and
+sender-scoped SES permission declared in `hosting.yaml`. For setup and acceptance,
+see the Engine's `docs/operations/accounts.md` and this repository's
+[role implementation plan](../docs/digital-twin-roles-and-permissions-plan.md).
 
-The server stores sessions in Redis for at most one hour. Logout revokes the
-session before redirecting through Cognito. Removing group membership prevents
-new sessions; revoke existing Redis sessions when immediate removal is needed.
-Application deployments preserve the runtime configuration and session store.
-
-To roll back frontend code, revert the faulty commit on main and let the same
-checks rebuild and deploy it. A manual retry of a workflow redeploys its exact
-artifact. Inspect the Amplify job ID in the workflow summary when a deployment
-times out; cancelling a workflow does not cancel an already accepted AWS job.
-
-Infrastructure checks:
+## Offline verification
 
 ```sh
-cfn-lint deployment/api-edge.yaml deployment/hosting.yaml
+uvx --from cfn-lint cfn-lint deployment/api-edge.yaml deployment/hosting.yaml
+node --test tests/deployment-templates.test.mjs
 bash -n scripts/deploy-amplify.sh
 ```
 
-## Deployed instance
+Tests compare all Golden edge resource properties against the nonsecret audited
+live template in `tests/fixtures/api-edge.golden-live.json`, check hosting resource
+identities, reject missing/mixed environment inputs, and prove fixed-503 bootstrap
+and Fargate association without EC2 targets or diagnostic switches. Live change
+sets, DNS/TLS, session/task replacement and cross-account denial remain required
+deployment evidence.
 
-The frontend is hosted at https://main.dbv0kjyl8w1at.amplifyapp.com, with
-same-origin API requests forwarded to `https://api.nexus.ipss.ai`. The API
-load balancer accepts public HTTPS; only its security group and the existing
-operator network can reach the Engine's port 8000. Keep `EnableApi=true` for
-the active `digital-twin-api-load-balancer` stack when updating it.
+## Debug point-cloud uploads
 
-Backend release [37963539199](https://github.com/WattByte-Nexus/Digital-Twin-Engine/actions/runs/37963539199)
-deployed source `855db229410d3f95384d882eb918aa3517216698` through GitHub OIDC
-and SSM. On 2026-10-09, live checks verified Cognito login, the Golden workspace,
-current weather and assets, and private point-cloud metadata. A separate
-unauthenticated client received HTTP 401 after those authenticated reads.
-Session cookies are Secure/HttpOnly and API responses remain `private, no-store`.
+Settings → Debug → Point-cloud upload sends LAS, LAZ and PLY files directly to
+the configured private source bucket in 32 MiB parts (100 GiB maximum). Region
+choices come from the authenticated Engine catalog. The control endpoint is
+`POST /api/v1/regions/{region_id}/point-cloud-uploads`; deploy the matching Engine
+change with the frontend's pinned contract before enabling this workflow.
 
-The API's runtime authentication configuration is installed in
-`/opt/digital-twin/config/app.yaml`; an operator backup is retained at
-`/opt/digital-twin/app.before-hosting-20261009.yaml`. Infrastructure's ignored
-`engine/frontend.auto.tfvars.json` preserves the enabled load-balancer ingress
-on future Terraform plans. Never commit initial user passwords or session keys.
+The Engine requires verified hosting authentication and `surveys:submit` for
+the selected region. It signs 24-hour owner/region-bound sessions using the
+existing hosting secret with a separate salt, and fifteen-minute S3 PUT URLs
+using its runtime role. No new IAM user, browser credential or Vite secret is
+needed. File bytes never pass through Amplify or the Engine.
+
+The source bucket's infrastructure owner must permit the frontend origin in
+S3 CORS. Merge this rule with the existing Site's rules; preserve its access:
+
+```json
+{
+  "AllowedOrigins": ["https://digital-twin.wattbyte-nexus.com"],
+  "AllowedMethods": ["PUT"],
+  "AllowedHeaders": ["*"],
+  "MaxAgeSeconds": 3600
+}
+```
+
+The Engine runtime role needs `s3:PutObject`, `s3:GetObject`,
+`s3:AbortMultipartUpload`, and `s3:ListMultipartUploadParts` on
+`arn:aws:s3:::digital-twin-golden-assets-sources-078183419290/uploads/pointclouds/*`.
+The bucket should abort incomplete multipart uploads under `uploads/pointclouds/`
+after one day, covering closed tabs, expired sign-in sessions and failed cleanup.
+These bucket/IAM settings belong to the source bucket's Infrastructure stack.
+
+Completed objects use `uploads/pointclouds/{region}/{UTC-date}/{uuid}/{filename}`
+and record region, coordinate reference, original filename, size, hashed uploader,
+and `upload-source=digital-twin-debug` in S3 metadata. That origin marker
+distinguishes frontend uploads from the older Site. Completion validates S3's
+actual part sizes and reads the final object's version; retrying completion
+reconciles a lost response. Uploading does not register a point-cloud dataset,
+replace active map data, or schedule processing.
+
+Leaving the upload settings section cancels the transfer and requests removal of
+unfinished parts. Completion verification cannot be cancelled; if it cannot be
+confirmed, inspect S3 before uploading the same capture again. Local-network mode
+has no verified identity and cannot use this private debug uploader.

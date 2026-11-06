@@ -1,33 +1,69 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Amplify Hosting, Cognito sessions and GitHub OIDC deployment for WattByte Nexus.
 Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, golden]
+  ExpectedAccountId:
+    Type: String
+    AllowedPattern: '^[0-9]{12}$'
+  BranchName:
+    Type: String
+    Default: main
+    AllowedPattern: '^[a-zA-Z0-9][a-zA-Z0-9-]*$'
+  GitHubOidcSubject:
+    Type: String
+    Default: repo:WattByte-Nexus/Digital-Twin-Frontend:ref:refs/heads/main
+    AllowedPattern: '^repo:WattByte-Nexus/Digital-Twin-Frontend:(ref:refs/heads/[a-zA-Z0-9/_.-]+|environment:[a-zA-Z0-9_-]+)$'
   ApiOrigin:
     Type: String
-    Default: ''
-    AllowedPattern: '(^$|https://[a-z0-9.-]+)'
+    AllowedPattern: '^https://[a-z0-9.-]+$'
   EngineRoleName:
     Type: String
-    Default: digital-twin-golden-engine-host
+    MinLength: 1
+    AllowedPattern: '^[a-zA-Z0-9+=,.@_-]+$'
+    Description: Environment-owned API runtime role receiving authentication permissions.
+  TransactionalEmailSender:
+    Type: String
+    AllowedPattern: '^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$'
+    Description: Verified SES mailbox for invitations and management verification.
+  TransactionalEmailIdentityArn:
+    Type: String
+    AllowedPattern: '^arn:aws:ses:[a-z0-9-]+:[0-9]{12}:identity/.+$'
+    Description: Verified SES identity in the API runtime region.
   PublicOrigin:
     Type: String
-    Default: ''
-    AllowedPattern: '(^$|https://[a-z0-9.-]+)'
+    AllowedPattern: '^https://[a-z0-9.-]+$'
+Rules:
+  AccountMatches:
+    Assertions:
+      - Assert: !Equals [!Ref ExpectedAccountId, !Ref 'AWS::AccountId']
+        AssertDescription: Deploy using the explicitly selected AWS account.
+  DevIsolation:
+    RuleCondition: !Equals [!Ref Environment, dev]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ExpectedAccountId, '078183419290']]
+        AssertDescription: Dev must use a dedicated account, not the stable account.
+      - Assert: !Not [!Equals [!Ref EngineRoleName, digital-twin-golden-engine-host]]
+        AssertDescription: Dev must use its own runtime role.
+      - Assert: !Not [!Equals [!Ref ApiOrigin, 'https://api.nexus.ipss.ai']]
+        AssertDescription: Dev must use its own HTTPS API origin.
+      - Assert: !Not [!Equals [!Ref PublicOrigin, 'https://digital-twin.wattbyte-nexus.com']]
+        AssertDescription: Dev must use its own exact HTTPS browser origin.
+      - Assert: !Equals [!Ref GitHubOidcSubject, 'repo:WattByte-Nexus/Digital-Twin-Frontend:environment:dev']
+        AssertDescription: Dev requires the exact GitHub dev environment subject.
 Conditions:
-  CustomOrigin: !Not [!Equals [!Ref PublicOrigin, '']]
-  ApiConfigured: !Not [!Equals [!Ref ApiOrigin, '']]
+  IsDev: !Equals [!Ref Environment, dev]
 Resources:
   App:
     Type: AWS::Amplify::App
     Properties:
-      Name: wattbyte-nexus
+      Name: !If [IsDev, wattbyte-nexus-dev, wattbyte-nexus]
       Platform: WEB
       CustomRules:
-        - !If
-          - ApiConfigured
-          - Source: /api/<*>
-            Target: !Sub ${ApiOrigin}/api/<*>
-            Status: '200'
-          - !Ref AWS::NoValue
+        - Source: /api/<*>
+          Target: !Sub ${ApiOrigin}/api/<*>
+          Status: '200'
         - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|jpeg|js|json|png|svg|txt|webp|woff|woff2|wasm|tif|pnts|bin|map)$)([^.]+$)/>'
           Target: /index.html
           Status: '200'
@@ -57,12 +93,11 @@ Resources:
     Type: AWS::Amplify::Branch
     Properties:
       AppId: !GetAtt App.AppId
-      BranchName: main
-      Stage: PRODUCTION
+      BranchName: !Ref BranchName
+      Stage: !If [IsDev, DEVELOPMENT, PRODUCTION]
       EnableAutoBuild: false
   PublicDomain:
     Type: AWS::Amplify::Domain
-    Condition: CustomOrigin
     Properties:
       AppId: !GetAtt App.AppId
       DomainName: !Select [2, !Split ['/', !Ref PublicOrigin]]
@@ -75,7 +110,7 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      UserPoolName: wattbyte-nexus
+      UserPoolName: !If [IsDev, wattbyte-nexus-dev, wattbyte-nexus]
       AdminCreateUserConfig:
         AllowAdminCreateUserOnly: true
       UsernameAttributes: [email]
@@ -90,8 +125,16 @@ Resources:
           RequireNumbers: true
           RequireSymbols: true
           TemporaryPasswordValidityDays: 7
-      MfaConfiguration: OPTIONAL
+      MfaConfiguration: 'ON'
       EnabledMfas: [SOFTWARE_TOKEN_MFA]
+      Schema:
+        - Name: nexus_account_id
+          AttributeDataType: String
+          Mutable: false
+          Required: false
+          StringAttributeConstraints:
+            MinLength: '1'
+            MaxLength: '100'
       AccountRecoverySetting:
         RecoveryMechanisms:
           - Name: verified_email
@@ -99,25 +142,22 @@ Resources:
   Domain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      Domain: !Sub wattbyte-nexus-${AWS::AccountId}
+      Domain: !If [IsDev, !Sub 'wattbyte-nexus-dev-${AWS::AccountId}', !Sub 'wattbyte-nexus-${AWS::AccountId}']
       UserPoolId: !Ref UserPool
   Client:
     Type: AWS::Cognito::UserPoolClient
     Properties:
       UserPoolId: !Ref UserPool
-      ClientName: nexus-hosted-session
+      ClientName: !If [IsDev, nexus-dev-hosted-session, nexus-hosted-session]
       GenerateSecret: true
       AllowedOAuthFlowsUserPoolClient: true
       AllowedOAuthFlows: [code]
       AllowedOAuthScopes: [openid, email, profile]
       SupportedIdentityProviders: [COGNITO]
       CallbackURLs:
-        - !If
-          - CustomOrigin
-          - !Sub ${PublicOrigin}/api/digital-twin/callback
-          - !Sub https://main.${App.DefaultDomain}/api/digital-twin/callback
+        - !Sub ${PublicOrigin}/api/digital-twin/callback
       LogoutURLs:
-        - !If [CustomOrigin, !Sub '${PublicOrigin}/', !Sub 'https://main.${App.DefaultDomain}/']
+        - !Sub '${PublicOrigin}/'
       PreventUserExistenceErrors: ENABLED
       EnableTokenRevocation: true
       ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
@@ -128,23 +168,17 @@ Resources:
         AccessToken: hours
         IdToken: hours
         RefreshToken: days
-  Administrators:
-    Type: AWS::Cognito::UserPoolGroup
-    Properties:
-      UserPoolId: !Ref UserPool
-      GroupName: nexus-administrators
-      Description: Administrators of the single WattByte Nexus deployment
   SessionSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: digital-twin/frontend/session-signing-key
+      Name: !If [IsDev, digital-twin/dev/frontend/session-signing-key, digital-twin/frontend/session-signing-key]
       GenerateSecretString:
         PasswordLength: 64
         ExcludePunctuation: true
   EngineAuthenticationPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: nexus-hosted-authentication
+      PolicyName: !If [IsDev, nexus-dev-hosted-authentication, nexus-hosted-authentication]
       Roles: [!Ref EngineRoleName]
       PolicyDocument:
         Version: '2012-10-17'
@@ -153,12 +187,24 @@ Resources:
             Action: secretsmanager:GetSecretValue
             Resource: !Ref SessionSecret
           - Effect: Allow
-            Action: cognito-idp:DescribeUserPoolClient
+            Action:
+              - cognito-idp:DescribeUserPoolClient
+              - cognito-idp:GetUserPoolMfaConfig
+              - cognito-idp:AdminGetUser
+              - cognito-idp:AdminCreateUser
+              - cognito-idp:AdminSetUserPassword
+              - cognito-idp:AdminUpdateUserAttributes
             Resource: !GetAtt UserPool.Arn
+          - Effect: Allow
+            Action: ses:SendEmail
+            Resource: !Ref TransactionalEmailIdentityArn
+            Condition:
+              StringEquals:
+                ses:FromAddress: !Ref TransactionalEmailSender
   DeployRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: digital-twin-frontend-github-deploy
+      RoleName: !If [IsDev, digital-twin-dev-frontend-github-deploy, digital-twin-frontend-github-deploy]
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -169,7 +215,7 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: repo:WattByte-Nexus/Digital-Twin-Frontend:ref:refs/heads/main
+                token.actions.githubusercontent.com:sub: !Ref GitHubOidcSubject
       Policies:
         - PolicyName: deploy-main-only
           PolicyDocument:
@@ -178,18 +224,18 @@ Resources:
               - Effect: Allow
                 Action: [amplify:CreateDeployment, amplify:StartDeployment]
                 Resource:
-                  - !Sub ${App.Arn}/branches/main
-                  - !Sub ${App.Arn}/branches/main/deployments/*
+                  - !Sub ${App.Arn}/branches/${BranchName}
+                  - !Sub ${App.Arn}/branches/${BranchName}/deployments/*
               - Effect: Allow
                 Action: [amplify:GetJob, amplify:StopJob]
-                Resource: !Sub ${App.Arn}/branches/main/jobs/*
+                Resource: !Sub ${App.Arn}/branches/${BranchName}/jobs/*
 Outputs:
   AppId:
     Value: !GetAtt App.AppId
   FrontendUrl:
-    Value: !If [CustomOrigin, !Ref PublicOrigin, !Sub 'https://main.${App.DefaultDomain}']
+    Value: !Ref PublicOrigin
   AmplifyUrl:
-    Value: !Sub https://main.${App.DefaultDomain}
+    Value: !Sub https://${BranchName}.${App.DefaultDomain}
   DeployRoleArn:
     Value: !GetAtt DeployRole.Arn
   UserPoolId:
@@ -200,3 +246,13 @@ Outputs:
     Value: !Sub https://${Domain}.auth.${AWS::Region}.amazoncognito.com
   SessionSecretArn:
     Value: !Ref SessionSecret
+  DeploymentEnvironment:
+    Value: !Ref Environment
+  DeploymentAccountId:
+    Value: !Ref 'AWS::AccountId'
+  DeploymentRegion:
+    Value: !Ref 'AWS::Region'
+  BranchName:
+    Value: !Ref BranchName
+  ApiOrigin:
+    Value: !Ref ApiOrigin
