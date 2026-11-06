@@ -1,4 +1,29 @@
 import { expect, test, type Page } from "@playwright/test";
+test("signed-out sign-in link supplies the active frontend origin", async ({ page }) => {
+  await page.route("**/api/digital-twin/access", (route) =>
+    route.fulfill({ status: 401, json: { detail: "Authentication is required." } })
+  );
+  await page.route("**/api/digital-twin/sign-in?**", (route) => {
+    const url = new URL(route.request().url());
+    const permitted = url.searchParams.get("frontendOrigin") === url.origin;
+    return route.fulfill({
+      status: permitted ? 200 : 400,
+      contentType: "text/plain",
+      body: permitted ? "Identity provider reached" : "Frontend origin is not permitted.",
+    });
+  });
+  await page.goto("/admin?private=omit-this#fragment");
+  const signIn = page.getByRole("link", { name: "Sign in", exact: true });
+  await expect(signIn).toBeVisible();
+  await signIn.click();
+  await expect(page.getByText("Identity provider reached", { exact: true })).toBeVisible();
+  const destination = new URL(page.url());
+  expect(destination.searchParams.get("frontendOrigin")).toBe(destination.origin);
+  expect(destination.searchParams.get("returnTo")).toBe("/admin");
+  expect(destination.searchParams.has("private")).toBe(false);
+  expect(destination.hash).toBe("");
+});
+
 const account = {
   id: "staff-1",
   role: "PLATFORM_SUPER_ADMIN",
