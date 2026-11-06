@@ -29,7 +29,8 @@ export type DigitalTwinCapability = (typeof DIGITAL_TWIN_CAPABILITIES)[number];
 export type DigitalTwinProductMode =
   | "digital-twin"
   | "expert-gis"
-  | "administration";
+  | "administration"
+  | "home";
 export type DigitalTwinView = "live" | "assets" | "scenarios" | "runs";
 
 export interface AuthorizedRegion {
@@ -321,9 +322,9 @@ export function resolveLandingLocation(
     access.permissions.includes("region:create")
   )
     return "/data";
-  if (access.roles[0] === "TENANT_ADMIN") return "/tenant-admin";
+  if (access.roles[0] === "TENANT_ADMIN") return "/home";
   if (access.roles[0] !== "TENANT_USER")
-    return capabilities.has("administration") ? "/admin" : null;
+    return capabilities.has("administration") ? "/home" : null;
   const recentRegion = access.regions.find(
     (region) => region.id === access.mostRecentlyUsedRegionId
   );
@@ -421,6 +422,12 @@ export function resolveAuthorizedLocation(
     return landing
       ? { kind: "redirect", location: landing }
       : { kind: "denied", reason: "route" };
+  }
+
+  if (["/home", "/settings"].includes(pathname.toLowerCase())) {
+    return capabilities.size > 0 ? {
+      kind: "allowed", location, mode: "home", view: "live", regionId: null,
+    } : { kind: "denied", reason: "route" };
   }
 
   if (pathname.toLowerCase() === "/data") {

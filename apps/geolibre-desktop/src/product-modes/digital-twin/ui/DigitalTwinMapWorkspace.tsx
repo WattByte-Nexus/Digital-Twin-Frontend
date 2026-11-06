@@ -1715,11 +1715,13 @@ export function DigitalTwinMapWorkspace({
                 apiUrl={digitalTwinApiUrl}
                 theme={activeThemeMode}
                 onToggleTheme={toggleTheme}
-                mapDisplaySettings={displaySettings}
-                onMapDisplaySettingsChange={setDisplaySettings}
-                viewMode={viewMode}
-                onViewModeChange={changeViewMode}
-                onOpenScenarios={() => navigateTo("scenarios")}
+                workspace={{
+                  mapDisplaySettings: displaySettings,
+                  onMapDisplaySettingsChange: setDisplaySettings,
+                  viewMode,
+                  onViewModeChange: changeViewMode,
+                  onOpenScenarios: () => navigateTo("scenarios"),
+                }}
                 accountInitials={operator.initials}
                 accountName={operator.name}
                 onClose={() => setSettingsOpen(false)}

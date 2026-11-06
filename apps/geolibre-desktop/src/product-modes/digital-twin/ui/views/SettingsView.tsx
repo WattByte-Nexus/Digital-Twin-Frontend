@@ -27,6 +27,7 @@ import {
   Search,
   Server,
   Settings2,
+  ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
 import { useState, type CSSProperties } from "react";
@@ -36,18 +37,26 @@ import {
   EngineStatusPage,
   SavedScenariosPage,
 } from "./settings-view-pages";
-import { SETTINGS_PAGE_COPY, type SettingsSectionId } from "./settings-view-model";
+import {
+  SETTINGS_PAGE_COPY,
+  type SettingsSectionId,
+} from "./settings-view-model";
 import "./settings-view.css";
 
 export interface SettingsViewProps {
   apiUrl: string;
   theme: "light" | "dark";
   onToggleTheme: () => void;
-  mapDisplaySettings: DigitalTwinMapDisplaySettings;
-  onMapDisplaySettingsChange: (settings: DigitalTwinMapDisplaySettings) => void;
-  viewMode: "3d" | "plan";
-  onViewModeChange: (mode: "3d" | "plan") => void;
-  onOpenScenarios: () => void;
+  workspace?: {
+    mapDisplaySettings: DigitalTwinMapDisplaySettings;
+    onMapDisplaySettingsChange: (
+      settings: DigitalTwinMapDisplaySettings
+    ) => void;
+    viewMode: "3d" | "plan";
+    onViewModeChange: (mode: "3d" | "plan") => void;
+    onOpenScenarios: () => void;
+  };
+  onOpenAdministration?: () => void;
   accountInitials?: string;
   accountName?: string;
   onClose: () => void;
@@ -94,7 +103,7 @@ const SETTINGS_GROUPS: ReadonlyArray<{
 function settingsItemMatchesSearch(
   groupLabel: string,
   item: (typeof SETTINGS_GROUPS)[number]["items"][number],
-  query: string,
+  query: string
 ) {
   if (!query) return true;
   const copy = SETTINGS_PAGE_COPY[item.id];
@@ -108,47 +117,69 @@ export function SettingsView({
   apiUrl,
   theme,
   onToggleTheme,
-  mapDisplaySettings,
-  onMapDisplaySettingsChange,
-  viewMode,
-  onViewModeChange,
-  onOpenScenarios,
+  workspace,
+  onOpenAdministration,
   accountInitials = "",
   accountName = "",
   onClose,
   organizationName = "",
 }: SettingsViewProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>("account-preferences");
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>(
+    "account-preferences"
+  );
   const [navWidth, setNavWidth] = useState(DEFAULT_NAV_WIDTH);
   const [searchQuery, setSearchQuery] = useState("");
   const pageCopy = SETTINGS_PAGE_COPY[activeSection];
   const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
-  const visibleGroups = SETTINGS_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) =>
-      settingsItemMatchesSearch(group.label, item, normalizedSearchQuery),
-    ),
-  })).filter((group) => group.items.length > 0);
+  const availableGroups = SETTINGS_GROUPS.filter(
+    (group) => workspace || group.label !== "Workspace"
+  );
+  const showAdministration =
+    Boolean(onOpenAdministration) &&
+    (!normalizedSearchQuery ||
+      "administration organization staff access plans".includes(
+        normalizedSearchQuery
+      ));
+  const visibleGroups = availableGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) =>
+        settingsItemMatchesSearch(group.label, item, normalizedSearchQuery)
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
   const style: SettingsViewStyle = {
     "--dt-settings-nav-width": `${navWidth}px`,
   };
 
   function handleSearchQueryChange(nextSearchQuery: string) {
-    const normalizedNextSearchQuery = nextSearchQuery.trim().toLocaleLowerCase();
+    const normalizedNextSearchQuery = nextSearchQuery
+      .trim()
+      .toLocaleLowerCase();
     const activeGroup = SETTINGS_GROUPS.find((group) =>
-      group.items.some((item) => item.id === activeSection),
+      group.items.some((item) => item.id === activeSection)
     );
-    const activeItem = activeGroup?.items.find((item) => item.id === activeSection);
+    const activeItem = activeGroup?.items.find(
+      (item) => item.id === activeSection
+    );
     const activeItemMatches =
       activeGroup && activeItem
-        ? settingsItemMatchesSearch(activeGroup.label, activeItem, normalizedNextSearchQuery)
+        ? settingsItemMatchesSearch(
+            activeGroup.label,
+            activeItem,
+            normalizedNextSearchQuery
+          )
         : false;
 
     if (normalizedNextSearchQuery && !activeItemMatches) {
       const firstMatch = SETTINGS_GROUPS.flatMap((group) =>
         group.items.filter((item) =>
-          settingsItemMatchesSearch(group.label, item, normalizedNextSearchQuery),
-        ),
+          settingsItemMatchesSearch(
+            group.label,
+            item,
+            normalizedNextSearchQuery
+          )
+        )
       )[0];
       if (firstMatch) setActiveSection(firstMatch.id);
     }
@@ -156,7 +187,10 @@ export function SettingsView({
   }
 
   return (
-    <div className="dt-settings-view bg-background text-foreground" style={style}>
+    <div
+      className="dt-settings-view bg-background text-foreground"
+      style={style}
+    >
       <aside
         aria-label="Settings sections"
         className="dt-settings-navigation border-r border-sidebar-border bg-card text-sidebar-foreground shadow-none"
@@ -174,7 +208,9 @@ export function SettingsView({
             <span>Back to workspace</span>
           </Button>
 
-          <h1 className="px-2 text-sm font-semibold text-sidebar-foreground">Settings</h1>
+          <h1 className="px-2 text-sm font-semibold text-sidebar-foreground">
+            Settings
+          </h1>
 
           {accountName || organizationName ? (
             <div className="flex items-center gap-3 px-2 py-2">
@@ -187,7 +223,9 @@ export function SettingsView({
                 <p className="truncate text-sm font-medium text-sidebar-foreground">
                   {accountName}
                 </p>
-                <p className="truncate text-xs text-sidebar-foreground/60">{organizationName}</p>
+                <p className="truncate text-xs text-sidebar-foreground/60">
+                  {organizationName}
+                </p>
               </div>
             </div>
           ) : null}
@@ -200,7 +238,9 @@ export function SettingsView({
             <Input
               aria-label="Search settings"
               className="h-11 border-sidebar-border bg-sidebar ps-9 text-sidebar-foreground placeholder:text-sidebar-foreground/50"
-              onChange={(event) => handleSearchQueryChange(event.currentTarget.value)}
+              onChange={(event) =>
+                handleSearchQueryChange(event.currentTarget.value)
+              }
               placeholder="Search settings"
               type="search"
               value={searchQuery}
@@ -212,11 +252,16 @@ export function SettingsView({
           <nav className="space-y-2 p-3" aria-label="Settings navigation">
             {visibleGroups.map((group) => (
               <section
-                aria-labelledby={`settings-group-${group.label.replaceAll(" ", "-")}`}
+                aria-labelledby={`settings-group-${group.label.replaceAll(
+                  " ",
+                  "-"
+                )}`}
                 key={group.label}
               >
                 <SidebarGroupLabel asChild>
-                  <h2 id={`settings-group-${group.label.replaceAll(" ", "-")}`}>{group.label}</h2>
+                  <h2 id={`settings-group-${group.label.replaceAll(" ", "-")}`}>
+                    {group.label}
+                  </h2>
                 </SidebarGroupLabel>
                 <SidebarMenu>
                   {group.items.map((item) => {
@@ -240,7 +285,23 @@ export function SettingsView({
                 </SidebarMenu>
               </section>
             ))}
-            {visibleGroups.length === 0 ? (
+            {showAdministration ? (
+              <section aria-label="Administration settings">
+                <SidebarGroupLabel>Management</SidebarGroupLabel>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      className="h-11 gap-3 px-3 text-sm"
+                      onClick={onOpenAdministration}
+                    >
+                      <ShieldCheck aria-hidden="true" className="size-5" />
+                      <span className="font-medium">Administration</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </section>
+            ) : null}
+            {visibleGroups.length === 0 && !showAdministration ? (
               <p className="px-3 py-8 text-center text-sm text-muted-foreground">
                 No settings found.
               </p>
@@ -281,21 +342,32 @@ export function SettingsView({
         <Input
           aria-label="Search settings"
           className="h-11"
-          onChange={(event) => handleSearchQueryChange(event.currentTarget.value)}
+          onChange={(event) =>
+            handleSearchQueryChange(event.currentTarget.value)
+          }
           placeholder="Search settings"
           type="search"
           value={searchQuery}
         />
         <SelectMenu
-          disabled={visibleGroups.length === 0}
-          onValueChange={(value) => setActiveSection(value as SettingsSectionId)}
+          disabled={visibleGroups.length === 0 && !showAdministration}
+          onValueChange={(value) =>
+            value === "administration"
+              ? onOpenAdministration?.()
+              : setActiveSection(value as SettingsSectionId)
+          }
           value={activeSection}
         >
-          <SelectMenuTrigger aria-label="Settings section" className="h-11 w-full">
+          <SelectMenuTrigger
+            aria-label="Settings section"
+            className="h-11 w-full"
+          >
             <SelectMenuValue />
           </SelectMenuTrigger>
           <SelectMenuContent
-            className={`${theme === "dark" ? "dark" : "theme-light"} surface-glass-overlay min-w-[var(--radix-select-trigger-width)]`}
+            className={`${
+              theme === "dark" ? "dark" : "theme-light"
+            } surface-glass-overlay min-w-[var(--radix-select-trigger-width)]`}
             position="popper"
           >
             {visibleGroups.map((group, index) => (
@@ -303,12 +375,21 @@ export function SettingsView({
                 {index > 0 ? <Separator className="my-1" /> : null}
                 <SelectMenuLabel>{group.label}</SelectMenuLabel>
                 {group.items.map((item) => (
-                  <SelectMenuItem className="min-h-11" key={item.id} value={item.id}>
+                  <SelectMenuItem
+                    className="min-h-11"
+                    key={item.id}
+                    value={item.id}
+                  >
                     {item.label}
                   </SelectMenuItem>
                 ))}
               </SelectMenuGroup>
             ))}
+            {showAdministration ? (
+              <SelectMenuItem className="min-h-11" value="administration">
+                Administration
+              </SelectMenuItem>
+            ) : null}
           </SelectMenuContent>
         </SelectMenu>
       </div>
@@ -320,10 +401,30 @@ export function SettingsView({
         <ScrollArea className="h-full" key={activeSection}>
           <div className="p-5 sm:p-8">
             <div className="mx-auto w-full max-w-3xl space-y-5">
-              {visibleGroups.length === 0 ? (
+              {showAdministration ? (
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card p-5">
+                  <div>
+                    <h2 className="font-semibold">Administration</h2>
+                    <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+                      Manage people, organizations, plans, and access for your
+                      account role.
+                    </p>
+                  </div>
+                  <Button
+                    className="min-h-11 gap-2"
+                    onClick={onOpenAdministration}
+                  >
+                    <ShieldCheck aria-hidden="true" className="size-4" />
+                    Open administration
+                  </Button>
+                </div>
+              ) : null}
+              {visibleGroups.length === 0 &&
+              showAdministration ? null : visibleGroups.length === 0 ? (
                 <div className="space-y-4 py-8 text-center">
                   <p className="break-words text-sm text-muted-foreground">
-                    No settings match “{searchQuery.trim()}”. Try a different search.
+                    No settings match “{searchQuery.trim()}”. Try a different
+                    search.
                   </p>
                   <Button
                     className="min-h-11"
@@ -335,21 +436,26 @@ export function SettingsView({
                   </Button>
                 </div>
               ) : activeSection === "account-preferences" ? (
-                <AccountPreferencesPage theme={theme} onToggleTheme={onToggleTheme} />
-              ) : activeSection === "workspace-map" ? (
+                <AccountPreferencesPage
+                  theme={theme}
+                  onToggleTheme={onToggleTheme}
+                />
+              ) : activeSection === "workspace-map" && workspace ? (
                 <>
                   <DigitalTwinMapSettings
-                    value={mapDisplaySettings}
-                    viewMode={viewMode}
-                    onValueChange={onMapDisplaySettingsChange}
-                    onViewModeChange={onViewModeChange}
+                    value={workspace.mapDisplaySettings}
+                    viewMode={workspace.viewMode}
+                    onValueChange={workspace.onMapDisplaySettingsChange}
+                    onViewModeChange={workspace.onViewModeChange}
                   />
                   <div className="flex justify-end">
                     <Button
                       className="min-h-11"
                       onClick={() => {
-                        onMapDisplaySettingsChange(DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS);
-                        onViewModeChange("3d");
+                        workspace.onMapDisplaySettingsChange(
+                          DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS
+                        );
+                        workspace.onViewModeChange("3d");
                       }}
                       type="button"
                       variant="outline"
@@ -358,8 +464,10 @@ export function SettingsView({
                     </Button>
                   </div>
                 </>
-              ) : activeSection === "workspace-simulation" ? (
-                <SavedScenariosPage onOpenScenarios={onOpenScenarios} />
+              ) : activeSection === "workspace-simulation" && workspace ? (
+                <SavedScenariosPage
+                  onOpenScenarios={workspace.onOpenScenarios}
+                />
               ) : (
                 <EngineStatusPage apiUrl={apiUrl} />
               )}

@@ -1,6 +1,10 @@
 import {
   Badge,
   Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Input,
   Label,
   Select,
   Table,
@@ -11,6 +15,7 @@ import {
   TableRow,
 } from "@geolibre/ui";
 import { useId, useState } from "react";
+import { Plus, Search, Users, X } from "lucide-react";
 import {
   accountRoleLabel,
   DIGITAL_TWIN_ROLES,
@@ -194,6 +199,11 @@ export function PeoplePanel({
   run: RunAction;
   busy: boolean;
 }) {
+  const [creationRevision, setCreationRevision] = useState<number | null>(null);
+  const creating = creationRevision === revision;
+  const setCreating = (open: boolean) =>
+    setCreationRevision(open ? revision : null);
+  const [search, setSearch] = useState("");
   const query = useManagementQuery<TenantWorkspace | Collection<Account>>(
     tenant ? "/tenant-workspace" : "/staff",
     revision
@@ -206,8 +216,50 @@ export function PeoplePanel({
   const departments =
     query.data && "departments" in query.data ? query.data.departments : [];
   const basePath = tenant ? "/tenant-users" : "/staff";
+  const visiblePeople = people.filter((person) =>
+    `${person.first_name} ${person.last_name} ${person.email}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase())
+  );
   return (
-    <div className="space-y-6">
+    <Collapsible
+      open={creating}
+      onOpenChange={setCreating}
+      className="space-y-5"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full sm:max-w-xs">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            aria-label="Search people"
+            placeholder="Search by name or email…"
+            className="min-h-11 pl-9"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+        <CollapsibleTrigger asChild>
+          <Button
+            variant={creating ? "outline" : "default"}
+            className="min-h-11 gap-2"
+            disabled={busy || query.loading || Boolean(query.error)}
+          >
+            {creating ? (
+              <X aria-hidden="true" className="size-4" />
+            ) : (
+              <Plus aria-hidden="true" className="size-4" />
+            )}
+            {creating
+              ? "Close invitation"
+              : tenant
+              ? "Invite product user"
+              : "Invite staff member"}
+          </Button>
+        </CollapsibleTrigger>
+      </div>
       <Section
         title={tenant ? "Organization users" : "Administrative staff"}
         description={
@@ -216,9 +268,20 @@ export function PeoplePanel({
             : "Staff accounts manage the service. They do not receive access to customer workspaces."
         }
       >
-        <QueryState {...query} empty={!people.length} onRefresh={refresh} />
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Users aria-hidden="true" className="size-4" />
+          <span className="tabular-nums">{people.length}</span>{" "}
+          {tenant ? "product users" : "staff members"}
+        </div>
+        <QueryState
+          {...query}
+          empty={!people.length}
+          emptyTitle={tenant ? "No product users yet" : "No staff members yet"}
+          emptyDescription="Invite someone to get started. Their invitation and account status will appear here."
+          onRefresh={refresh}
+        />
         {people.length ? (
-          <Table>
+          <Table className="[&_td]:py-4 [&_th]:h-11 [&_th]:bg-surface-subtle/60">
             <TableHeader>
               <TableRow>
                 <TableHead>Person</TableHead>
@@ -228,7 +291,7 @@ export function PeoplePanel({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {people.map((person) => (
+              {visiblePeople.map((person) => (
                 <PersonRow
                   key={`${person.id}-${person.version}`}
                   person={person}
@@ -241,53 +304,69 @@ export function PeoplePanel({
             </TableBody>
           </Table>
         ) : null}
-      </Section>
-      <Section
-        title={tenant ? "Invite product user" : "Invite staff member"}
-        description="An email invitation lets the recipient set up their own account."
-      >
-        <form
-          key={revision}
-          className="grid gap-4 sm:grid-cols-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const values = formValues(form);
-            void run(basePath, {
-              first_name: values.first_name,
-              last_name: values.last_name,
-              email: values.email,
-              ...(tenant
-                ? { department_id: values.department_id }
-                : { role: values.role }),
-            }).then((ok) => {
-              if (ok) form.reset();
-            });
-          }}
-        >
-          <Field label="First name" name="first_name" />
-          <Field label="Last name" name="last_name" />
-          <Field label="Email" name="email" type="email" />
-          {tenant ? (
-            <DepartmentSelect departments={departments} />
-          ) : (
-            <StaffRoleSelect />
-          )}
-          <div className="sm:col-span-2">
-            <Button
-              type="submit"
-              disabled={
-                busy ||
-                query.loading ||
-                Boolean(query.error) ||
-                (tenant && departments.length === 0)
-              }
-            >
-              Send invitation
+        {people.length > 0 && visiblePeople.length === 0 ? (
+          <div
+            role="status"
+            className="py-6 text-center text-sm text-muted-foreground"
+          >
+            No people match “{search}”.{" "}
+            <Button variant="link" onClick={() => setSearch("")}>
+              Clear search
             </Button>
           </div>
-        </form>
+        ) : null}
       </Section>
+      <CollapsibleContent>
+        <Section
+          title={tenant ? "Invite product user" : "Invite staff member"}
+          description="An email invitation lets the recipient set up their own account."
+        >
+          <form
+            key={revision}
+            className="grid max-w-3xl gap-4 sm:grid-cols-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = event.currentTarget;
+              const values = formValues(form);
+              void run(basePath, {
+                first_name: values.first_name,
+                last_name: values.last_name,
+                email: values.email,
+                ...(tenant
+                  ? { department_id: values.department_id }
+                  : { role: values.role }),
+              }).then((ok) => {
+                if (ok) {
+                  form.reset();
+                  setCreating(false);
+                }
+              });
+            }}
+          >
+            <Field label="First name" name="first_name" />
+            <Field label="Last name" name="last_name" />
+            <Field label="Email" name="email" type="email" />
+            {tenant ? (
+              <DepartmentSelect departments={departments} />
+            ) : (
+              <StaffRoleSelect />
+            )}
+            <div className="sm:col-span-2">
+              <Button
+                type="submit"
+                disabled={
+                  busy ||
+                  query.loading ||
+                  Boolean(query.error) ||
+                  (tenant && departments.length === 0)
+                }
+              >
+                Send invitation
+              </Button>
+            </div>
+          </form>
+        </Section>
+      </CollapsibleContent>
       {tenant ? (
         <DepartmentsPanel
           departments={departments}
@@ -295,7 +374,7 @@ export function PeoplePanel({
           busy={busy || query.loading || Boolean(query.error)}
         />
       ) : null}
-    </div>
+    </Collapsible>
   );
 }
 function StaffRoleSelect({

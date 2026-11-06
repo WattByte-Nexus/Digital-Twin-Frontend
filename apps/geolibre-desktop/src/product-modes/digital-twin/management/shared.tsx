@@ -8,6 +8,7 @@ import {
   Input,
   Label,
 } from "@geolibre/ui";
+import { Inbox, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import { ManagementError, managementRequest } from "./client";
 
@@ -18,6 +19,7 @@ export function Field({
   type = "text",
   defaultValue,
   required = true,
+  description,
   ...props
 }: {
   label: string;
@@ -29,10 +31,12 @@ export function Field({
   max?: number;
   step?: string;
   maxLength?: number;
+  placeholder?: string;
+  description?: string;
 }) {
   const id = useId();
   return (
-    <div className="grid gap-2">
+    <div className="grid content-start gap-2">
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}
@@ -40,8 +44,17 @@ export function Field({
         type={type}
         defaultValue={defaultValue}
         required={required}
+        aria-describedby={description ? `${id}-description` : undefined}
         {...props}
       />
+      {description ? (
+        <p
+          id={`${id}-description`}
+          className="text-xs leading-5 text-muted-foreground"
+        >
+          {description}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -55,9 +68,9 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <Card>
+    <Card className="border border-border/70 shadow-sm">
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle className="text-base">{title}</CardTitle>
         {description ? (
           <CardDescription className="max-w-prose">
             {description}
@@ -101,7 +114,11 @@ export function QueryState({
   error,
   empty,
   onRefresh,
+  emptyTitle = "No records yet",
+  emptyDescription = "New records will appear here when they are created.",
 }: {
+  emptyTitle?: string;
+  emptyDescription?: string;
   loading: boolean;
   error?: string;
   empty?: boolean;
@@ -109,9 +126,16 @@ export function QueryState({
 }) {
   if (loading)
     return (
-      <p role="status" className="text-sm text-muted-foreground">
+      <div
+        role="status"
+        className="flex items-center gap-2 rounded-lg bg-surface-subtle px-4 py-6 text-sm text-muted-foreground"
+      >
+        <Loader2
+          aria-hidden="true"
+          className="size-4 motion-safe:animate-spin"
+        />
         Loading current records…
-      </p>
+      </div>
     );
   if (error)
     return (
@@ -123,7 +147,15 @@ export function QueryState({
       </div>
     );
   return empty ? (
-    <p className="text-sm text-muted-foreground">No records yet.</p>
+    <div className="flex flex-col items-center rounded-xl border border-dashed border-border bg-surface-subtle/40 px-6 py-12 text-center">
+      <div className="mb-4 flex size-12 items-center justify-center rounded-xl border border-border bg-background text-muted-foreground">
+        <Inbox aria-hidden="true" className="size-5" />
+      </div>
+      <p className="text-sm font-semibold">{emptyTitle}</p>
+      <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+        {emptyDescription}
+      </p>
+    </div>
   ) : null;
 }
 function actionDescription(path: string): string {
