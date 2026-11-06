@@ -117,7 +117,7 @@ describe("Digital Twin access resolution", () => {
     );
   });
 
-  it("lands an administrator without operational scope in Administration", () => {
+  it("lands an administrator in the app without granting operational scope", () => {
     assert.equal(
       resolveLandingLocation(
         access({
@@ -128,7 +128,7 @@ describe("Digital Twin access resolution", () => {
           mostRecentlyUsedRegionId: null,
         })
       ),
-      "/admin"
+      "/home"
     );
   });
 
@@ -305,7 +305,7 @@ describe("Digital Twin access resolution", () => {
       roles: ["TENANT_ADMIN"],
       capabilities: ["digital-twin", "expert-gis", "tenant-administration"],
     });
-    assert.equal(resolveLandingLocation(admin), "/tenant-admin");
+    assert.equal(resolveLandingLocation(admin), "/home");
     assert.equal(
       resolveAuthorizedLocation(admin, "/tenant-admin").kind,
       "allowed"
@@ -317,7 +317,7 @@ describe("Digital Twin access resolution", () => {
     assert.equal(resolveAuthorizedLocation(admin, "/workspace").kind, "denied");
     assert.equal(resolveAuthorizedLocation(admin, "/admin").kind, "denied");
   });
-  it("admits tenant-free staff only to administration", () => {
+  it("admits tenant-free staff to app settings and administration without product data", () => {
     const staff = parseAccessContext({
       subject_id: "staff",
       account_id: "staff-account",
@@ -331,7 +331,9 @@ describe("Digital Twin access resolution", () => {
       plan: null,
     });
     assert.equal(staff.organization, null);
-    assert.equal(resolveLandingLocation(staff), "/admin");
+    assert.equal(resolveAuthorizedLocation(staff, "/home").kind, "allowed");
+    assert.equal(resolveAuthorizedLocation(staff, "/settings").kind, "allowed");
+    assert.equal(resolveLandingLocation(staff), "/home");
     assert.equal(resolveAuthorizedLocation(staff, "/admin").kind, "allowed");
     assert.equal(resolveAuthorizedLocation(staff, "/account").kind, "denied");
     assert.equal(
@@ -345,7 +347,7 @@ describe("Digital Twin access resolution", () => {
       accessState: "organization-expired",
       capabilities: ["expired-tenant-access"],
     });
-    assert.equal(resolveLandingLocation(expired), "/tenant-admin");
+    assert.equal(resolveLandingLocation(expired), "/home");
     assert.equal(
       resolveAuthorizedLocation(expired, "/tenant-admin").kind,
       "allowed"

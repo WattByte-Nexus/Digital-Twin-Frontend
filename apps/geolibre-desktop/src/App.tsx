@@ -18,6 +18,7 @@ import { useUndoRedoShortcuts } from "./hooks/useUndoRedoShortcuts";
 import { languageDirection } from "./i18n/languages";
 import { ProductDataWorkspace } from "./product-modes/digital-twin/ProductDataWorkspace";
 import { PublicAccountEntry } from "./product-modes/digital-twin/management/PublicAccountEntry";
+import { ApplicationHome } from "./product-modes/digital-twin/ApplicationHome";
 import { AdministrationLanding } from "./product-modes/digital-twin/AdministrationLanding";
 import { DigitalTwinAccessBoundary } from "./product-modes/digital-twin/DigitalTwinAccessBoundary";
 import { DigitalTwinMapWorkspace } from "./product-modes/digital-twin/ui/DigitalTwinMapWorkspace";
@@ -124,6 +125,7 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
 }
 
 function AuthorizedApplication({ access, navigate, route }: AuthorizedApplicationProps) {
+  if (route.mode === "home") return <ApplicationHome access={access} navigate={navigate} settingsOpen={new URL(route.location, "https://digital-twin.invalid").pathname.toLowerCase() === "/settings"} />;
   const diagnostics =
     new URL(route.location, "https://digital-twin.invalid").pathname === "/diagnostics";
   if (new URL(route.location, "https://digital-twin.invalid").pathname === "/data") return <ProductDataWorkspace access={access} onClose={() => navigate(access.regions[0] ? `/regions/${encodeURIComponent(access.regions[0].id)}/live` : "/account")} />;
@@ -134,7 +136,8 @@ function AuthorizedApplication({ access, navigate, route }: AuthorizedApplicatio
       <AdministrationLanding
         access={access}
         screen={diagnostics ? "diagnostics" : new URL(route.location, "https://digital-twin.invalid").pathname === "/account" ? "account" : "administration"}
-        onOpenProduct={access.roles[0] === "TENANT_USER" && access.regions[0] ? () => navigate(`/regions/${encodeURIComponent(access.regions[0].id)}/live`) : undefined}
+        onOpenSettings={() => navigate("/settings")}
+        onReturnToApp={() => navigate(access.roles[0] === "TENANT_USER" && access.regions[0] ? `/regions/${encodeURIComponent(access.regions[0].id)}/live` : "/home")}
         onOpenAdministration={
           diagnostics && canOpenAdministration ? () => navigate(access.roles[0] === "TENANT_ADMIN" ? "/tenant-admin" : "/admin") : undefined
         }

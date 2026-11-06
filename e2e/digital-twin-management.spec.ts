@@ -1,7 +1,13 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-test("signed-out sign-in link supplies the active frontend origin", async ({ page }) => {
+test("signed-out sign-in link supplies the active frontend origin", async ({
+  page,
+}) => {
   await page.route("**/api/digital-twin/access", (route) =>
-    route.fulfill({ status: 401, json: { detail: "Authentication is required." } })
+    route.fulfill({
+      status: 401,
+      json: { detail: "Authentication is required." },
+    })
   );
   await page.route("**/api/digital-twin/sign-in?**", (route) => {
     const url = new URL(route.request().url());
@@ -9,16 +15,22 @@ test("signed-out sign-in link supplies the active frontend origin", async ({ pag
     return route.fulfill({
       status: permitted ? 200 : 400,
       contentType: "text/plain",
-      body: permitted ? "Identity provider reached" : "Frontend origin is not permitted.",
+      body: permitted
+        ? "Identity provider reached"
+        : "Frontend origin is not permitted.",
     });
   });
   await page.goto("/admin?private=omit-this#fragment");
   const signIn = page.getByRole("link", { name: "Sign in", exact: true });
   await expect(signIn).toBeVisible();
   await signIn.click();
-  await expect(page.getByText("Identity provider reached", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Identity provider reached", { exact: true })
+  ).toBeVisible();
   const destination = new URL(page.url());
-  expect(destination.searchParams.get("frontendOrigin")).toBe(destination.origin);
+  expect(destination.searchParams.get("frontendOrigin")).toBe(
+    destination.origin
+  );
   expect(destination.searchParams.get("returnTo")).toBe("/admin");
   expect(destination.searchParams.has("private")).toBe(false);
   expect(destination.hash).toBe("");
@@ -125,6 +137,9 @@ test("staff invitations retain their intent through explicit email verification"
   await expect(
     page.getByRole("heading", { name: "Administration", exact: true })
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Invite staff member", exact: true })
+    .click();
   await page.getByLabel("First name", { exact: true }).fill("Jamie");
   await page.getByLabel("Last name", { exact: true }).fill("Reviewer");
   await page.getByLabel("Email", { exact: true }).fill("jamie@example.test");
@@ -226,6 +241,13 @@ test("expired tenant administrators load only extension recovery and cannot moun
     return route.fulfill({ json: { items: [], next_cursor: null } });
   });
   await page.goto("/");
+  await expect(page).toHaveURL(/home$/);
+  await page
+    .getByRole("button", { name: "Open settings", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Open administration", exact: true })
+    .click();
   await expect(page).toHaveURL(/tenant-admin$/);
   await expect(
     page.getByText("Organization access has expired", { exact: true })
@@ -266,6 +288,9 @@ test("tenant user invitations have no role, email-edit, password or feature over
     });
   });
   await page.goto("/tenant-admin");
+  await page
+    .getByRole("button", { name: "Invite product user", exact: true })
+    .click();
   await page.getByLabel("First name", { exact: true }).fill("Pat");
   await page.getByLabel("Last name", { exact: true }).fill("User");
   await page.getByLabel("Email", { exact: true }).fill("pat@example.test");
@@ -322,10 +347,17 @@ test("public applications submit without mounting protected workspaces", async (
 test("activation removes invitation secrets from the address bar and submits them only to activation", async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem("geolibre.digital-twin.api-url", "https://untrusted-engine.example"));
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      "geolibre.digital-twin.api-url",
+      "https://untrusted-engine.example"
+    )
+  );
   let payload: unknown;
   await page.route("**/api/digital-twin/public/activate", (route) => {
-    expect(new URL(route.request().url()).origin).toBe(new URL(page.url()).origin);
+    expect(new URL(route.request().url()).origin).toBe(
+      new URL(page.url()).origin
+    );
     payload = route.request().postDataJSON();
     return route.fulfill({ json: { activated: true } });
   });
@@ -649,6 +681,14 @@ test("administration remains scrollable on mobile with keyboard-visible focus an
   ).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(
+    page.getByRole("button", { name: "Open sidebar", exact: true })
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("button", { name: "Settings", exact: true })
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(
     page.getByRole("button", { name: "Dark mode", exact: true })
   ).toBeFocused();
   await expect(
@@ -664,6 +704,9 @@ test("administration remains scrollable on mobile with keyboard-visible focus an
     fullPage: true,
     animations: "disabled",
   });
+  await page
+    .getByRole("button", { name: "Invite staff member", exact: true })
+    .click();
   const send = page.getByRole("button", {
     name: "Send invitation",
     exact: true,
@@ -757,5 +800,182 @@ test("a product account with create authority can author its first owned region 
   await expect(page.locator(".maplibregl-canvas")).toHaveCount(0);
   await expect(
     page.getByRole("tab", { name: "Staff", exact: true })
+  ).toHaveCount(0);
+});
+
+test("administrators enter the app, open administration through Settings, and return to the app", async ({
+  page,
+}) => {
+  await session(page);
+  const productReads: string[] = [];
+  await page.route("**/api/v1/**", (route) => {
+    productReads.push(route.request().url());
+    return route.fulfill({ status: 403, json: {} });
+  });
+  await page.route("**/api/digital-twin/management/staff", (route) =>
+    route.fulfill({ json: { items: [account], next_cursor: null } })
+  );
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(
+    page.getByRole("heading", { name: "Your workspace", exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Administration", exact: true })
+  ).toHaveCount(0);
+  await expect(page.locator(".maplibregl-canvas")).toHaveCount(0);
+  const homeAudit = await new AxeBuilder({ page }).analyze();
+  expect(
+    homeAudit.violations.filter((violation) =>
+      ["serious", "critical"].includes(violation.impact ?? "")
+    )
+  ).toEqual([]);
+  await page.screenshot({
+    path: "/tmp/admin-app-home-redesign.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page
+    .getByRole("button", { name: "Open settings", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page
+    .getByRole("button", { name: "Open administration", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(
+    page.getByRole("heading", { name: "Administration", exact: true })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to app", exact: true }).click();
+  await expect(page).toHaveURL(/\/home$/);
+  expect(productReads).toEqual([]);
+});
+
+test("organization workspace separates searchable records from the creation form", async ({
+  page,
+}) => {
+  await session(page);
+  await page.route("**/api/digital-twin/management/staff", (route) =>
+    route.fulfill({ json: { items: [account], next_cursor: null } })
+  );
+  await page.route("**/api/digital-twin/management/organizations", (route) =>
+    route.fulfill({ json: { items: [], next_cursor: null } })
+  );
+  await page.route("**/api/digital-twin/management/plans", (route) =>
+    route.fulfill({ json: { items: [standard], next_cursor: null } })
+  );
+  await page.goto("/admin");
+  await page.getByRole("tab", { name: "Organizations", exact: true }).click();
+  await expect(
+    page.getByText("No organizations yet", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Organization name", { exact: true })
+  ).toHaveCount(0);
+  const audit = await new AxeBuilder({ page }).analyze();
+  expect(
+    audit.violations.filter((violation) =>
+      ["serious", "critical"].includes(violation.impact ?? "")
+    )
+  ).toEqual([]);
+  await page.screenshot({
+    path: "/tmp/admin-organizations-redesign.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page
+    .getByRole("button", { name: "Create organization", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Organization name", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "First administrator", exact: true })
+  ).toBeVisible();
+  await page.screenshot({
+    path: "/tmp/admin-create-organization-redesign.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "Dark mode", exact: true }).click();
+  const durationInput = page.getByLabel("Access duration in days", {
+    exact: true,
+  });
+  const cardForeground = await durationInput.evaluate(
+    (element) => getComputedStyle(element.closest('[data-slot="card"]')!).color
+  );
+  await expect(durationInput).toHaveCSS("color", cardForeground);
+  const darkAudit = await new AxeBuilder({ page }).analyze();
+  expect(
+    darkAudit.violations.filter((violation) =>
+      ["serious", "critical"].includes(violation.impact ?? "")
+    )
+  ).toEqual([]);
+  await page.screenshot({
+    path: "/tmp/admin-create-organization-dark-redesign.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.getByRole("button", { name: "Open sidebar", exact: true }).click();
+  await expect(
+    page.getByRole("tab", { name: "Plans", exact: true })
+  ).toBeVisible();
+  await expect(page.locator('[data-mobile="true"]')).toHaveClass(/dark/);
+  await page.getByRole("tab", { name: "Plans", exact: true }).click();
+  await expect(page.locator('[data-mobile="true"]')).toHaveCount(0);
+});
+
+test("organization records can be searched and opened without exposing the creation form", async ({
+  page,
+}) => {
+  await session(page);
+  const organizations = ["North Grid", "South Grid"].map((name, index) => ({
+    id: `organization-${index}`,
+    name,
+    plan_id: standard.id,
+    enabled: true,
+    effective_at: "2026-11-01T00:00:00Z",
+    expires_at: "2027-11-01T00:00:00Z",
+    region_ids: [`region-${index}`],
+    version: 1,
+    administrator: {
+      ...account,
+      id: `tenant-admin-${index}`,
+      role: "TENANT_ADMIN",
+      organization_id: `organization-${index}`,
+    },
+  }));
+  await page.route("**/api/digital-twin/management/staff", (route) =>
+    route.fulfill({ json: { items: [account], next_cursor: null } })
+  );
+  await page.route("**/api/digital-twin/management/organizations", (route) =>
+    route.fulfill({ json: { items: organizations, next_cursor: null } })
+  );
+  await page.route("**/api/digital-twin/management/plans", (route) =>
+    route.fulfill({ json: { items: [standard], next_cursor: null } })
+  );
+  await page.goto("/admin");
+  await page.getByRole("tab", { name: "Organizations", exact: true }).click();
+  await expect(page.getByRole("cell", { name: /^North Grid/ })).toBeVisible();
+  await expect(page.getByRole("cell", { name: /^South Grid/ })).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "Search organizations", exact: true })
+    .fill("North");
+  await expect(page.getByRole("cell", { name: /^South Grid/ })).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Manage North Grid", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Edit organization", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Organization name", { exact: true })
+  ).toHaveValue("North Grid");
+  await expect(
+    page.getByRole("button", {
+      name: "Create organization and invite administrator",
+      exact: true,
+    })
   ).toHaveCount(0);
 });

@@ -54,7 +54,7 @@ async function installDataMocks(page: Page, admin = true, adminOnly = false) {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route("**/api/digital-twin/management/staff", route => route.fulfill({json: {items: [], next_cursor: null}}));
   await page.goto(adminOnly ? "/admin" : process.env.DIGITAL_TWIN_E2E_URL ?? "/");
-  await expect(page.getByRole("button", { name: adminOnly ? "Send invitation" : "Data", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: adminOnly ? "Invite staff member" : "Data", exact: true })).toBeVisible();
   return state;
 }
 

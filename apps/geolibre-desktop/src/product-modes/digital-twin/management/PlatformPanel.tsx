@@ -1,4 +1,21 @@
-import { Badge, Button, Checkbox, Label, Select } from "@geolibre/ui";
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Input,
+  Label,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@geolibre/ui";
+import { ArrowUpRight, Building2, Plus, Search, X } from "lucide-react";
 import { useId, useState } from "react";
 import {
   accountStatus,
@@ -495,86 +512,264 @@ export function OrganizationsPanel({
   run: RunAction;
   busy: boolean;
 }) {
+  const [creationRevision, setCreationRevision] = useState<number | null>(null);
+  const creating = creationRevision === revision;
+  const setCreating = (open: boolean) =>
+    setCreationRevision(open ? revision : null);
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string>();
   const organizations = useManagementQuery<Collection<ManagedOrganization>>(
     "/organizations",
     revision
   );
   const plans = useManagementQuery<Collection<Plan>>("/plans", revision);
+  const records = organizations.data?.items ?? [];
+  const visible = records.filter((organization) =>
+    organization.name.toLowerCase().includes(search.trim().toLowerCase())
+  );
+  const selected = records.find(
+    (organization) => organization.id === selectedId
+  );
   const blocked =
     busy ||
     organizations.loading ||
     plans.loading ||
     Boolean(organizations.error || plans.error);
   return (
-    <div className="space-y-6">
-      <QueryState
-        {...organizations}
-        empty={!organizations.data?.items.length}
-        onRefresh={refresh}
-      />
-      <QueryState {...plans} onRefresh={refresh} />
-      {organizations.data?.items.map((organization) => (
-        <OrganizationRow
-          key={`${organization.id}-${organization.version}`}
-          organization={organization}
-          plans={plans.data?.items ?? []}
-          run={run}
-          busy={blocked}
-        />
-      ))}
-      <Section
-        title="Create organization"
-        description="Creates an organization and an invitation for its first administrator. Administrators use a separate account from product users."
-      >
-        <form
-          key={revision}
-          className="grid gap-4 sm:grid-cols-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const values = formValues(form);
-            void run("/organizations", {
-              name: values.name,
-              plan_id: values.plan_id,
-              duration_days: Number(values.duration_days),
-              region_ids: String(values.region_ids)
-                .split(",")
-                .map((value) => value.trim())
-                .filter(Boolean),
-              initial_admin: {
-                first_name: values.first_name,
-                last_name: values.last_name,
-                email: values.email,
-              },
-            }).then((ok) => {
-              if (ok) form.reset();
-            });
-          }}
+    <Collapsible
+      open={creating}
+      onOpenChange={setCreating}
+      className="space-y-5"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full sm:max-w-xs">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            aria-label="Search organizations"
+            placeholder="Search organizations…"
+            className="min-h-11 pl-9"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+        <CollapsibleTrigger asChild>
+          <Button className="min-h-11 gap-2" disabled={blocked}>
+            {creating ? (
+              <X aria-hidden="true" className="size-4" />
+            ) : (
+              <Plus aria-hidden="true" className="size-4" />
+            )}
+            {creating ? "Close new organization" : "Create organization"}
+          </Button>
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent className="space-y-5">
+        <Section
+          title="Create organization"
+          description="Set up the organization, then invite the person who will manage its users."
         >
-          <Field label="Organization name" name="name" />
-          <PlanSelect plans={plans.data?.items ?? []} />
-          <Field
-            label="Access duration in days"
-            name="duration_days"
-            type="number"
-            min={1}
-            defaultValue={365}
+          <form
+            key={revision}
+            className="max-w-3xl space-y-7"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = event.currentTarget;
+              const values = formValues(form);
+              void run("/organizations", {
+                name: values.name,
+                plan_id: values.plan_id,
+                duration_days: Number(values.duration_days),
+                region_ids: String(values.region_ids)
+                  .split(",")
+                  .map((value) => value.trim())
+                  .filter(Boolean),
+                initial_admin: {
+                  first_name: values.first_name,
+                  last_name: values.last_name,
+                  email: values.email,
+                },
+              }).then((ok) => {
+                if (ok) {
+                  form.reset();
+                  setCreating(false);
+                }
+              });
+            }}
+          >
+            <fieldset className="grid gap-4 sm:grid-cols-2">
+              <legend className="mb-4 text-sm font-semibold">
+                Organization details
+              </legend>
+              <Field
+                label="Organization name"
+                name="name"
+                placeholder="e.g. Mountain West Utilities"
+              />
+              <PlanSelect plans={plans.data?.items ?? []} />
+              <Field
+                label="Access duration in days"
+                name="duration_days"
+                type="number"
+                min={1}
+                defaultValue={365}
+              />
+              <Field
+                label="Authorized region IDs, separated by commas"
+                name="region_ids"
+                required={false}
+                description="Optional. Assign regions now or update access later."
+              />
+            </fieldset>
+            <fieldset className="grid gap-4 border-t border-border pt-6 sm:grid-cols-2">
+              <legend className="mb-2 pr-3 text-sm font-semibold">
+                First administrator
+              </legend>
+              <Field label="Administrator first name" name="first_name" />
+              <Field label="Administrator last name" name="last_name" />
+              <div className="sm:col-span-2">
+                <Field
+                  label="Administrator email"
+                  name="email"
+                  type="email"
+                  description="We'll email an invitation so they can set up their account securely."
+                />
+              </div>
+            </fieldset>
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
+              <Button type="submit" disabled={blocked}>
+                Create organization and invite administrator
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => setCreating(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Section>
+      </CollapsibleContent>
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+        <div className="flex items-center gap-2 border-b border-border px-5 py-4">
+          <Building2
+            aria-hidden="true"
+            className="size-4 text-muted-foreground"
           />
-          <Field
-            label="Authorized region IDs, separated by commas"
-            name="region_ids"
-            required={false}
+          <h3 className="text-sm font-semibold">All organizations</h3>
+          <Badge variant="secondary" className="ml-1 tabular-nums">
+            {records.length}
+          </Badge>
+        </div>
+        <div className={!visible.length ? "p-5" : ""}>
+          <QueryState
+            {...organizations}
+            empty={!records.length}
+            emptyTitle="No organizations yet"
+            emptyDescription="Create your first organization to assign a plan and invite its administrator."
+            onRefresh={refresh}
           />
-          <Field label="Administrator first name" name="first_name" />
-          <Field label="Administrator last name" name="last_name" />
-          <Field label="Administrator email" name="email" type="email" />
-          <div className="sm:col-span-2">
-            <Button type="submit" disabled={blocked}>
-              Create organization and invite administrator
+          <QueryState {...plans} onRefresh={refresh} />
+          {visible.length ? (
+            <Table className="[&_td]:py-4 [&_th]:h-11 [&_th]:bg-surface-subtle/60">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-5">Organization</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Access ends</TableHead>
+                  <TableHead>Regions</TableHead>
+                  <TableHead className="text-right pr-5">Manage</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visible.map((organization) => (
+                  <TableRow key={organization.id}>
+                    <TableCell className="pl-5">
+                      <p className="font-medium">{organization.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {organization.administrator?.email ??
+                          "Administrator pending"}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      {plans.data?.items.find(
+                        (plan) => plan.id === organization.plan_id
+                      )?.name ?? organization.plan_id}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={organization.enabled ? "secondary" : "outline"}
+                      >
+                        {organization.enabled ? "Enabled" : "Disabled"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums">
+                      {new Date(organization.expires_at).toLocaleDateString(
+                        undefined,
+                        { month: "short", day: "numeric", year: "numeric" }
+                      )}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {organization.region_ids.length}
+                    </TableCell>
+                    <TableCell className="pr-5 text-right">
+                      <Button
+                        variant="ghost"
+                        className="min-h-11 gap-2"
+                        onClick={() =>
+                          setSelectedId(
+                            selectedId === organization.id
+                              ? undefined
+                              : organization.id
+                          )
+                        }
+                        aria-expanded={selectedId === organization.id}
+                        aria-label={`Manage ${organization.name}`}
+                      >
+                        Manage
+                        <ArrowUpRight aria-hidden="true" className="size-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : records.length && !organizations.loading ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No organizations match “{search}”.{" "}
+              <Button variant="link" onClick={() => setSearch("")}>
+                Clear search
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      {selected ? (
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              className="gap-2"
+              onClick={() => setSelectedId(undefined)}
+            >
+              <X aria-hidden="true" className="size-4" />
+              Close organization details
             </Button>
           </div>
-        </form>
-      </Section>
-    </div>
+          <OrganizationRow
+            key={`${selected.id}-${selected.version}`}
+            organization={selected}
+            plans={plans.data?.items ?? []}
+            run={run}
+            busy={blocked}
+          />
+        </div>
+      ) : null}
+    </Collapsible>
   );
 }
