@@ -79,6 +79,7 @@ function signInLocation(): string {
   // Return paths contain stable route ids, never labels or cached content. Query
   // state is omitted at the unauthenticated boundary to avoid forwarding
   // arbitrary or stale values to the identity provider.
+  url.searchParams.set("frontendOrigin", window.location.origin);
   url.searchParams.set("returnTo", window.location.pathname);
   return url.href;
 }
