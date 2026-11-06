@@ -31,6 +31,7 @@ export interface DigitalTwinMapDisplaySettings {
   satellite: boolean;
   elevation: boolean;
   pointClouds: boolean;
+  pointCloudView: "full" | "crowns";
   assetTrees: boolean;
   placeLabels: boolean;
   roads: boolean;
@@ -48,6 +49,7 @@ export const DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS: DigitalTwinMapDisplaySet
     satellite: true,
     elevation: true,
     pointClouds: false,
+    pointCloudView: "full",
     assetTrees: true,
     placeLabels: true,
     roads: true,
@@ -71,7 +73,7 @@ export interface DigitalTwinMapToolbarProps {
 }
 
 const contentClassName =
-  "min-w-64 rounded-xl border-border bg-popover p-1.5 shadow-2xl";
+  "surface-glass-overlay min-w-64 rounded-xl border-border p-1.5 motion-reduce:animate-none";
 const labelClassName =
   "pb-1 pt-2 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground";
 const itemClassName = "min-h-9 rounded-lg";
@@ -90,7 +92,7 @@ export function DigitalTwinMapToolbar({
     theme
   )}`;
 
-  const set = (key: keyof DigitalTwinMapDisplaySettings, checked: boolean) => {
+  const set = (key: Exclude<keyof DigitalTwinMapDisplaySettings, "pointCloudView">, checked: boolean) => {
     onValueChange({ ...value, [key]: checked });
   };
 
@@ -132,6 +134,14 @@ export function DigitalTwinMapToolbar({
             <Cloud />
             Point clouds
           </MenubarCheckboxItem>
+          <MenubarSeparator />
+          <MenubarLabel className={labelClassName}>Point-cloud view</MenubarLabel>
+          <MenubarRadioGroup value={value.pointCloudView} onValueChange={(view) => {
+            if (view === "full" || view === "crowns") onValueChange({ ...value, pointCloudView: view });
+          }}>
+            <MenubarRadioItem className="min-h-11 rounded-lg" disabled={!value.pointClouds} value="full">Full scan</MenubarRadioItem>
+            <MenubarRadioItem className="min-h-11 rounded-lg" disabled={!value.pointClouds} value="crowns">Tree crowns</MenubarRadioItem>
+          </MenubarRadioGroup>
         </MenubarContent>
       </MenubarMenu>
 

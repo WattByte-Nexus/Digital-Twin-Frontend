@@ -23,6 +23,7 @@ export const DIGITAL_TWIN_POINT_CLOUD_SURFACE_GROUP_ID =
 
 export interface DigitalTwinMapPointCloud {
   dataset: DigitalTwinReadyPointCloudDataset;
+  view?: "full" | "crowns";
   onError: (error: Error) => void;
   onReady?: () => void;
 }
@@ -86,12 +87,13 @@ export function createDigitalTwinMapSurfaceLayers({
     });
   }
 
-  if (pointCloud && pointCloud.dataset.pointCount > 0) {
+  if (pointCloud && (pointCloud.view !== "crowns" || pointCloud.dataset.pointCount > 0)) {
     groups.push({
       id: DIGITAL_TWIN_POINT_CLOUD_SURFACE_GROUP_ID,
       surface: DIGITAL_TWIN_SHARED_SURFACE,
       layers: [
         createDigitalTwinPointCloudLayer(pointCloud.dataset, {
+          view: pointCloud.view,
           onError: pointCloud.onError,
           onReady: pointCloud.onReady,
         }),

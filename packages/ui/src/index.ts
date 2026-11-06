@@ -86,6 +86,7 @@ export {
   tabsListVariants,
 } from "./components/tabs";
 export { Input } from "./components/input";
+export { Progress } from "./components/progress";
 export {
   FilterButton,
   FilterChip,
@@ -138,6 +139,8 @@ export { Slider } from "./components/slider";
 export { Separator } from "./components/separator";
 export { Toggle, toggleVariants } from "./components/toggle";
 export { ToggleGroup, ToggleGroupItem } from "./components/toggle-group";
+export { SettingRow, SettingsCard } from "./components/settings-section";
+export { DigitalTwinMapSettings } from "./components/digital-twin-map-settings";
 export {
   Tooltip,
   TooltipContent,

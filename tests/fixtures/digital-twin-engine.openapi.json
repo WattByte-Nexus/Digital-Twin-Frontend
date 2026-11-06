@@ -41,6 +41,400 @@
         "title": "AcceptedScenarioSimulationRun",
         "type": "object"
       },
+      "AccessExtension": {
+        "additionalProperties": false,
+        "description": "Persist a trial-user or ordinary-organization renewal request.",
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "approved_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Expires At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "duration_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Days"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "TRIAL",
+              "ORGANIZATION"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "organization_id": {
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "previous_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Expires At"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Expires At"
+          },
+          "reviewer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Id"
+          },
+          "status": {
+            "default": "PENDING",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "account_id",
+          "organization_id",
+          "created_at"
+        ],
+        "title": "AccessExtension",
+        "type": "object"
+      },
+      "AccessPlan": {
+        "additionalProperties": false,
+        "description": "Current product entitlements and cumulative per-user allowances.",
+        "properties": {
+          "cpu_hours": {
+            "default": 20,
+            "maximum": 1000000,
+            "minimum": 0,
+            "title": "Cpu Hours",
+            "type": "number"
+          },
+          "deletable": {
+            "title": "Deletable",
+            "type": "boolean"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "TRIAL",
+              "STANDARD",
+              "CUSTOM"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "storage_bytes": {
+            "default": 500000000,
+            "minimum": 0,
+            "title": "Storage Bytes",
+            "type": "integer"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "features",
+          "deletable"
+        ],
+        "title": "AccessPlan",
+        "type": "object"
+      },
+      "AccountRead": {
+        "additionalProperties": false,
+        "description": "Public management account DTO with separate durable invitation delivery.",
+        "properties": {
+          "activation_state": {
+            "default": "invited",
+            "enum": [
+              "invited",
+              "active"
+            ],
+            "title": "Activation State",
+            "type": "string"
+          },
+          "department_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Id"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "invitation_delivery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InvitationDelivery"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "organization_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Id"
+          },
+          "role": {
+            "$ref": "#/components/schemas/AccountRole"
+          },
+          "suspended": {
+            "default": false,
+            "title": "Suspended",
+            "type": "boolean"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "email",
+          "id",
+          "role",
+          "invitation_delivery"
+        ],
+        "title": "AccountRead",
+        "type": "object"
+      },
+      "AccountRole": {
+        "description": "The five fixed IPSS roles; tenant administrators cannot use the product.",
+        "enum": [
+          "PLATFORM_SUPER_ADMIN",
+          "WEB_TRIAL_ADMIN",
+          "DESKTOP_TRIAL_ADMIN",
+          "TENANT_ADMIN",
+          "TENANT_USER"
+        ],
+        "title": "AccountRole",
+        "type": "string"
+      },
+      "AccountStateWrite": {
+        "additionalProperties": false,
+        "description": "Suspend or reactivate without changing invitation completion.",
+        "properties": {
+          "suspended": {
+            "title": "Suspended",
+            "type": "boolean"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "suspended"
+        ],
+        "title": "AccountStateWrite",
+        "type": "object"
+      },
+      "ActionInput": {
+        "additionalProperties": false,
+        "description": "Bind verification to the exact pending management method and pathname.",
+        "properties": {
+          "action": {
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "ActionInput",
+        "type": "object"
+      },
+      "ActivationInput": {
+        "additionalProperties": false,
+        "description": "Carry the emailed invitation and recipient-entered password transiently.",
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 14,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "ActivationInput",
+        "type": "object"
+      },
+      "ApplicationDecisionInput": {
+        "additionalProperties": false,
+        "description": "Finalize an owned review and its applicant-facing response.",
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "message": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "approved",
+          "message"
+        ],
+        "title": "ApplicationDecisionInput",
+        "type": "object"
+      },
       "AssetPatch": {
         "additionalProperties": false,
         "description": "Sparse editable fields for either public asset kind.",
@@ -234,6 +628,36 @@
         "title": "BoundingBox",
         "type": "object"
       },
+      "CodeInput": {
+        "additionalProperties": false,
+        "description": "Consume a six-digit challenge in the current authenticated session.",
+        "properties": {
+          "action": {
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "challenge_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Challenge Id",
+            "type": "string"
+          },
+          "code": {
+            "pattern": "^[0-9]{6}$",
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "challenge_id",
+          "code"
+        ],
+        "title": "CodeInput",
+        "type": "object"
+      },
       "ConfiguredDataSource": {
         "additionalProperties": false,
         "description": "Summarize one enabled regional source without private configuration.",
@@ -301,6 +725,137 @@
         "title": "Coordinate",
         "type": "object"
       },
+      "Department": {
+        "additionalProperties": false,
+        "description": "Organization-owned label with normalized uniqueness enforced in SQL.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "organization_id": {
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "organization_id",
+          "name"
+        ],
+        "title": "Department",
+        "type": "object"
+      },
+      "DepartmentCreate": {
+        "additionalProperties": false,
+        "description": "Create a normalized unique department name in the current organization.",
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DepartmentCreate",
+        "type": "object"
+      },
+      "DepartmentWrite": {
+        "additionalProperties": false,
+        "description": "Rename a department without replacing its stable user assignments.",
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "DepartmentWrite",
+        "type": "object"
+      },
+      "DirectTrialInput": {
+        "additionalProperties": false,
+        "description": "Invite a web trial directly with the same provisioning invariants.",
+        "properties": {
+          "duration_days": {
+            "maximum": 3650,
+            "minimum": 1,
+            "title": "Duration Days",
+            "type": "integer"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "organization_name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Organization Name",
+            "type": "string"
+          },
+          "reason": {
+            "default": "Direct web trial",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "website": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Website",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "first_name",
+          "last_name",
+          "organization_name",
+          "duration_days"
+        ],
+        "title": "DirectTrialInput",
+        "type": "object"
+      },
       "EarthEngineMetadata": {
         "additionalProperties": false,
         "description": "Expose selected static layers and startup readiness without cache refs.",
@@ -346,6 +901,256 @@
           "ready"
         ],
         "title": "EarthEngineMetadata",
+        "type": "object"
+      },
+      "ExtensionDecisionInput": {
+        "additionalProperties": false,
+        "description": "Review one extension without changing any features, usage, or state.",
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "expected_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Expires At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "message": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Message",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "approved"
+        ],
+        "title": "ExtensionDecisionInput",
+        "type": "object"
+      },
+      "ExtensionPage": {
+        "additionalProperties": false,
+        "description": "Expose scoped extension history without other tenant account details.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExtensionRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ExtensionPage",
+        "type": "object"
+      },
+      "ExtensionRead": {
+        "additionalProperties": false,
+        "description": "Include the authoritative current deadline for a reviewed decision.",
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "approved_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Expires At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Expires At"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "duration_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Days"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "TRIAL",
+              "ORGANIZATION"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "organization_id": {
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "previous_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Expires At"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Expires At"
+          },
+          "reviewer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Id"
+          },
+          "status": {
+            "default": "PENDING",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "account_id",
+          "organization_id",
+          "created_at",
+          "current_expires_at"
+        ],
+        "title": "ExtensionRead",
+        "type": "object"
+      },
+      "FeatureWrite": {
+        "additionalProperties": false,
+        "description": "Change product availability against an explicitly reviewed revision.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "enabled"
+        ],
+        "title": "FeatureWrite",
         "type": "object"
       },
       "FieldError": {
@@ -537,6 +1342,83 @@
           "lon"
         ],
         "title": "IgnitionPoint",
+        "type": "object"
+      },
+      "InvitationCreate": {
+        "additionalProperties": false,
+        "description": "Invitation target; credentials are owned by Cognito, never this API.",
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "email"
+        ],
+        "title": "InvitationCreate",
+        "type": "object"
+      },
+      "InvitationDelivery": {
+        "additionalProperties": false,
+        "description": "Safe current invitation delivery state; never includes mail/provider payloads.",
+        "properties": {
+          "attempts": {
+            "minimum": 0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "provider_unavailable",
+                  "delivery_failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "processing",
+              "delivered",
+              "failed",
+              "expired",
+              "setup-in-progress",
+              "not-current"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "attempts",
+          "failure_code"
+        ],
+        "title": "InvitationDelivery",
         "type": "object"
       },
       "LandCoverBreakdownEntry": {
@@ -844,6 +1726,198 @@
         "title": "MapLayerReading",
         "type": "object"
       },
+      "Organization": {
+        "additionalProperties": false,
+        "description": "Tenant validity and live plan binding; trials start on activation.",
+        "properties": {
+          "duration_days": {
+            "default": 365,
+            "maximum": 3650,
+            "minimum": 1,
+            "title": "Duration Days",
+            "type": "integer"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_trial": {
+            "default": false,
+            "title": "Is Trial",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "plan_id",
+          "effective_at",
+          "expires_at"
+        ],
+        "title": "Organization",
+        "type": "object"
+      },
+      "OrganizationCreate": {
+        "additionalProperties": false,
+        "description": "Create a paid organization, initial administrator and ownership together.",
+        "properties": {
+          "duration_days": {
+            "default": 365,
+            "maximum": 3650,
+            "minimum": 1,
+            "title": "Duration Days",
+            "type": "integer"
+          },
+          "initial_admin": {
+            "$ref": "#/components/schemas/InvitationCreate"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "region_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Region Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "plan_id",
+          "initial_admin"
+        ],
+        "title": "OrganizationCreate",
+        "type": "object"
+      },
+      "OrganizationExtensionInput": {
+        "additionalProperties": false,
+        "description": "Request ordinary organization access renewal, including after expiry.",
+        "properties": {
+          "duration_days": {
+            "default": 365,
+            "maximum": 36500,
+            "minimum": 1,
+            "title": "Duration Days",
+            "type": "integer"
+          },
+          "message": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "title": "OrganizationExtensionInput",
+        "type": "object"
+      },
+      "OrganizationWrite": {
+        "additionalProperties": false,
+        "description": "Edit organization validity, plan and exact owned region selection.",
+        "properties": {
+          "effective_at": {
+            "format": "date-time",
+            "title": "Effective At",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "region_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Region Ids",
+            "type": "array"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "name",
+          "plan_id",
+          "enabled",
+          "effective_at",
+          "expires_at",
+          "region_ids"
+        ],
+        "title": "OrganizationWrite",
+        "type": "object"
+      },
       "Page_Region_": {
         "additionalProperties": false,
         "properties": {
@@ -958,6 +2032,118 @@
           "next_cursor"
         ],
         "title": "Page[WildfireSimulationRun]",
+        "type": "object"
+      },
+      "PersonWrite": {
+        "additionalProperties": false,
+        "description": "Update a human name against an exact account revision.",
+        "properties": {
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "version"
+        ],
+        "title": "PersonWrite",
+        "type": "object"
+      },
+      "PlanCreate": {
+        "additionalProperties": false,
+        "description": "Create an explicit custom plan from the live product catalog.",
+        "properties": {
+          "cpu_hours": {
+            "default": 20,
+            "maximum": 1000000,
+            "minimum": 0,
+            "title": "Cpu Hours",
+            "type": "number"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "storage_bytes": {
+            "default": 500000000,
+            "minimum": 0,
+            "title": "Storage Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "features"
+        ],
+        "title": "PlanCreate",
+        "type": "object"
+      },
+      "PlanWrite": {
+        "additionalProperties": false,
+        "description": "Edit an exact plan revision; fixed plan feature rules stay immutable.",
+        "properties": {
+          "cpu_hours": {
+            "default": 20,
+            "maximum": 1000000,
+            "minimum": 0,
+            "title": "Cpu Hours",
+            "type": "number"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "storage_bytes": {
+            "default": 500000000,
+            "minimum": 0,
+            "title": "Storage Bytes",
+            "type": "integer"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "features",
+          "version"
+        ],
+        "title": "PlanWrite",
         "type": "object"
       },
       "PointCloudDatasetCollection": {
@@ -2179,6 +3365,35 @@
         "title": "ProblemDetails",
         "type": "object"
       },
+      "ProvisionInput": {
+        "additionalProperties": false,
+        "description": "Confirm an approved application's inherited Trial plan invitation.",
+        "properties": {
+          "confirmed": {
+            "const": true,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "duration_days": {
+            "maximum": 3650,
+            "minimum": 1,
+            "title": "Duration Days",
+            "type": "integer"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "duration_days",
+          "confirmed"
+        ],
+        "title": "ProvisionInput",
+        "type": "object"
+      },
       "Region": {
         "additionalProperties": false,
         "description": "Describe one geographic region managed by the catalog.\n\nThe complete contract crosses state, job, and response boundaries. Public\ncreate requests supply only editable content; the API allocates\n``region_id`` before passing this complete contract to the catalog. The\ncatalog remains authoritative for lifecycle transitions.\n\nAttributes:\n    region_id: Stable identifier used by state, jobs, and simulation runs.\n    name: Human-readable region name shown to API clients.\n    bounds: WGS84 extent used for spatial inventory and map queries.\n    status: Current draft or published lifecycle state.\n    published_revision_id: Immutable revision currently published for\n        simulation use, or ``None`` while the region remains a draft.",
@@ -3019,6 +4234,95 @@
         "title": "SimulationTickRef",
         "type": "object"
       },
+      "StaffCreate": {
+        "additionalProperties": false,
+        "description": "Invite one staff account into a fixed management role.",
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/AccountRole"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "email",
+          "role"
+        ],
+        "title": "StaffCreate",
+        "type": "object"
+      },
+      "StaffWrite": {
+        "additionalProperties": false,
+        "description": "Edit a staff name and singular management role against a revision.",
+        "properties": {
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/AccountRole"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "version",
+          "role"
+        ],
+        "title": "StaffWrite",
+        "type": "object"
+      },
+      "StartUpload": {
+        "additionalProperties": false,
+        "description": "Start intake with file metadata only.",
+        "properties": {
+          "action": {
+            "const": "start",
+            "title": "Action",
+            "type": "string"
+          },
+          "capture": {
+            "$ref": "#/components/schemas/UploadCapture"
+          }
+        },
+        "required": [
+          "action",
+          "capture"
+        ],
+        "title": "StartUpload",
+        "type": "object"
+      },
       "SyntheticWindScenario": {
         "additionalProperties": false,
         "description": "Describe one immutable, bounded wind override for a future simulation.\n\nAttributes:\n    scenario_id: Stable public identity allocated by the API.\n    name: Human-readable scenario name supplied by the user.\n    region_id: Published region containing the override bounds.\n    bounds: Axis-aligned WGS84 extent selected by the user.\n    base_weather_version: Exact weather version on which the override rests.\n    wind_speed: Submitted and canonical wind-speed values.\n    wind_direction: Submitted and canonical wind-direction values.\n    duration_hours: Simulated interval for which the override applies.\n    status: Current immutable scenario lifecycle state.",
@@ -3073,6 +4377,100 @@
           "duration_hours"
         ],
         "title": "SyntheticWindScenario",
+        "type": "object"
+      },
+      "TenantUserCreate": {
+        "additionalProperties": false,
+        "description": "Invite an ordinary user into the acting administrator's organization.",
+        "properties": {
+          "department_id": {
+            "title": "Department Id",
+            "type": "string"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "email",
+          "department_id"
+        ],
+        "title": "TenantUserCreate",
+        "type": "object"
+      },
+      "TenantUserWrite": {
+        "additionalProperties": false,
+        "description": "Edit ordinary user identity labels without promotion or email mutation.",
+        "properties": {
+          "department_id": {
+            "title": "Department Id",
+            "type": "string"
+          },
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "version",
+          "department_id"
+        ],
+        "title": "TenantUserWrite",
+        "type": "object"
+      },
+      "TransferInput": {
+        "additionalProperties": false,
+        "description": "Select the active web reviewer receiving an undecided application.",
+        "properties": {
+          "owner_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "owner_id"
+        ],
+        "title": "TransferInput",
         "type": "object"
       },
       "TreeAssetCreate": {
@@ -3186,6 +4584,553 @@
         "title": "TreeSegmentation",
         "type": "object"
       },
+      "TrialApplication": {
+        "additionalProperties": false,
+        "description": "Persist the WEB application review state and explicit provisioning link.",
+        "properties": {
+          "claimed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "cycle": {
+            "default": 0,
+            "title": "Cycle",
+            "type": "integer"
+          },
+          "decision_message": {
+            "default": "",
+            "title": "Decision Message",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "title": "First Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_name": {
+            "title": "Last Name",
+            "type": "string"
+          },
+          "organization_name": {
+            "title": "Organization Name",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "provisioned_account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provisioned Account Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "default": "PENDING",
+            "enum": [
+              "PENDING",
+              "UNDER_EVALUATION",
+              "APPROVED",
+              "REJECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "first_name",
+          "last_name",
+          "organization_name",
+          "reason",
+          "created_at"
+        ],
+        "title": "TrialApplication",
+        "type": "object"
+      },
+      "TrialApplicationInput": {
+        "additionalProperties": false,
+        "description": "Capture an anonymous WEB application without creating an identity.",
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "organization_name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Organization Name",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "website": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Website",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "first_name",
+          "last_name",
+          "organization_name",
+          "reason"
+        ],
+        "title": "TrialApplicationInput",
+        "type": "object"
+      },
+      "TrialApplicationPage": {
+        "additionalProperties": false,
+        "description": "Expose a bounded web review collection with explicit pagination state.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TrialApplication"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "TrialApplicationPage",
+        "type": "object"
+      },
+      "TrialExtensionInput": {
+        "additionalProperties": false,
+        "description": "Request a future web trial expiry with a mandatory explanation.",
+        "properties": {
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_expires_at": {
+            "format": "date-time",
+            "title": "Requested Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requested_expires_at",
+          "reason"
+        ],
+        "title": "TrialExtensionInput",
+        "type": "object"
+      },
+      "TrialReceipt": {
+        "additionalProperties": false,
+        "description": "Return the same anonymous receipt for new, repeated, or throttled intake.",
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "title": "TrialReceipt",
+        "type": "object"
+      },
+      "TrialStateInput": {
+        "additionalProperties": false,
+        "description": "Change suspension independently of invitation and expiration state.",
+        "properties": {
+          "suspended": {
+            "title": "Suspended",
+            "type": "boolean"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "suspended"
+        ],
+        "title": "TrialStateInput",
+        "type": "object"
+      },
+      "TrialUserPage": {
+        "additionalProperties": false,
+        "description": "Expose only web-trial accounts to eligible web reviewers.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TrialUserRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "TrialUserPage",
+        "type": "object"
+      },
+      "TrialUserRead": {
+        "additionalProperties": false,
+        "description": "Combine trial identity and independently tracked organization validity.",
+        "properties": {
+          "activation_state": {
+            "default": "invited",
+            "enum": [
+              "invited",
+              "active"
+            ],
+            "title": "Activation State",
+            "type": "string"
+          },
+          "department_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Id"
+          },
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "invitation_delivery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InvitationDelivery"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/Organization"
+          },
+          "organization_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Id"
+          },
+          "role": {
+            "$ref": "#/components/schemas/AccountRole"
+          },
+          "suspended": {
+            "default": false,
+            "title": "Suspended",
+            "type": "boolean"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "email",
+          "id",
+          "role",
+          "invitation_delivery",
+          "organization"
+        ],
+        "title": "TrialUserRead",
+        "type": "object"
+      },
+      "UploadAborted": {
+        "description": "Confirm removal of unfinished multipart bytes.",
+        "properties": {
+          "aborted": {
+            "const": true,
+            "default": true,
+            "title": "Aborted",
+            "type": "boolean"
+          }
+        },
+        "title": "UploadAborted",
+        "type": "object"
+      },
+      "UploadCapture": {
+        "additionalProperties": false,
+        "description": "Describe one bounded raw capture and its source coordinate reference.",
+        "properties": {
+          "epsg": {
+            "anyOf": [
+              {
+                "pattern": "^EPSG:[1-9]\\d{2,5}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epsg"
+          },
+          "filename": {
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          },
+          "reference": {
+            "enum": [
+              "embedded",
+              "local",
+              "epsg"
+            ],
+            "title": "Reference",
+            "type": "string"
+          },
+          "size": {
+            "exclusiveMinimum": 0,
+            "maximum": 107374182400,
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filename",
+          "size",
+          "reference"
+        ],
+        "title": "UploadCapture",
+        "type": "object"
+      },
+      "UploadCompleted": {
+        "description": "Identify the verified private object without scheduling processing.",
+        "properties": {
+          "uri": {
+            "title": "Uri",
+            "type": "string"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "required": [
+          "uri",
+          "version_id"
+        ],
+        "title": "UploadCompleted",
+        "type": "object"
+      },
+      "UploadPart": {
+        "additionalProperties": false,
+        "description": "Request a temporary URL for one bounded file slice.",
+        "properties": {
+          "action": {
+            "const": "part",
+            "title": "Action",
+            "type": "string"
+          },
+          "part_number": {
+            "maximum": 10000,
+            "minimum": 1,
+            "title": "Part Number",
+            "type": "integer"
+          },
+          "token": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "token",
+          "part_number"
+        ],
+        "title": "UploadPart",
+        "type": "object"
+      },
+      "UploadPartSigned": {
+        "description": "Return a short-lived write-only URL, never AWS credentials.",
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "UploadPartSigned",
+        "type": "object"
+      },
+      "UploadSessionAction": {
+        "additionalProperties": false,
+        "description": "Carry an opaque server-issued capability for completion or cancellation.",
+        "properties": {
+          "action": {
+            "enum": [
+              "complete",
+              "abort"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "token"
+        ],
+        "title": "UploadSessionAction",
+        "type": "object"
+      },
+      "UploadStarted": {
+        "description": "Return the capability and exact upload slice size in bytes.",
+        "properties": {
+          "part_size": {
+            "title": "Part Size",
+            "type": "integer"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "part_size"
+        ],
+        "title": "UploadStarted",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -3224,6 +5169,38 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VersionedWrite": {
+        "additionalProperties": false,
+        "description": "Expected revision, preventing silent overwrites of concurrent edits.",
+        "properties": {
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "VersionedWrite",
+        "type": "object"
+      },
+      "VersionInput": {
+        "additionalProperties": false,
+        "description": "Require the latest record version on mutable review operations.",
+        "properties": {
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "VersionInput",
         "type": "object"
       },
       "WeatherCoverage": {
@@ -3906,6 +5883,2416 @@
         ]
       }
     },
+    "/api/digital-twin/management/applications": {
+      "get": {
+        "description": "Return the web review queue without assigning ownership.",
+        "operationId": "applications_api_digital_twin_management_applications_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialApplicationPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Applications",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/applications/{application_id}/claim": {
+      "post": {
+        "description": "Atomically claim the reviewed application version for this reviewer.",
+        "operationId": "claim_api_digital_twin_management_applications__application_id__claim_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialApplication"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claim",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/applications/{application_id}/decision": {
+      "post": {
+        "description": "Approve or reject an owned review without creating an account.",
+        "operationId": "decision_api_digital_twin_management_applications__application_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationDecisionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialApplication"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decision",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/applications/{application_id}/provision": {
+      "post": {
+        "description": "Confirm one invited trial user after a separate approval decision.",
+        "operationId": "provision_api_digital_twin_management_applications__application_id__provision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialApplication"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Provision",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/applications/{application_id}/release": {
+      "post": {
+        "description": "Release only this reviewer's undecided application.",
+        "operationId": "release_api_digital_twin_management_applications__application_id__release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialApplication"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/applications/{application_id}/transfer": {
+      "post": {
+        "description": "Transfer owned undecided work to another eligible web reviewer.",
+        "operationId": "transfer_api_digital_twin_management_applications__application_id__transfer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialApplication"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transfer",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/features": {
+      "get": {
+        "description": "List concrete enabled customer feature codes and AI classification.\n\nArgs:\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "features_api_digital_twin_management_features_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Features Api Digital Twin Management Features Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Features",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/features/{feature_id}": {
+      "post": {
+        "description": "Apply reviewed live feature availability under platform action verification.\n\nArgs:\n    feature_id: Concrete customer product feature code from the live catalog.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "update_feature_api_digital_twin_management_features__feature_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feature_id",
+            "required": true,
+            "schema": {
+              "title": "Feature Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeatureWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Feature Api Digital Twin Management Features  Feature Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Feature",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/me": {
+      "get": {
+        "description": "Return the acting account's current safe management/product context.\n\nArgs:\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "me_api_digital_twin_management_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Me Api Digital Twin Management Me Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/organization-extensions": {
+      "get": {
+        "description": "Return platform review work or this tenant admin's own history.",
+        "operationId": "organization_extensions_api_digital_twin_management_organization_extensions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Organization Extensions",
+        "tags": [
+          "trial-management"
+        ]
+      },
+      "post": {
+        "description": "Request ordinary organization renewal, including after expiration.",
+        "operationId": "request_organization_extension_api_digital_twin_management_organization_extensions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationExtensionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessExtension"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Organization Extension",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/organization-extensions/{extension_id}/decision": {
+      "post": {
+        "description": "Approve renewal from the later of now and the current deadline.",
+        "operationId": "decide_organization_extension_api_digital_twin_management_organization_extensions__extension_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionDecisionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessExtension"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Organization Extension",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/organizations": {
+      "get": {
+        "description": "List platform-managed tenant validity, plans and authoritative regions.\n\nArgs:\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "organizations_api_digital_twin_management_organizations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Organizations Api Digital Twin Management Organizations Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Organizations",
+        "tags": [
+          "account-management"
+        ]
+      },
+      "post": {
+        "description": "Create organization, initial admin and invitation intent atomically.\n\nArgs:\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "create_organization_api_digital_twin_management_organizations_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Organization Api Digital Twin Management Organizations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Organization",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/organizations/{organization_id}": {
+      "post": {
+        "description": "Replace a reviewed organization's plan, validity and owned region set.\n\nArgs:\n    organization_id: Exact paid tenant identity managed by the platform administrator.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "update_organization_api_digital_twin_management_organizations__organization_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organization_id",
+            "required": true,
+            "schema": {
+              "title": "Organization Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Organization Api Digital Twin Management Organizations  Organization Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Organization",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/organizations/{organization_id}/administrator": {
+      "post": {
+        "description": "Edit a paid tenant administrator's name under current platform authority.\n\nArgs:\n    organization_id: Exact paid tenant identity managed by the platform administrator.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "update_organization_administrator_api_digital_twin_management_organizations__organization_id__administrator_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organization_id",
+            "required": true,
+            "schema": {
+              "title": "Organization Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Organization Administrator",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/organizations/{organization_id}/administrator/resend-invitation": {
+      "post": {
+        "description": "Resend a current pending tenant-admin invitation with durable idempotency.\n\nArgs:\n    organization_id: Exact paid tenant identity managed by the platform administrator.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "resend_organization_administrator_api_digital_twin_management_organizations__organization_id__administrator_resend_invitation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organization_id",
+            "required": true,
+            "schema": {
+              "title": "Organization Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionedWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resend Organization Administrator",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/organizations/{organization_id}/administrator/state": {
+      "post": {
+        "description": "Suspend/reactivate the separate tenant admin without changing product users.\n\nArgs:\n    organization_id: Exact paid tenant identity managed by the platform administrator.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "organization_administrator_state_api_digital_twin_management_organizations__organization_id__administrator_state_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organization_id",
+            "required": true,
+            "schema": {
+              "title": "Organization Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountStateWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Organization Administrator State",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/plans": {
+      "get": {
+        "description": "List live fixed/custom plans for platform administration.\n\nArgs:\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "plans_api_digital_twin_management_plans_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Plans Api Digital Twin Management Plans Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Plans",
+        "tags": [
+          "account-management"
+        ]
+      },
+      "post": {
+        "description": "Create an explicit custom plan using only currently enabled features.\n\nArgs:\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "create_plan_api_digital_twin_management_plans_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Plan",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/plans/{plan_id}": {
+      "post": {
+        "description": "Update live plan allowances/custom features with fixed-plan guards.\n\nArgs:\n    plan_id: Exact fixed or custom plan identity being reviewed.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "update_plan_api_digital_twin_management_plans__plan_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Plan",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/plans/{plan_id}/delete": {
+      "post": {
+        "description": "Delete only an unreferenced custom plan at the reviewed revision.\n\nArgs:\n    plan_id: Exact fixed or custom plan identity being reviewed.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "delete_plan_api_digital_twin_management_plans__plan_id__delete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionedWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Plan Api Digital Twin Management Plans  Plan Id  Delete Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Plan",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/staff": {
+      "get": {
+        "description": "List current platform staff for an eligible platform administrator.\n\nArgs:\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "list_staff_api_digital_twin_management_staff_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Staff Api Digital Twin Management Staff Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Staff",
+        "tags": [
+          "account-management"
+        ]
+      },
+      "post": {
+        "description": "Validate staff invitation fields and commit one idempotent invitation.\n\nArgs:\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "create_staff_api_digital_twin_management_staff_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Staff",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/staff/{account_id}": {
+      "post": {
+        "description": "Edit a reviewed staff name and role without bypassing last-admin checks.\n\nArgs:\n    account_id: Exact staff or ordinary-user identity within the selected workspace.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "update_staff_api_digital_twin_management_staff__account_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Staff",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/staff/{account_id}/resend-invitation": {
+      "post": {
+        "description": "Resend an eligible pending staff invitation as one durable generation.\n\nArgs:\n    account_id: Exact staff or ordinary-user identity within the selected workspace.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "resend_staff_api_digital_twin_management_staff__account_id__resend_invitation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionedWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resend Staff",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/staff/{account_id}/state": {
+      "post": {
+        "description": "Suspend/reactivate staff against the exact reviewed record revision.\n\nArgs:\n    account_id: Exact staff or ordinary-user identity within the selected workspace.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "staff_state_api_digital_twin_management_staff__account_id__state_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountStateWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Staff State",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/tenant-departments": {
+      "post": {
+        "description": "Create a unique normalized department within the current organization.\n\nArgs:\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "create_department_api_digital_twin_management_tenant_departments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Department"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Department",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/tenant-departments/{department_id}": {
+      "post": {
+        "description": "Rename a scoped department without replacing its user assignments.\n\nArgs:\n    department_id: Stable department identity in the acting tenant administrator scope.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "update_department_api_digital_twin_management_tenant_departments__department_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "department_id",
+            "required": true,
+            "schema": {
+              "title": "Department Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Department"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Department",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/tenant-departments/{department_id}/delete": {
+      "post": {
+        "description": "Delete only a scoped department with no remaining assigned accounts.\n\nArgs:\n    department_id: Stable department identity in the acting tenant administrator scope.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "delete_department_api_digital_twin_management_tenant_departments__department_id__delete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "department_id",
+            "required": true,
+            "schema": {
+              "title": "Department Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionedWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Department Api Digital Twin Management Tenant Departments  Department Id  Delete Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Department",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/tenant-users": {
+      "post": {
+        "description": "Invite a scoped ordinary user without accepting role/email edits later.\n\nArgs:\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "create_user_api_digital_twin_management_tenant_users_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantUserCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create User",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/tenant-users/{account_id}": {
+      "post": {
+        "description": "Edit an owned ordinary user's name/department against a revision.\n\nArgs:\n    account_id: Exact staff or ordinary-user identity within the selected workspace.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "update_user_api_digital_twin_management_tenant_users__account_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantUserWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update User",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/tenant-users/{account_id}/resend-invitation": {
+      "post": {
+        "description": "Queue one fresh invitation for a scoped, eligible pending ordinary user.\n\nArgs:\n    account_id: Exact staff or ordinary-user identity within the selected workspace.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "resend_user_api_digital_twin_management_tenant_users__account_id__resend_invitation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionedWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resend User",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/tenant-users/{account_id}/state": {
+      "post": {
+        "description": "Suspend/reactivate a scoped ordinary user without restoring old sessions.\n\nArgs:\n    account_id: Exact staff or ordinary-user identity within the selected workspace.\n    body: Strictly validated request fields for this management operation.\n    key: Client logical operation identity, bound to actor, action and payload.\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "user_state_api_digital_twin_management_tenant_users__account_id__state_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountStateWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "User State",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/tenant-workspace": {
+      "get": {
+        "description": "List only the current tenant administrator's users and departments.\n\nArgs:\n    service: Runtime-owned management service providing policy and persistence.\n    actor: Fresh verified account authority supplied by the hosting boundary.\nReturns:\n    Safe current workflow JSON or an identical stored retry response.\nRaises:\n    HTTPException: For denied authority, invalid or conflicting intent,\n        stale revisions, missing resources or unavailable persistence.",
+        "operationId": "tenant_workspace_api_digital_twin_management_tenant_workspace_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Tenant Workspace Api Digital Twin Management Tenant Workspace Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Tenant Workspace",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/trial-extensions": {
+      "get": {
+        "description": "Return the review queue or the active trial user's own history.",
+        "operationId": "trial_extensions_api_digital_twin_management_trial_extensions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Trial Extensions",
+        "tags": [
+          "trial-management"
+        ]
+      },
+      "post": {
+        "description": "Request a later expiry before the trial's present deadline.",
+        "operationId": "request_trial_extension_api_digital_twin_management_trial_extensions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrialExtensionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessExtension"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Trial Extension",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/trial-extensions/{extension_id}/decision": {
+      "post": {
+        "description": "Decide one pending trial extension with mandatory applicant response.",
+        "operationId": "decide_trial_extension_api_digital_twin_management_trial_extensions__extension_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionDecisionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessExtension"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Trial Extension",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/trial-plan": {
+      "get": {
+        "description": "Return the current Trial plan before a web reviewer's provisioning review.\n\nArgs:\n    service: Runtime-owned management policy and persistence boundary.\n    actor: Fresh verified web-trial administrator authority.\nReturns:\n    Effective Trial features and per-user cumulative allowances.\nRaises:\n    HTTPException: For denied authority or unavailable persistence.",
+        "operationId": "trial_plan_api_digital_twin_management_trial_plan_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Trial Plan",
+        "tags": [
+          "account-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/trial-users": {
+      "get": {
+        "description": "Return web trial accounts with separate activation and validity.",
+        "operationId": "trial_users_api_digital_twin_management_trial_users_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialUserPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Trial Users",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/trial-users/{account_id}/resend-invitation": {
+      "post": {
+        "description": "Resend pending trial invitations; active users use recovery instead.",
+        "operationId": "resend_api_digital_twin_management_trial_users__account_id__resend_invitation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resend",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/trial-users/{account_id}/state": {
+      "post": {
+        "description": "Suspend a trial independently; reject expired trial reactivation.",
+        "operationId": "state_api_digital_twin_management_trial_users__account_id__state_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrialStateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "State",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/trial-users/direct": {
+      "post": {
+        "description": "Invite one direct web trial with inherited Trial plan entitlements.",
+        "operationId": "direct_api_digital_twin_management_trial_users_direct_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectTrialInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialApplication"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Direct",
+        "tags": [
+          "trial-management"
+        ]
+      }
+    },
+    "/api/digital-twin/management/verification/start": {
+      "post": {
+        "description": "Send a bounded-lifetime code to the authenticated account's own email.\n\nArgs:\n    data: Exact pending method:path; no recipient override is accepted.\n    request: Server-owned current session and trusted connection address.\n    actor: Current account authority injected by the hosting boundary.\nReturns:\n    Challenge identity and fixed expiry; never the verification code.",
+        "operationId": "start_verification_api_digital_twin_management_verification_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Start Verification Api Digital Twin Management Verification Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Verification",
+        "tags": [
+          "account-security"
+        ]
+      }
+    },
+    "/api/digital-twin/management/verification/verify": {
+      "post": {
+        "description": "Verify one code and return its single-use action approval to the current session.",
+        "operationId": "verify_action_api_digital_twin_management_verification_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Verify Action Api Digital Twin Management Verification Verify Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Action",
+        "tags": [
+          "account-security"
+        ]
+      }
+    },
+    "/api/digital-twin/public/activate": {
+      "post": {
+        "description": "Set the recipient's password through a signed single-use invitation.\n\nArgs:\n    data: Emailed token and password, validated without storing either.\n    request: Same-origin, bounded-body request classified by hosting middleware.\nReturns:\n    Completion status; the user must sign in and complete Cognito MFA afterward.",
+        "operationId": "activate_account_api_digital_twin_public_activate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Activate Account Api Digital Twin Public Activate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Account",
+        "tags": [
+          "account-security"
+        ]
+      }
+    },
+    "/api/digital-twin/public/trial-applications": {
+      "post": {
+        "description": "Accept public WEB contact data without creating or exposing accounts.",
+        "operationId": "submit_api_digital_twin_public_trial_applications_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrialApplicationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit",
+        "tags": [
+          "public-trials"
+        ]
+      }
+    },
     "/api/v1/data-sources": {
       "get": {
         "description": "Return safe summaries of configured weather and static sources.\n\nArgs:\n    catalog: Runtime-owned configured-source reader.\n    request: Hosting context used to scope source collection members.\n\nReturns:\n    Deterministically ordered source summaries without private config.",
@@ -4055,7 +8442,7 @@
     },
     "/api/v1/map-layers/{layer_id}/data.tif": {
       "get": {
-        "description": "Generate or serve one safe COG with ranges and cache validators.\n\nArgs:\n    layer_id: Public catalog identity returned by a descriptor endpoint.\n    request: Active request carrying conditional and range headers.\n    artifact_service: Runtime-owned generator and bounded source catalog.\n\nReturns:\n    A full or partial TIFF response, or an empty 304 when the caller's\n    ``If-None-Match`` value matches the prepared artifact.\n\nRaises:\n    MapLayerArtifactError: If the layer is unknown, its source is not ready,\n        or a valid COG cannot be generated. Standard API handlers convert\n        these failures to safe problem details.\n\nSide Effects:\n    A cache miss dispatches blocking Zarr, raster, and filesystem work to a\n    worker thread before streaming the resulting local file.",
+        "description": "Generate or serve one safe COG with ranges and cache validators.\n\nArgs:\n    layer_id: Public catalog identity returned by a descriptor endpoint.\n    request: Active request carrying conditional and range headers.\n    artifact_service: Runtime-owned generator and bounded source catalog.\n\nReturns:\n    A full or partial TIFF response, or an empty 304 when the caller's\n    ``If-None-Match`` value matches the prepared artifact.\n\nRaises:\n    MapLayerArtifactError: If the layer is unknown, its source is not ready,\n        or a valid COG cannot be generated. Standard API handlers convert\n        these failures to safe problem details.\n\nSide Effects:\n    FastAPI runs this synchronous handler off the event loop. A cold source\n    may generate and publish a COG; committed objects stream exact private\n    S3 versions without a complete local download or hash pass.",
         "operationId": "get_map_layer_cog_api_v1_map_layers__layer_id__data_tif_get",
         "parameters": [
           {
@@ -4229,7 +8616,7 @@
         ]
       },
       "post": {
-        "description": "Create a draft through the concrete owning region store.\n\nArgs:\n    candidate: Validated client-owned name and geographic bounds.\n    store: Concrete owning persistence boundary for regions.\n\nReturns:\n    The store-owned draft region.",
+        "description": "Create a draft through the concrete owning region store.\n\nArgs:\n    candidate: Validated client-owned name and geographic bounds.\n    store: Concrete owning persistence boundary for regions.\n    request: Verified hosting context that supplies exclusive tenant ownership.\n\nReturns:\n    The store-owned draft region.",
         "operationId": "create_region_api_v1_regions_post",
         "requestBody": {
           "content": {
@@ -5274,6 +9661,133 @@
         ]
       }
     },
+    "/api/v1/regions/{region_id}/point-cloud-uploads": {
+      "post": {
+        "description": "Control one region-scoped private raw upload using a verified identity.\n\nArgs:\n    region_id: Catalog region for which the operator has surveys:submit.\n    action: Strict start/part/complete/abort request; never file content.\n    request: Active authenticated hosting request.\n    response: Outgoing response marked private and noncacheable.\n    service: Runtime S3 signing/verification boundary.\nReturns:\n    Session, temporary URL, verified S3 location, or cancellation receipt.\nRaises:\n    HTTPException: With 401 for unauthenticated local/hosted access, 403 for\n        denied region or invalid session, or 409 for incomplete S3 parts.\nSide Effects:\n    Creates, signs, verifies or aborts private multipart uploads. Never\n    registers datasets, modifies active tiles or queues Engine processing.",
+        "operationId": "control_point_cloud_upload_api_v1_regions__region_id__point_cloud_uploads_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "region_id",
+            "required": true,
+            "schema": {
+              "title": "Region Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "abort": "#/components/schemas/UploadSessionAction",
+                    "complete": "#/components/schemas/UploadSessionAction",
+                    "part": "#/components/schemas/UploadPart",
+                    "start": "#/components/schemas/StartUpload"
+                  },
+                  "propertyName": "action"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/StartUpload"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UploadPart"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UploadSessionAction"
+                  }
+                ],
+                "title": "Action"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UploadStarted"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UploadPartSigned"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UploadCompleted"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UploadAborted"
+                    }
+                  ],
+                  "title": "Response Control Point Cloud Upload Api V1 Regions  Region Id  Point Cloud Uploads Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Verified hosting authentication is required."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The region grant or upload session is invalid."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "S3 parts could not be verified."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The upload runtime or storage is unavailable."
+          }
+        },
+        "summary": "Control Point Cloud Upload",
+        "tags": [
+          "point-clouds"
+        ]
+      }
+    },
     "/api/v1/regions/{region_id}/publish": {
       "post": {
         "description": "Publish a draft as an immutable simulation-ready revision.\n\nArgs:\n    region_id: Stable public identifier for the draft to publish.\n    service: Coordinated region and tree-inventory publication boundary.\n\nReturns:\n    The published region with its immutable revision identifier.",
@@ -5854,7 +10368,7 @@
         ]
       },
       "post": {
-        "description": "Persist and enqueue one validated manual wildfire simulation.\n\nArgs:\n    candidate: Client-owned simulation inputs validated at the HTTP edge.\n    request: Active request carrying its middleware-assigned request ID.\n    response: Mutable response used to publish the resource location.\n    commands: Service coordinating durable acceptance and publication.\n    idempotency_key: Client key identifying one logical submission.\n\nReturns:\n    The newly queued run or the original run for an identical replay.\n\nRaises:\n    HTTPException: If the idempotency key belongs to another request.\n\nSide Effects:\n    Persists a queued run and publishes it once to Redis Streams.",
+        "description": "Durably accept one validated wildfire simulation and its queue intent.\n\nArgs:\n    candidate: Client-owned simulation inputs validated at the HTTP edge.\n    request: Active request carrying its middleware-assigned request ID.\n    response: Mutable response used to publish the resource location.\n    commands: Service coordinating durable acceptance and publication.\n    idempotency_key: Client key identifying one logical submission.\n\nReturns:\n    The newly queued run or the original run for an identical replay.\n\nRaises:\n    HTTPException: If the idempotency key belongs to another request.\n\nSide Effects:\n    Atomically persists the queued run, region reservation, idempotency\n    record, and outbox intent for independent delivery to the cloud queue.",
         "operationId": "create_simulation_run_api_v1_simulation_runs_post",
         "parameters": [
           {
@@ -6023,7 +10537,7 @@
     },
     "/api/v1/simulation-runs/{run_id}/events": {
       "get": {
-        "description": "Stream replayable progress until one simulation run becomes terminal.\n\nArgs:\n    run_id: Stable public execution identifier selected by the browser.\n    context: Prevalidated lifecycle record, progress store, and optional\n        browser reconnection cursor.\n\nReturns:\n    Async iterator containing a current snapshot or replayed events\n    followed by live progress. FastAPI wraps it in the declared native SSE\n    response, and the iterator exits after a terminal event.\n\nRaises:\n    HTTPException: If the run does not exist or the supplied cursor is\n        malformed.\n\nSide Effects:\n    Reads durable run/progress state, performs bounded blocking Redis reads,\n    and holds one HTTP connection until terminal state or disconnection.",
+        "description": "Stream replayable progress until one simulation run becomes terminal.\n\nArgs:\n    run_id: Stable public execution identifier selected by the browser.\n    context: Prevalidated lifecycle record, progress store, and optional\n        browser reconnection cursor.\n\nReturns:\n    Async iterator containing a current snapshot or replayed events\n    followed by live progress. FastAPI wraps it in the declared native SSE\n    response, and the iterator exits after a terminal event.\n\nRaises:\n    HTTPException: If the run does not exist or the supplied cursor is\n        malformed.\n\nSide Effects:\n    Reads durable run/progress state, performs bounded cloud journal polling,\n    and holds one HTTP connection until terminal state or disconnection.",
         "operationId": "stream_simulation_run_events_api_v1_simulation_runs__run_id__events_get",
         "parameters": [
           {
@@ -6189,7 +10703,7 @@
     }
   },
   "x-engine-contract": {
-    "revision": "c4f3df8456f88f3ac22c25343a6ecb259eb3d284",
-    "schema_sha256": "33bb905eaaf0c7f776b2dc853bdbcf2437428db572c13f24236673ff12ef5299"
+    "revision": "03285e0241d467e1decfc6bcccfd853063cc4543",
+    "schema_sha256": "6b2bee91e82eca0b825db657fa0ebd7d3423dee21cddf6a6001da8cc04546581"
   }
 }

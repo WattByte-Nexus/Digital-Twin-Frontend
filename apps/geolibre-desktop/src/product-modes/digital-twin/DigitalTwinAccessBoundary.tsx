@@ -1,13 +1,18 @@
 import { Button } from "@geolibre/ui";
 import { AlertTriangle, Loader2, LockKeyhole, Map } from "lucide-react";
 import {
+  Fragment,
   type ReactNode,
   useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import { defaultDigitalTwinApiUrl } from "../../lib/digital-twin-api";
+import {
+  defaultDigitalTwinApiUrl,
+  DIGITAL_TWIN_ACCESS_INVALIDATED_EVENT,
+  signOutDigitalTwin,
+} from "../../lib/digital-twin-api";
 import { fetchDigitalTwinRegions } from "../../lib/digital-twin-runs";
 import {
   AccessResolutionError,
@@ -44,8 +49,22 @@ function accessEndpoint(): string {
     import.meta.env.VITE_DIGITAL_TWIN_ACCESS_URL,
     "api/digital-twin/access",
     import.meta.env.BASE_URL,
-    document.baseURI,
+    document.baseURI
   );
+}
+
+function resolveCurrentAccess(
+  signal: AbortSignal
+): Promise<DigitalTwinAccessContext> {
+  return import.meta.env.DEV &&
+    import.meta.env.VITE_DIGITAL_TWIN_DEV_ACCESS !== "0"
+    ? fetchDigitalTwinRegions(defaultDigitalTwinApiUrl(), { signal }).then(
+        (regions) =>
+          createDevelopmentAccess(regions, {
+            regionId: import.meta.env.VITE_DIGITAL_TWIN_DEV_REGION_ID,
+          })
+      )
+    : loadDigitalTwinAccess({ endpoint: accessEndpoint(), signal });
 }
 
 function signInLocation(): string {
@@ -54,8 +73,8 @@ function signInLocation(): string {
       import.meta.env.VITE_DIGITAL_TWIN_SIGN_IN_URL,
       "api/digital-twin/sign-in",
       import.meta.env.BASE_URL,
-      document.baseURI,
-    ),
+      document.baseURI
+    )
   );
   // Return paths contain stable route ids, never labels or cached content. Query
   // state is omitted at the unauthenticated boundary to avoid forwarding
@@ -90,7 +109,10 @@ function LoadingAccess() {
   return (
     <AccessFrame>
       <div aria-live="polite" className="flex items-center gap-3" role="status">
-        <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin text-primary" />
+        <Loader2
+          aria-hidden="true"
+          className="h-5 w-5 animate-spin text-primary"
+        />
         <div>
           <p className="font-medium">Resolving access</p>
           <p className="text-sm text-muted-foreground">
@@ -115,24 +137,30 @@ function FailedAccess({
     <AccessFrame>
       <div className="flex items-start gap-3">
         {unauthenticated ? (
-          <LockKeyhole aria-hidden="true" className="mt-0.5 h-5 w-5 text-primary" />
+          <LockKeyhole
+            aria-hidden="true"
+            className="mt-0.5 h-5 w-5 text-primary"
+          />
         ) : (
-          <AlertTriangle aria-hidden="true" className="mt-0.5 h-5 w-5 text-amber-600" />
+          <AlertTriangle
+            aria-hidden="true"
+            className="mt-0.5 h-5 w-5 text-destructive"
+          />
         )}
         <div className="min-w-0">
           <h2 className="font-semibold">
             {unauthenticated
               ? "Sign in required"
               : unavailable
-                ? "Identity provider unavailable"
-                : "Access unavailable"}
+              ? "Identity provider unavailable"
+              : "Access unavailable"}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {unauthenticated
               ? "Sign in to resolve your organization, role, and assigned regions."
               : unavailable
-                ? "Your protected workspace has not loaded. Check the connection and try again."
-                : "Your account does not have access to this Digital Twin deployment."}
+              ? "Your protected workspace has not loaded. Check the connection and try again."
+              : "Your account does not have access to this Digital Twin deployment. Ask your organization administrator or trial reviewer to check activation, suspension, and access expiry."}
           </p>
           <div className="mt-4 flex gap-2">
             {unauthenticated ? (
@@ -141,6 +169,7 @@ function FailedAccess({
               </Button>
             ) : null}
             {unavailable ? <Button onClick={onRetry}>Try again</Button> : null}
+            {!unauthenticated ? <Button variant="outline" onClick={signOutDigitalTwin}>Sign out</Button> : null}
           </div>
         </div>
       </div>
@@ -152,11 +181,15 @@ function DeniedRoute({ onReturn }: { onReturn?: () => void }) {
   return (
     <AccessFrame>
       <div className="flex items-start gap-3">
-        <LockKeyhole aria-hidden="true" className="mt-0.5 h-5 w-5 text-primary" />
+        <LockKeyhole
+          aria-hidden="true"
+          className="mt-0.5 h-5 w-5 text-primary"
+        />
         <div>
           <h2 className="font-semibold">This location is not available</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            The requested route is outside your assigned product, workspace, or region access.
+            The requested route is outside your assigned product, workspace, or
+            region access.
           </p>
           {onReturn ? (
             <Button className="mt-4" onClick={onReturn}>
@@ -173,10 +206,14 @@ function DeniedRoute({ onReturn }: { onReturn?: () => void }) {
  * Prevents every protected workspace hook and canvas from mounting until the
  * trusted application backend has resolved identity and access.
  */
-export function DigitalTwinAccessBoundary({ children }: DigitalTwinAccessBoundaryProps) {
+export function DigitalTwinAccessBoundary({
+  children,
+}: DigitalTwinAccessBoundaryProps) {
   const [retryGeneration, setRetryGeneration] = useState(0);
   const [location, setLocation] = useState(() => currentLocation());
-  const [bootstrap, setBootstrap] = useState<BootstrapState>({ status: "loading" });
+  const [bootstrap, setBootstrap] = useState<BootstrapState>({
+    status: "loading",
+  });
 
   useEffect(() => {
     const syncLocation = () => setLocation(currentLocation());
@@ -188,20 +225,12 @@ export function DigitalTwinAccessBoundary({ children }: DigitalTwinAccessBoundar
     const controller = new AbortController();
     setBootstrap({ status: "loading" });
 
-    const request =
-      import.meta.env.DEV && import.meta.env.VITE_DIGITAL_TWIN_DEV_ACCESS !== "0"
-        ? fetchDigitalTwinRegions(defaultDigitalTwinApiUrl(), {
-            signal: controller.signal,
-          }).then((regions) =>
-            createDevelopmentAccess(regions, {
-              regionId: import.meta.env.VITE_DIGITAL_TWIN_DEV_REGION_ID,
-            }),
-          )
-        : loadDigitalTwinAccess({ endpoint: accessEndpoint(), signal: controller.signal });
+    const request = resolveCurrentAccess(controller.signal);
 
     void request.then(
       (access) => {
-        if (!controller.signal.aborted) setBootstrap({ status: "authenticated", access });
+        if (!controller.signal.aborted)
+          setBootstrap({ status: "authenticated", access });
       },
       (error: unknown) => {
         if (controller.signal.aborted) return;
@@ -213,13 +242,51 @@ export function DigitalTwinAccessBoundary({ children }: DigitalTwinAccessBoundar
               : new AccessResolutionError(
                   "provider-unavailable",
                   "Access resolution failed.",
-                  { cause: error },
+                  { cause: error }
                 ),
         });
-      },
+      }
     );
     return () => controller.abort();
   }, [retryGeneration]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      void resolveCurrentAccess(controller.signal).then(
+        (access) => {
+          if (!controller.signal.aborted)
+            setBootstrap({ status: "authenticated", access });
+        },
+        (error) => {
+          if (!controller.signal.aborted)
+            setBootstrap({
+              status: "failed",
+              error:
+                error instanceof AccessResolutionError
+                  ? error
+                  : new AccessResolutionError(
+                      "provider-unavailable",
+                      "Access could not be revalidated."
+                    ),
+            });
+        }
+      );
+    };
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener(DIGITAL_TWIN_ACCESS_INVALIDATED_EVENT, refresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener(
+        DIGITAL_TWIN_ACCESS_INVALIDATED_EVENT,
+        refresh
+      );
+    };
+  }, []);
 
   const navigate = useCallback(
     (nextLocation: string, options?: { replace?: boolean }) => {
@@ -230,7 +297,7 @@ export function DigitalTwinAccessBoundary({ children }: DigitalTwinAccessBoundar
       else window.history.pushState(null, "", relative);
       setLocation(relative);
     },
-    [],
+    []
   );
 
   const resolution = useMemo(() => {
@@ -239,7 +306,8 @@ export function DigitalTwinAccessBoundary({ children }: DigitalTwinAccessBoundar
   }, [bootstrap, location]);
 
   useEffect(() => {
-    if (resolution?.kind === "redirect") navigate(resolution.location, { replace: true });
+    if (resolution?.kind === "redirect")
+      navigate(resolution.location, { replace: true });
   }, [navigate, resolution]);
 
   if (bootstrap.status === "loading" || resolution?.kind === "redirect") {
@@ -257,10 +325,24 @@ export function DigitalTwinAccessBoundary({ children }: DigitalTwinAccessBoundar
     const landing = resolveLandingLocation(bootstrap.access);
     return (
       <DeniedRoute
-        onReturn={landing ? () => navigate(landing, { replace: true }) : undefined}
+        onReturn={
+          landing ? () => navigate(landing, { replace: true }) : undefined
+        }
       />
     );
   }
 
-  return children({ access: bootstrap.access, navigate, route: resolution });
+  const scopeKey = JSON.stringify([
+    bootstrap.access.accountId,
+    bootstrap.access.roles,
+    bootstrap.access.accessState,
+    bootstrap.access.regions,
+    bootstrap.access.permissions,
+    bootstrap.access.plan,
+  ]);
+  return (
+    <Fragment key={scopeKey}>
+      {children({ access: bootstrap.access, navigate, route: resolution })}
+    </Fragment>
+  );
 }

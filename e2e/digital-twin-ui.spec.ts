@@ -10,8 +10,9 @@ async function installNativeEngine(page: Page, options: { denyAccess?: boolean; 
   let submitted = false;
   await page.route("**/api/digital-twin/access", route => route.fulfill(options.denyAccess ? { status: 403, json: {} } : { json: {
     subject_id: "test-operator", display_name: "Test operator", organization: { id: "test", name: "Test operations" },
-    roles: ["administrator"], capabilities: ["digital-twin", "administration"],
-    regions: [{ id: fixtures.region.region_id, name: fixtures.region.name }],
+    roles: ["TENANT_USER"], capabilities: ["digital-twin"],
+    account_id: "account-product", access_state: "active", plan: null, permissions: ["region:read", "scenarios:create", "runs:submit", "runs:cancel"],
+    regions: [{ id: fixtures.region.region_id, name: fixtures.region.name, actions: ["region:read", "scenarios:create", "runs:submit", "runs:cancel"] }],
     most_recently_used_region_id: fixtures.region.region_id, saved_start_location: "digital-twin",
   } }));
   await page.route("**/api/v1/**", async route => {

@@ -192,7 +192,9 @@ function pointCloudDatasetKey(
 function pointCloudStatusText(
   pointCloud: PointCloudLoadState,
   readyDatasetKey: string | null,
-  enabled: boolean
+  enabled: boolean,
+  view: "full" | "crowns",
+  renderError: { key: string; message: string } | null
 ): string {
   if (!enabled) return "Point clouds disabled.";
   if (pointCloud.status === "loading") return "Point-cloud metadata loading.";
@@ -203,9 +205,13 @@ function pointCloudStatusText(
     return `Point cloud failed to load: ${pointCloud.error.message}`;
   }
   if (pointCloud.status === "ready") {
-    return readyDatasetKey === pointCloudDatasetKey(pointCloud.dataset)
-      ? `${pointCloud.dataset.name} ready. Source RGB is preserved; missing RGB is shown in cyan.`
-      : `${pointCloud.dataset.name} tiles loading.`;
+    const key = `${pointCloudDatasetKey(pointCloud.dataset)}:${view}`;
+    if (view === "crowns" && pointCloud.dataset.pointCount === 0) return "No segmented tree crowns are available in this dataset.";
+    if (renderError?.key === key) return `Point cloud failed to load: ${renderError.message}`;
+    const label = view === "full" ? "Full scan" : "Tree crowns";
+    return readyDatasetKey === key
+      ? `${pointCloud.dataset.name} ready. ${label}. Source RGB is preserved; missing RGB is shown in cyan.`
+      : `${pointCloud.dataset.name}: ${label.toLowerCase()} tiles loading.`;
   }
   if (pointCloud.status === "queued") return "Point-cloud build queued.";
   if (pointCloud.status === "building") return "Point-cloud build in progress.";
@@ -377,7 +383,8 @@ export interface DigitalTwinMapWorkspaceProps {
     destination: DigitalTwinDestination,
     resourceId?: string
   ) => void;
-  canManageData?: boolean;
+  canPerform?: (regionId: string, action: string) => boolean;
+  onOpenAccount?: () => void;
   onOpenDiagnostics?: () => void;
   onOpenExpertWorkspace?: () => void;
   onSelectRegion?: (regionId: string) => void;
@@ -400,7 +407,8 @@ export function DigitalTwinMapWorkspace({
   showWeather = true,
   themeMode = "light",
   onNavigate,
-  canManageData = false,
+  canPerform = () => false,
+  onOpenAccount,
   onOpenDiagnostics,
   onOpenExpertWorkspace,
   onSelectRegion,
@@ -471,6 +479,7 @@ export function DigitalTwinMapWorkspace({
   const [readyPointCloudDatasetKey, setReadyPointCloudDatasetKey] = useState<
     string | null
   >(null);
+  const [pointCloudRenderError, setPointCloudRenderError] = useState<{ key: string; message: string } | null>(null);
   const [displaySettings, setDisplaySettings] =
     useState<DigitalTwinMapDisplaySettings>(
       DEFAULT_DIGITAL_TWIN_MAP_DISPLAY_SETTINGS
@@ -1099,20 +1108,17 @@ export function DigitalTwinMapWorkspace({
       pointCloud: activePointCloud
         ? {
             dataset: activePointCloud,
+            view: displaySettings.pointCloudView,
             onError: (error) => {
-              const datasetKey = pointCloudDatasetKey(activePointCloud);
+              const key = `${pointCloudDatasetKey(activePointCloud)}:${displaySettings.pointCloudView}`;
               console.error(`${activePointCloud.name} could not be loaded`, error);
-              setPointCloud((current) =>
-                current.status === "ready" &&
-                pointCloudDatasetKey(current.dataset) === datasetKey
-                  ? { status: "error", error }
-                  : current
-              );
+              setPointCloudRenderError({ key, message: error.message });
             },
-            onReady: () =>
-              setReadyPointCloudDatasetKey(
-                pointCloudDatasetKey(activePointCloud)
-              ),
+            onReady: () => {
+              const key = `${pointCloudDatasetKey(activePointCloud)}:${displaySettings.pointCloudView}`;
+              setReadyPointCloudDatasetKey(key);
+              setPointCloudRenderError((current) => current?.key === key ? null : current);
+            },
           }
         : undefined,
     });
@@ -1122,6 +1128,7 @@ export function DigitalTwinMapWorkspace({
     assetsSurfaceReady,
     displaySettings.assetTrees,
     displaySettings.pointClouds,
+    displaySettings.pointCloudView,
     raster,
     pointCloud,
     assetMapInteraction.poleInteraction,
@@ -1134,7 +1141,9 @@ export function DigitalTwinMapWorkspace({
   const activePointCloudStatus = pointCloudStatusText(
     pointCloud,
     readyPointCloudDatasetKey,
-    showLidar && displaySettings.pointClouds
+    showLidar && displaySettings.pointClouds,
+    displaySettings.pointCloudView,
+    pointCloudRenderError
   );
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1227,6 +1236,7 @@ export function DigitalTwinMapWorkspace({
     request: ScenarioRunRequest,
     idempotencyKey: string
   ) => {
+    if (!canPerform(request.regionId, "runs:submit")) throw new Error("Run submission is not available for this region.");
     const submission = await submitDigitalTwinRunRequest(digitalTwinApiUrl, request, { idempotencyKey });
     refreshRunCatalog();
     setScenarioDirty(false);
@@ -1494,7 +1504,8 @@ export function DigitalTwinMapWorkspace({
               organizationName={organizationName}
               sidebarTrigger={<SidebarTrigger />}
               themeMode={activeThemeMode}
-              onOpenAdministration={canManageData ? () => requestWorkspaceChange(() => setDataOpen(true)) : undefined}
+              onOpenAccount={onOpenAccount ? () => requestWorkspaceChange(onOpenAccount) : undefined}
+              onOpenAdministration={canPerform(activeRegionId, "region:write") || canPerform(activeRegionId, "assets:write") || canPerform(activeRegionId, "surveys:submit") ? () => requestWorkspaceChange(() => setDataOpen(true)) : undefined}
               onOpenDiagnostics={onOpenDiagnostics ? () => requestWorkspaceChange(onOpenDiagnostics) : undefined}
               onOpenExpertWorkspace={onOpenExpertWorkspace ? () => requestWorkspaceChange(onOpenExpertWorkspace) : undefined}
                 onOpenSearch={() => setSearchOpen(true)}
@@ -1741,7 +1752,7 @@ export function DigitalTwinMapWorkspace({
                 activeRasterIds={raster ? [raster.id] : []}
                 apiUrl={digitalTwinApiUrl}
                 regions={regions}
-                canManage={canManageData}
+                canPerform={canPerform}
                 theme={activeThemeMode}
                 onClose={() => setDataOpen(false)}
                 onRasterRemoved={(id) => setRaster((current) => current?.id === id ? null : current)}
@@ -1766,9 +1777,14 @@ export function DigitalTwinMapWorkspace({
               label="Settings workspace"
             >
               <SettingsView
+                canUploadToRegion={(regionId) => canPerform(regionId, "surveys:submit")}
                 apiUrl={digitalTwinApiUrl}
                 theme={activeThemeMode}
                 onToggleTheme={toggleTheme}
+                mapDisplaySettings={displaySettings}
+                onMapDisplaySettingsChange={setDisplaySettings}
+                viewMode={viewMode}
+                onViewModeChange={changeViewMode}
                 onOpenScenarios={() => navigateTo("scenarios")}
                 accountInitials={operator.initials}
                 accountName={operator.name}
@@ -1783,7 +1799,7 @@ export function DigitalTwinMapWorkspace({
               resetKeys={[activeRegionId, location]}
             >
               <AssetsView
-                canManage={canManageData}
+                canManage={canPerform(activeRegionId, "assets:write")}
                 apiUrl={digitalTwinApiUrl}
                 location={location}
                 onOpenAsset={(assetId) =>
@@ -1808,6 +1824,7 @@ export function DigitalTwinMapWorkspace({
                 mapSlot={mapHost}
                 onBuilderOpenChange={handleBuilderOpenChange}
                 onRun={launchSimulation}
+                canPerform={canPerform}
                 regions={regions}
                 theme={activeThemeMode}
               />
@@ -1819,7 +1836,7 @@ export function DigitalTwinMapWorkspace({
               resetKeys={[activeRegionId, location]}
             >
               <RunsView
-                canCancel={canManageData}
+                canCancelRun={(regionId) => canPerform(regionId, "runs:cancel")}
                 authorizedRegionIds={authorizedRegionIds}
                 apiUrl={digitalTwinApiUrl}
                 error={runCatalogError}
@@ -1828,6 +1845,7 @@ export function DigitalTwinMapWorkspace({
                 location={location}
                 mapControllerRef={interactionMapControllerRef}
                 mapSlot={mapHost}
+                canCreateScenario={canPerform(activeRegionId, "scenarios:create")}
                 onCreateScenario={() => {
                   setScenarioCreationRequest((request) => request + 1);
                   navigateTo("scenarios");

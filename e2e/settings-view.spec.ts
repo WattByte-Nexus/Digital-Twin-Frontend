@@ -1,97 +1,274 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import fixtures from "../tests/fixtures/digital-twin-engine.api-fixtures.json";
+
+async function installEngine(page: Page) {
+  let health: "ready" | "degraded" | "offline" = "ready";
+  await page.route("**/api/digital-twin/access", (route) => route.fulfill({ json: {
+    subject_id: "settings-operator", display_name: "Test operator",
+    organization: { id: "test", name: "Test operations" },
+    roles: ["TENANT_USER"], capabilities: ["digital-twin"],
+    account_id: "account-settings", access_state: "active", plan: null, permissions: ["region:read", "scenarios:create", "runs:submit", "runs:cancel", "surveys:submit"],
+    regions: [{ id: fixtures.region.region_id, name: fixtures.region.name, actions: ["region:read", "scenarios:create", "runs:submit", "runs:cancel", "surveys:submit"] }],
+    most_recently_used_region_id: fixtures.region.region_id, saved_start_location: "digital-twin",
+  } }));
+  await page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname.replace(/^.*\/api\/v1/, "");
+    if (path.startsWith("/health/")) {
+      await route.fulfill(health === "offline" || (health === "degraded" && path === "/health/ready")
+        ? { status: 503, json: { detail: "Unavailable" } }
+        : { json: { status: path === "/health/live" ? "live" : "ready" } });
+      return;
+    }
+    const regionPath = `/regions/${fixtures.region.region_id}`;
+    const json = path === "/regions" ? fixtures.region_page
+      : path === regionPath ? fixtures.region
+      : path.endsWith("/readiness") ? fixtures.region_readiness
+      : path.endsWith("/weather-datasets") ? fixtures.weather_page
+      : path.endsWith("/assets.geojson") ? { type: "FeatureCollection", features: [] }
+      : path.endsWith("/assets") || path === "/data-sources" ? []
+      : { items: [], next_cursor: null };
+    await route.fulfill({ json });
+  });
+  return { setHealth: (next: typeof health) => { health = next; } };
+}
+
+async function openSettings(page: Page) {
+  const settingsButton = page.getByRole("button", { name: "Settings", exact: true });
+  const openSidebar = page.getByRole("button", { name: "Open sidebar", exact: true });
+  await expect.poll(async () => (await settingsButton.isVisible()) || (await openSidebar.isVisible())).toBe(true);
+  if (!(await settingsButton.isVisible())) {
+    await openSidebar.click();
+  }
+  await settingsButton.click();
+  await expect(page.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible();
+}
+
+async function chooseSection(page: Page, name: string) {
+  const mobileSection = page.getByRole("combobox", { name: "Settings section" });
+  const desktopSection = page.getByRole("button", { name, exact: true });
+  await expect.poll(async () => (await mobileSection.isVisible()) || (await desktopSection.isVisible())).toBe(true);
+  if (await mobileSection.isVisible()) {
+    await mobileSection.click();
+    await page.getByRole("option", { name, exact: true }).click();
+  } else {
+    await desktopSection.click();
+  }
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+}
 
 test.describe("Digital Twin settings", () => {
-  test("navigates the initial settings scopes and keeps preview controls interactive", async ({
-    page,
-  }) => {
-    const pageErrors: Error[] = [];
-    page.on("pageerror", (error) => pageErrors.push(error));
-    await page.route("**/api/digital-twin/access", async (route) => {
-      await route.fulfill({
-        json: {
-          subject_id: "operator-7",
-          display_name: "A. Chen",
-          organization: { id: "wattbyte", name: "WattByte Nexus" },
-          roles: ["operator", "administrator"],
-          capabilities: ["digital-twin", "expert-gis", "administration"],
-          regions: [{ id: "boulder-co", name: "Boulder Foothills" }],
-          most_recently_used_region_id: "boulder-co",
-          saved_start_location: "digital-twin",
-        },
-      });
-    });
-    await page.route("**/api/v1/**", async (route) => {
-      const path = new URL(route.request().url()).pathname;
-      const json = path.endsWith("/api/v1/health/ready")
-        ? { status: "ready" }
-        : path.endsWith("/api/v1/regions")
-          ? {
-              items: [
-                {
-                  region_id: "boulder-co",
-                  name: "Boulder Foothills",
-                  status: "published",
-                  bounds: { west: -105.35, south: 39.95, east: -105.15, north: 40.1 },
-                },
-              ],
-            }
-          : { items: [] };
-      await route.fulfill({ json });
-    });
+  test.beforeEach(async ({ page }) => {
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-    await page.goto("/regions/boulder-co/live");
-    await expect.poll(() => pageErrors.map((error) => error.message)).toEqual([]);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+  });
 
-    await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Alert routing", exact: true })).toBeVisible();
-    const productSidebar = page.locator(
-      '[data-slot="sidebar-container"][aria-label="Digital Twin navigation"]',
-    );
-    const productTopbar = page.locator(
-      'header[aria-label="Digital Twin application header"]',
-    );
-    await expect(productSidebar).toHaveCount(0);
-    await expect(productTopbar).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: "Close settings and return to workspace" }),
-    ).toBeVisible();
-    const settingsSearch = page.getByRole("searchbox", { name: "Search settings" });
-    await expect(settingsSearch).toBeVisible();
-    await settingsSearch.fill("map");
-    await expect(page.getByRole("button", { name: "Map & display" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Preferences" })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Map & display" })).toBeVisible();
-    await settingsSearch.clear();
+  test("appearance persists and map controls share the live workspace state", async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await installEngine(page);
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await openSettings(page);
 
-    await page.getByRole("button", { name: "Preferences", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible();
-    const reduceMotion = page.getByRole("switch", { name: "Reduce motion" });
-    await reduceMotion.click();
-    await expect(reduceMotion).toBeChecked();
+    await page.getByRole("radio", { name: "Dark", exact: true }).click();
+    await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeChecked();
+    await page.getByRole("combobox", { name: "Accent color" }).click();
+    await page.getByRole("option", { name: "Violet", exact: true }).click();
+    await expect(page.getByRole("combobox", { name: "Accent color" })).toHaveText(/Violet/i);
+    await page.reload();
+    await openSettings(page);
+    await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeChecked();
+    await expect(page.getByRole("combobox", { name: "Accent color" })).toHaveText(/Violet/i);
+    // Scoped theme surfaces must keep the chosen accent, not reset to default blue.
+    await expect.poll(() => page.locator(".dt-settings-view").evaluate((element) => getComputedStyle(element).getPropertyValue("--primary").trim())).toBe("263.4 70% 50.4%");
 
-    await page.getByRole("button", { name: "Simulation presets", exact: true }).click();
-    await expect(
-      page.getByRole("heading", { name: "Simulation presets", exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Presets are starting values, not hidden engine configuration."),
-    ).toBeVisible();
+    await chooseSection(page, "Map & display");
+    await expect(page.getByRole("switch")).toHaveCount(13);
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeDisabled();
+    await page.getByRole("switch", { name: "Point clouds", exact: true }).click();
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeChecked();
+    await page.getByRole("radio", { name: "Tree crowns", exact: true }).click();
+    await page.getByRole("switch", { name: "Satellite imagery" }).click();
+    await expect(page.getByRole("switch", { name: "Satellite imagery" })).not.toBeChecked();
+    await page.getByRole("radio", { name: "Plan view" }).click();
+    await expect(page.getByRole("radio", { name: "Plan view" })).toBeChecked();
+    await page.getByRole("button", { name: "Close settings and return to workspace" }).click();
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await expect(page.getByRole("menuitemcheckbox", { name: "Satellite imagery" })).not.toBeChecked();
+    await expect(page.getByRole("menuitemradio", { name: "Tree crowns", exact: true })).toBeChecked();
+    await page.getByRole("menuitemradio", { name: "Full scan", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await expect(page.getByRole("menuitemradio", { name: "Full scan", exact: true })).toBeChecked();
+    await page.keyboard.press("Escape");
+    await page.getByRole("menuitem", { name: "View", exact: true }).click();
+    await expect(page.getByRole("menuitemradio", { name: "Plan view" })).toBeChecked();
+    await page.keyboard.press("Escape");
 
-    await page.getByRole("button", { name: "Members & roles", exact: true }).click();
-    await expect(page.getByRole("table")).toBeVisible();
-    await expect(
-      page.getByRole("table").getByText("Grid Operations", { exact: true }),
-    ).toBeVisible();
+    await openSettings(page);
+    await chooseSection(page, "Map & display");
+    await expect(page.getByRole("radio", { name: "Full scan", exact: true })).toBeChecked();
+    await page.getByRole("button", { name: "Restore map defaults" }).click();
+    await expect(page.getByRole("switch", { name: "Satellite imagery" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Terrain 3D" })).toBeChecked();
+    await chooseSection(page, "Saved scenarios");
+    await page.getByRole("button", { name: "Open saved scenarios" }).click();
+    await expect(page).toHaveURL(/\/scenarios$/);
+    await expect(page.locator(".dt-settings-view")).toHaveCount(0);
+    expect(pageErrors).toEqual([]);
+  });
 
-    await page.getByRole("button", { name: "Status & health", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Status & health", exact: true })).toBeVisible();
-    await expect(page.getByText("Requires restart", { exact: true })).toBeVisible();
+  test("engine health refreshes from ready through degraded and offline", async ({ page }) => {
+    const engine = await installEngine(page);
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await openSettings(page);
+    await chooseSection(page, "Status & health");
+    const status = page.getByRole("region", { name: "Status & health settings" }).getByRole("status");
+    await expect(status).toHaveText("Live and ready");
+    await expect(page.locator(".dt-settings-view time")).toHaveAttribute("datetime", /T/);
+    engine.setHealth("degraded");
+    await page.getByRole("button", { name: "Check now" }).click();
+    await expect(status).toHaveText("Startup not ready");
+    engine.setHealth("offline");
+    await page.getByRole("button", { name: "Check now" }).click();
+    await expect(status).toHaveText("Offline");
+  });
 
-    await page
-      .getByRole("button", { name: "Close settings and return to workspace" })
-      .click();
-    await expect(productSidebar).toBeVisible();
-    await expect(productTopbar).toBeVisible();
+  test("full-scan requests do not depend on detected crowns", async ({ page }) => {
+    await installEngine(page);
+    const dataset = { ...fixtures.point_cloud_ready, region_id: fixtures.region.region_id, point_count: 0 };
+    await page.route("**/point-cloud-datasets", route => route.fulfill({ json: {
+      active_dataset_id: dataset.dataset_id, items: [dataset],
+    } }));
+    let fullRequests = 0;
+    await page.route("**/full/tileset.json", route => {
+      fullRequests++;
+      return route.fulfill({ status: 404, json: { detail: "Dataset requires a full-scan rebuild." } });
+    });
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: "Point clouds", exact: true }).click();
+    await expect.poll(() => fullRequests).toBeGreaterThan(0);
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Tree crowns", exact: true }).click();
+    await expect(page.getByText("No segmented tree crowns are available in this dataset.", { exact: true })).toHaveCount(1);
+    await page.getByRole("menuitem", { name: "Surface", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Full scan", exact: true }).click();
+    await expect.poll(() => fullRequests).toBeGreaterThan(1);
+  });
+
+  test("debug uploads a point cloud directly to S3 with explicit placement metadata", async ({ page }) => {
+    await installEngine(page);
+    const actions: Record<string, unknown>[] = [];
+    await page.route("**/point-cloud-uploads", async (route) => {
+      const action = route.request().postDataJSON();
+      actions.push(action);
+      await route.fulfill({ json: action.action === "start" ? { token: "session", part_size: 32 * 1024 ** 2 }
+        : action.action === "part" ? { url: "https://upload-test.s3.amazonaws.com/capture-part" }
+        : { uri: "s3://private-sources/uploads/pointclouds/capture.ply", version_id: "v1" } });
+    });
+    let uploaded = "";
+    await page.route("https://upload-test.s3.amazonaws.com/**", async (route) => {
+      uploaded = route.request().postDataBuffer()?.toString() ?? "";
+      expect(route.request().headers()["cookie"]).toBeUndefined();
+      await route.fulfill({ status: 200, headers: { "Access-Control-Allow-Origin": "*" }, body: "" });
+    });
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await openSettings(page);
+    await chooseSection(page, "Point-cloud upload");
+    await page.getByRole("combobox", { name: "Region", exact: true }).click();
+    await page.getByRole("option", { name: fixtures.region.name, exact: true }).click();
+    await page.getByLabel("Point-cloud file", { exact: true }).setInputFiles({ name: "capture.ply", mimeType: "application/octet-stream", buffer: Buffer.from("ply\nexample") });
+    await expect(page.getByRole("combobox", { name: "Coordinate reference" })).toHaveText("Local coordinates");
+    await page.getByRole("combobox", { name: "Coordinate reference" }).click();
+    await page.getByRole("option", { name: "EPSG code", exact: true }).click();
+    await page.getByRole("textbox", { name: "EPSG code" }).fill("EPSG:26913");
+    await page.getByRole("button", { name: "Upload to S3" }).click();
+    await expect(page.getByText("Upload complete", { exact: true })).toBeVisible();
+    expect(uploaded).toBe("ply\nexample");
+    expect(actions.map((action) => action.action)).toEqual(["start", "part", "complete"]);
+    expect(actions[0].capture).toEqual({ filename: "capture.ply", size: 11, reference: "epsg", epsg: "EPSG:26913" });
+    await expect(page.getByText("s3://private-sources/uploads/pointclouds/capture.ply", { exact: true })).toBeVisible();
+  });
+
+  test("debug cancellation waits for the session then removes unfinished S3 parts", async ({ page }) => {
+    await installEngine(page);
+    let releaseStart!: () => void;
+    const started = new Promise<void>((resolve) => { releaseStart = resolve; });
+    const actions: string[] = [];
+    await page.route("**/point-cloud-uploads", async (route) => {
+      const action = route.request().postDataJSON();
+      actions.push(action.action);
+      if (action.action === "start") {
+        await started;
+        await route.fulfill({ json: { token: "session", part_size: 32 * 1024 ** 2 } });
+      } else await route.fulfill({ json: { aborted: true } });
+    });
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await openSettings(page);
+    await chooseSection(page, "Point-cloud upload");
+    await page.getByRole("combobox", { name: "Region", exact: true }).click();
+    await page.getByRole("option", { name: fixtures.region.name, exact: true }).click();
+    await page.getByLabel("Point-cloud file", { exact: true }).setInputFiles({ name: "capture.laz", mimeType: "application/octet-stream", buffer: Buffer.from("LAZ") });
+    await page.getByRole("button", { name: "Upload to S3" }).click();
+    await expect.poll(() => actions).toEqual(["start"]);
+    await page.getByRole("button", { name: "Cancel upload" }).click();
+    releaseStart();
+    await expect(page.getByText("Upload cancelled. Unfinished parts were removed.", { exact: true })).toBeVisible();
+    expect(actions).toEqual(["start", "abort"]);
+    await expect(page.getByRole("button", { name: "Upload to S3" })).toBeEnabled();
+  });
+
+  test("debug upload remains reachable on narrow screens with themed portals", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installEngine(page);
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await openSettings(page);
+    await page.getByRole("radio", { name: "Dark", exact: true }).click();
+    await chooseSection(page, "Point-cloud upload");
+    await page.getByRole("combobox", { name: "Region", exact: true }).click();
+    await expect(page.getByRole("listbox")).toHaveClass(/dark.*surface-glass-overlay/);
+    await page.getByRole("option", { name: fixtures.region.name, exact: true }).click();
+    await page.getByLabel("Point-cloud file", { exact: true }).setInputFiles({ name: "capture.las", mimeType: "application/octet-stream", buffer: Buffer.from("LAS") });
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.getByRole("button", { name: "Upload to S3" }).scrollIntoViewIfNeeded();
+      await expect(page.getByRole("button", { name: "Upload to S3" })).toBeInViewport();
+      expect(await page.locator(".dt-settings-content [data-radix-scroll-area-viewport]").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.screenshot({ path: "/tmp/digital-twin-point-cloud-upload-settings.png" });
+  });
+
+  test("narrow layouts keep all settings and search reachable without overflow", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installEngine(page);
+    await page.goto(`/regions/${fixtures.region.region_id}/live`);
+    await openSettings(page);
+    await page.getByRole("radio", { name: "Dark", exact: true }).click();
+    await page.getByRole("combobox", { name: "Accent color" }).click();
+    await expect(page.getByRole("listbox")).toHaveClass(/dark/);
+    await page.getByRole("option", { name: "Custom", exact: true }).click();
+    await page.getByLabel("Custom accent", { exact: true }).fill("#a855f7");
+    await expect(page.getByText("#a855f7", { exact: true })).toBeVisible();
+    await expect.poll(() => page.locator(".dt-settings-view").evaluate((element) => getComputedStyle(element).getPropertyValue("--primary").trim())).toBe("270.7 91% 65.1%");
+    await chooseSection(page, "Map & display");
+    await page.getByRole("switch", { name: "Elevation", exact: true }).focus();
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("switch", { name: "Elevation", exact: true })).not.toBeChecked();
+    const search = page.getByRole("searchbox", { name: "Search settings" });
+    await search.fill("accent");
+    await expect(page.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible();
+    await search.fill("no-such-setting");
+    await expect(page.getByRole("heading", { name: "No settings found" })).toBeVisible();
+    await page.getByRole("button", { name: "Clear search" }).click();
+    await chooseSection(page, "Map & display");
+    for (const width of [320, 760, 900]) {
+      await page.setViewportSize({ width, height: 844 });
+      if (width === 900) {
+        await page.getByRole("separator", { name: "Resize settings navigation" }).focus();
+        await page.keyboard.press("End");
+      }
+      await page.getByRole("button", { name: "Restore map defaults" }).scrollIntoViewIfNeeded();
+      await expect(page.getByRole("button", { name: "Restore map defaults" })).toBeInViewport();
+      expect(await page.locator(".dt-settings-content [data-radix-scroll-area-viewport]").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    }
   });
 });

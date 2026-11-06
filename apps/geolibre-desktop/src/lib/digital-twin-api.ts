@@ -1,4 +1,6 @@
 /** Shared HTTP boundary for the native Digital Twin product. */
+export const DIGITAL_TWIN_ACCESS_INVALIDATED_EVENT = "digital-twin-access-invalidated";
+
 const API_STORAGE_KEY = "geolibre.digital-twin.api-url";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
 const DEV_API_PROXY_PATH = "/__digital_twin_api";
@@ -138,7 +140,10 @@ export async function requestDigitalTwinResponse(
     ...init,
     headers,
   });
-  if (!response.ok) throw await failure(response);
+  if (!response.ok) {
+    if ((response.status === 401 || response.status === 403) && typeof window !== "undefined") window.dispatchEvent(new Event(DIGITAL_TWIN_ACCESS_INVALIDATED_EVENT));
+    throw await failure(response);
+  }
   return response;
 }
 
