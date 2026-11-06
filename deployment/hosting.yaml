@@ -10,6 +10,10 @@ Parameters:
     Default: https://api.nexus.ipss.ai
     AllowedPattern: 'https://[a-z0-9.-]+'
     Description: API origin for develop; currently shares production, independently switchable later.
+  DevelopPublicOrigin:
+    Type: String
+    Default: https://develop.digital-twin.wattbyte-nexus.com
+    AllowedPattern: 'https://[a-z0-9.-]+'
   PublicOrigin:
     Type: String
     Default: ''
@@ -121,6 +125,15 @@ Resources:
       SubDomainSettings:
         - Prefix: ''
           BranchName: !GetAtt Main.BranchName
+  DevelopPublicDomain:
+    Type: AWS::Amplify::Domain
+    Properties:
+      AppId: !GetAtt DevelopApp.AppId
+      DomainName: !Select [2, !Split ['/', !Ref DevelopPublicOrigin]]
+      EnableAutoSubDomain: false
+      SubDomainSettings:
+        - Prefix: ''
+          BranchName: !GetAtt Develop.BranchName
   UserPool:
     Type: AWS::Cognito::UserPool
     DeletionPolicy: Retain
@@ -167,10 +180,10 @@ Resources:
           - CustomOrigin
           - !Sub ${PublicOrigin}/api/digital-twin/callback
           - !Sub https://main.${App.DefaultDomain}/api/digital-twin/callback
-        - !Sub https://develop.${DevelopApp.DefaultDomain}/api/digital-twin/callback
+        - !Sub ${DevelopPublicOrigin}/api/digital-twin/callback
       LogoutURLs:
         - !If [CustomOrigin, !Sub '${PublicOrigin}/', !Sub 'https://main.${App.DefaultDomain}/']
-        - !Sub https://develop.${DevelopApp.DefaultDomain}/
+        - !Sub ${DevelopPublicOrigin}/
       PreventUserExistenceErrors: ENABLED
       EnableTokenRevocation: true
       ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
@@ -260,7 +273,7 @@ Outputs:
   DevelopAppId:
     Value: !GetAtt DevelopApp.AppId
   DevelopFrontendUrl:
-    Value: !Sub https://develop.${DevelopApp.DefaultDomain}
+    Value: !Ref DevelopPublicOrigin
   DeployRoleArn:
     Value: !GetAtt DeployRole.Arn
   DevelopDeployRoleArn:
