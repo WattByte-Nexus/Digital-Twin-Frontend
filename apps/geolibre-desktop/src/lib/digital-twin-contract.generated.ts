@@ -1,5 +1,5 @@
 // Generated from the pinned Digital Twin Engine OpenAPI. Do not edit.
-// Engine revision: 383a5f2a275198ea7281a16281a672652e6be87c; schema SHA-256: 89a792a5899c52dcfd88f9fcd4d6f38ae17c0e9a5f93d3449f5973714f807341
+// Engine revision: ddb85023f6a6d1ce85dcdde594beca8d925966ba; schema SHA-256: 68b8a2f39cffe77ac72e4b0366d03ba8c1671cd65aee219327cb1a645e8e3d91
 
 export interface paths {
     "/": {
@@ -34,6 +34,1176 @@ export interface paths {
         get: operations["get_readiness__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Applications
+         * @description Return the web review queue without assigning ownership.
+         */
+        get: operations["applications_api_digital_twin_management_applications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/applications/{application_id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim
+         * @description Atomically claim the reviewed application version for this reviewer.
+         */
+        post: operations["claim_api_digital_twin_management_applications__application_id__claim_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/applications/{application_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decision
+         * @description Approve or reject an owned review without creating an account.
+         */
+        post: operations["decision_api_digital_twin_management_applications__application_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/applications/{application_id}/provision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Provision
+         * @description Confirm one invited trial user after a separate approval decision.
+         */
+        post: operations["provision_api_digital_twin_management_applications__application_id__provision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/applications/{application_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release
+         * @description Release only this reviewer's undecided application.
+         */
+        post: operations["release_api_digital_twin_management_applications__application_id__release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/applications/{application_id}/transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transfer
+         * @description Transfer owned undecided work to another eligible web reviewer.
+         */
+        post: operations["transfer_api_digital_twin_management_applications__application_id__transfer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Features
+         * @description List concrete enabled customer feature codes and AI classification.
+         *
+         *     Args:
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        get: operations["features_api_digital_twin_management_features_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/features/{feature_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Feature
+         * @description Apply reviewed live feature availability under platform action verification.
+         *
+         *     Args:
+         *         feature_id: Concrete customer product feature code from the live catalog.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["update_feature_api_digital_twin_management_features__feature_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Me
+         * @description Return the acting account's current safe management/product context.
+         *
+         *     Args:
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        get: operations["me_api_digital_twin_management_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/organization-extensions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Organization Extensions
+         * @description Return platform review work or this tenant admin's own history.
+         */
+        get: operations["organization_extensions_api_digital_twin_management_organization_extensions_get"];
+        put?: never;
+        /**
+         * Request Organization Extension
+         * @description Request ordinary organization renewal, including after expiration.
+         */
+        post: operations["request_organization_extension_api_digital_twin_management_organization_extensions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/organization-extensions/{extension_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Organization Extension
+         * @description Approve renewal from the later of now and the current deadline.
+         */
+        post: operations["decide_organization_extension_api_digital_twin_management_organization_extensions__extension_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Organizations
+         * @description List platform-managed tenant validity, plans and authoritative regions.
+         *
+         *     Args:
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        get: operations["organizations_api_digital_twin_management_organizations_get"];
+        put?: never;
+        /**
+         * Create Organization
+         * @description Create organization, initial admin and invitation intent atomically.
+         *
+         *     Args:
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["create_organization_api_digital_twin_management_organizations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/organizations/{organization_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Organization
+         * @description Replace a reviewed organization's plan, validity and owned region set.
+         *
+         *     Args:
+         *         organization_id: Exact paid tenant identity managed by the platform administrator.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["update_organization_api_digital_twin_management_organizations__organization_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/organizations/{organization_id}/administrator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Organization Administrator
+         * @description Edit a paid tenant administrator's name under current platform authority.
+         *
+         *     Args:
+         *         organization_id: Exact paid tenant identity managed by the platform administrator.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["update_organization_administrator_api_digital_twin_management_organizations__organization_id__administrator_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/organizations/{organization_id}/administrator/resend-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend Organization Administrator
+         * @description Resend a current pending tenant-admin invitation with durable idempotency.
+         *
+         *     Args:
+         *         organization_id: Exact paid tenant identity managed by the platform administrator.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["resend_organization_administrator_api_digital_twin_management_organizations__organization_id__administrator_resend_invitation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/organizations/{organization_id}/administrator/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Organization Administrator State
+         * @description Suspend/reactivate the separate tenant admin without changing product users.
+         *
+         *     Args:
+         *         organization_id: Exact paid tenant identity managed by the platform administrator.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["organization_administrator_state_api_digital_twin_management_organizations__organization_id__administrator_state_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plans
+         * @description List live fixed/custom plans for platform administration.
+         *
+         *     Args:
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        get: operations["plans_api_digital_twin_management_plans_get"];
+        put?: never;
+        /**
+         * Create Plan
+         * @description Create an explicit custom plan using only currently enabled features.
+         *
+         *     Args:
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["create_plan_api_digital_twin_management_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Plan
+         * @description Update live plan allowances/custom features with fixed-plan guards.
+         *
+         *     Args:
+         *         plan_id: Exact fixed or custom plan identity being reviewed.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["update_plan_api_digital_twin_management_plans__plan_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/plans/{plan_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Plan
+         * @description Delete only an unreferenced custom plan at the reviewed revision.
+         *
+         *     Args:
+         *         plan_id: Exact fixed or custom plan identity being reviewed.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["delete_plan_api_digital_twin_management_plans__plan_id__delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Staff
+         * @description List current platform staff for an eligible platform administrator.
+         *
+         *     Args:
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        get: operations["list_staff_api_digital_twin_management_staff_get"];
+        put?: never;
+        /**
+         * Create Staff
+         * @description Validate staff invitation fields and commit one idempotent invitation.
+         *
+         *     Args:
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["create_staff_api_digital_twin_management_staff_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/staff/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Staff
+         * @description Edit a reviewed staff name and role without bypassing last-admin checks.
+         *
+         *     Args:
+         *         account_id: Exact staff or ordinary-user identity within the selected workspace.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["update_staff_api_digital_twin_management_staff__account_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/staff/{account_id}/resend-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend Staff
+         * @description Resend an eligible pending staff invitation as one durable generation.
+         *
+         *     Args:
+         *         account_id: Exact staff or ordinary-user identity within the selected workspace.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["resend_staff_api_digital_twin_management_staff__account_id__resend_invitation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/staff/{account_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Staff State
+         * @description Suspend/reactivate staff against the exact reviewed record revision.
+         *
+         *     Args:
+         *         account_id: Exact staff or ordinary-user identity within the selected workspace.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["staff_state_api_digital_twin_management_staff__account_id__state_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/tenant-departments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Department
+         * @description Create a unique normalized department within the current organization.
+         *
+         *     Args:
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["create_department_api_digital_twin_management_tenant_departments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/tenant-departments/{department_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Department
+         * @description Rename a scoped department without replacing its user assignments.
+         *
+         *     Args:
+         *         department_id: Stable department identity in the acting tenant administrator scope.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["update_department_api_digital_twin_management_tenant_departments__department_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/tenant-departments/{department_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Department
+         * @description Delete only a scoped department with no remaining assigned accounts.
+         *
+         *     Args:
+         *         department_id: Stable department identity in the acting tenant administrator scope.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["delete_department_api_digital_twin_management_tenant_departments__department_id__delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/tenant-users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create User
+         * @description Invite a scoped ordinary user without accepting role/email edits later.
+         *
+         *     Args:
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["create_user_api_digital_twin_management_tenant_users_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/tenant-users/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update User
+         * @description Edit an owned ordinary user's name/department against a revision.
+         *
+         *     Args:
+         *         account_id: Exact staff or ordinary-user identity within the selected workspace.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["update_user_api_digital_twin_management_tenant_users__account_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/tenant-users/{account_id}/resend-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend User
+         * @description Queue one fresh invitation for a scoped, eligible pending ordinary user.
+         *
+         *     Args:
+         *         account_id: Exact staff or ordinary-user identity within the selected workspace.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["resend_user_api_digital_twin_management_tenant_users__account_id__resend_invitation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/tenant-users/{account_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * User State
+         * @description Suspend/reactivate a scoped ordinary user without restoring old sessions.
+         *
+         *     Args:
+         *         account_id: Exact staff or ordinary-user identity within the selected workspace.
+         *         body: Strictly validated request fields for this management operation.
+         *         key: Client logical operation identity, bound to actor, action and payload.
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        post: operations["user_state_api_digital_twin_management_tenant_users__account_id__state_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/tenant-workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tenant Workspace
+         * @description List only the current tenant administrator's users and departments.
+         *
+         *     Args:
+         *         service: Runtime-owned management service providing policy and persistence.
+         *         actor: Fresh verified account authority supplied by the hosting boundary.
+         *     Returns:
+         *         Safe current workflow JSON or an identical stored retry response.
+         *     Raises:
+         *         HTTPException: For denied authority, invalid or conflicting intent,
+         *             stale revisions, missing resources or unavailable persistence.
+         */
+        get: operations["tenant_workspace_api_digital_twin_management_tenant_workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/trial-extensions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trial Extensions
+         * @description Return the review queue or the active trial user's own history.
+         */
+        get: operations["trial_extensions_api_digital_twin_management_trial_extensions_get"];
+        put?: never;
+        /**
+         * Request Trial Extension
+         * @description Request a later expiry before the trial's present deadline.
+         */
+        post: operations["request_trial_extension_api_digital_twin_management_trial_extensions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/trial-extensions/{extension_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Trial Extension
+         * @description Decide one pending trial extension with mandatory applicant response.
+         */
+        post: operations["decide_trial_extension_api_digital_twin_management_trial_extensions__extension_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/trial-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trial Plan
+         * @description Return the current Trial plan before a web reviewer's provisioning review.
+         *
+         *     Args:
+         *         service: Runtime-owned management policy and persistence boundary.
+         *         actor: Fresh verified web-trial administrator authority.
+         *     Returns:
+         *         Effective Trial features and per-user cumulative allowances.
+         *     Raises:
+         *         HTTPException: For denied authority or unavailable persistence.
+         */
+        get: operations["trial_plan_api_digital_twin_management_trial_plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/trial-users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trial Users
+         * @description Return web trial accounts with separate activation and validity.
+         */
+        get: operations["trial_users_api_digital_twin_management_trial_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/trial-users/{account_id}/resend-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend
+         * @description Resend pending trial invitations; active users use recovery instead.
+         */
+        post: operations["resend_api_digital_twin_management_trial_users__account_id__resend_invitation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/trial-users/{account_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * State
+         * @description Suspend a trial independently; reject expired trial reactivation.
+         */
+        post: operations["state_api_digital_twin_management_trial_users__account_id__state_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/trial-users/direct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Direct
+         * @description Invite one direct web trial with inherited Trial plan entitlements.
+         */
+        post: operations["direct_api_digital_twin_management_trial_users_direct_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/verification/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Verification
+         * @description Send a bounded-lifetime code to the authenticated account's own email.
+         *
+         *     Args:
+         *         data: Exact pending method:path; no recipient override is accepted.
+         *         request: Server-owned current session and trusted connection address.
+         *         actor: Current account authority injected by the hosting boundary.
+         *     Returns:
+         *         Challenge identity and fixed expiry; never the verification code.
+         */
+        post: operations["start_verification_api_digital_twin_management_verification_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/management/verification/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Action
+         * @description Verify one code and return its single-use action approval to the current session.
+         */
+        post: operations["verify_action_api_digital_twin_management_verification_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/public/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate Account
+         * @description Set the recipient's password through a signed single-use invitation.
+         *
+         *     Args:
+         *         data: Emailed token and password, validated without storing either.
+         *         request: Same-origin, bounded-body request classified by hosting middleware.
+         *     Returns:
+         *         Completion status; the user must sign in and complete Cognito MFA afterward.
+         */
+        post: operations["activate_account_api_digital_twin_public_activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digital-twin/public/trial-applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit
+         * @description Accept public WEB contact data without creating or exposing accounts.
+         */
+        post: operations["submit_api_digital_twin_public_trial_applications_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -273,6 +1443,7 @@ export interface paths {
          *     Args:
          *         candidate: Validated client-owned name and geographic bounds.
          *         store: Concrete owning persistence boundary for regions.
+         *         request: Verified hosting context that supplies exclusive tenant ownership.
          *
          *     Returns:
          *         The store-owned draft region.
@@ -1238,6 +2409,177 @@ export interface components {
             status_url: string;
         };
         /**
+         * AccessExtension
+         * @description Persist a trial-user or ordinary-organization renewal request.
+         */
+        AccessExtension: {
+            /** Account Id */
+            account_id: string;
+            /** Approved Expires At */
+            approved_expires_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Duration Days */
+            duration_days?: number | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "TRIAL" | "ORGANIZATION";
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Organization Id */
+            organization_id: string;
+            /** Previous Expires At */
+            previous_expires_at?: string | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Requested Expires At */
+            requested_expires_at?: string | null;
+            /** Reviewer Id */
+            reviewer_id?: string | null;
+            /**
+             * Status
+             * @default PENDING
+             * @enum {string}
+             */
+            status: "PENDING" | "APPROVED" | "REJECTED";
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * AccessPlan
+         * @description Current product entitlements and cumulative per-user allowances.
+         */
+        AccessPlan: {
+            /**
+             * Cpu Hours
+             * @default 20
+             */
+            cpu_hours: number;
+            /** Deletable */
+            deletable: boolean;
+            /** Features */
+            features: string[];
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "TRIAL" | "STANDARD" | "CUSTOM";
+            /** Name */
+            name: string;
+            /**
+             * Storage Bytes
+             * @default 500000000
+             */
+            storage_bytes: number;
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * AccountRead
+         * @description Public management account DTO with separate durable invitation delivery.
+         */
+        AccountRead: {
+            /**
+             * Activation State
+             * @default invited
+             * @enum {string}
+             */
+            activation_state: "invited" | "active";
+            /** Department Id */
+            department_id?: string | null;
+            /** Email */
+            email: string;
+            /** First Name */
+            first_name: string;
+            /** Id */
+            id: string;
+            invitation_delivery: components["schemas"]["InvitationDelivery"] | null;
+            /** Last Name */
+            last_name: string;
+            /** Organization Id */
+            organization_id?: string | null;
+            role: components["schemas"]["AccountRole"];
+            /**
+             * Suspended
+             * @default false
+             */
+            suspended: boolean;
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * AccountRole
+         * @description The five fixed IPSS roles; tenant administrators cannot use the product.
+         * @enum {string}
+         */
+        AccountRole: "PLATFORM_SUPER_ADMIN" | "WEB_TRIAL_ADMIN" | "DESKTOP_TRIAL_ADMIN" | "TENANT_ADMIN" | "TENANT_USER";
+        /**
+         * AccountStateWrite
+         * @description Suspend or reactivate without changing invitation completion.
+         */
+        AccountStateWrite: {
+            /** Suspended */
+            suspended: boolean;
+            /** Version */
+            version: number;
+        };
+        /**
+         * ActionInput
+         * @description Bind verification to the exact pending management method and pathname.
+         */
+        ActionInput: {
+            /** Action */
+            action: string;
+        };
+        /**
+         * ActivationInput
+         * @description Carry the emailed invitation and recipient-entered password transiently.
+         */
+        ActivationInput: {
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
+        /**
+         * ApplicationDecisionInput
+         * @description Finalize an owned review and its applicant-facing response.
+         */
+        ApplicationDecisionInput: {
+            /** Approved */
+            approved: boolean;
+            /** Message */
+            message: string;
+            /** Version */
+            version: number;
+        };
+        /**
          * AssetPatch
          * @description Sparse editable fields for either public asset kind.
          */
@@ -1325,6 +2667,18 @@ export interface components {
             west: number;
         };
         /**
+         * CodeInput
+         * @description Consume a six-digit challenge in the current authenticated session.
+         */
+        CodeInput: {
+            /** Action */
+            action: string;
+            /** Challenge Id */
+            challenge_id: string;
+            /** Code */
+            code: string;
+        };
+        /**
          * ConfiguredDataSource
          * @description Summarize one enabled regional source without private configuration.
          */
@@ -1358,6 +2712,67 @@ export interface components {
             lon: number;
         };
         /**
+         * Department
+         * @description Organization-owned label with normalized uniqueness enforced in SQL.
+         */
+        Department: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Organization Id */
+            organization_id: string;
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * DepartmentCreate
+         * @description Create a normalized unique department name in the current organization.
+         */
+        DepartmentCreate: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * DepartmentWrite
+         * @description Rename a department without replacing its stable user assignments.
+         */
+        DepartmentWrite: {
+            /** Name */
+            name: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * DirectTrialInput
+         * @description Invite a web trial directly with the same provisioning invariants.
+         */
+        DirectTrialInput: {
+            /** Duration Days */
+            duration_days: number;
+            /** Email */
+            email: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Organization Name */
+            organization_name: string;
+            /**
+             * Reason
+             * @default Direct web trial
+             */
+            reason: string;
+            /**
+             * Website
+             * @default
+             */
+            website: string;
+        };
+        /**
          * EarthEngineMetadata
          * @description Expose selected static layers and startup readiness without cache refs.
          */
@@ -1377,6 +2792,102 @@ export interface components {
             region_id: string;
             /** Source Id */
             source_id: string;
+        };
+        /**
+         * ExtensionDecisionInput
+         * @description Review one extension without changing any features, usage, or state.
+         */
+        ExtensionDecisionInput: {
+            /** Approved */
+            approved: boolean;
+            /** Expected Expires At */
+            expected_expires_at?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * ExtensionPage
+         * @description Expose scoped extension history without other tenant account details.
+         */
+        ExtensionPage: {
+            /** Items */
+            items: components["schemas"]["ExtensionRead"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * ExtensionRead
+         * @description Include the authoritative current deadline for a reviewed decision.
+         */
+        ExtensionRead: {
+            /** Account Id */
+            account_id: string;
+            /** Approved Expires At */
+            approved_expires_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Current Expires At */
+            current_expires_at: string | null;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Duration Days */
+            duration_days?: number | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "TRIAL" | "ORGANIZATION";
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Organization Id */
+            organization_id: string;
+            /** Previous Expires At */
+            previous_expires_at?: string | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Requested Expires At */
+            requested_expires_at?: string | null;
+            /** Reviewer Id */
+            reviewer_id?: string | null;
+            /**
+             * Status
+             * @default PENDING
+             * @enum {string}
+             */
+            status: "PENDING" | "APPROVED" | "REJECTED";
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * FeatureWrite
+         * @description Change product availability against an explicitly reviewed revision.
+         */
+        FeatureWrite: {
+            /** Enabled */
+            enabled: boolean;
+            /** Version */
+            version: number;
         };
         /**
          * FieldError
@@ -1477,6 +2988,33 @@ export interface components {
             lat: number;
             /** Lon */
             lon: number;
+        };
+        /**
+         * InvitationCreate
+         * @description Invitation target; credentials are owned by Cognito, never this API.
+         */
+        InvitationCreate: {
+            /** Email */
+            email: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+        };
+        /**
+         * InvitationDelivery
+         * @description Safe current invitation delivery state; never includes mail/provider payloads.
+         */
+        InvitationDelivery: {
+            /** Attempts */
+            attempts: number;
+            /** Failure Code */
+            failure_code: ("provider_unavailable" | "delivery_failed") | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "processing" | "delivered" | "failed" | "expired" | "setup-in-progress" | "not-current";
         };
         /**
          * LandCoverBreakdownEntry
@@ -1647,6 +3185,102 @@ export interface components {
             /** Value */
             value?: number | null;
         };
+        /**
+         * Organization
+         * @description Tenant validity and live plan binding; trials start on activation.
+         */
+        Organization: {
+            /**
+             * Duration Days
+             * @default 365
+             */
+            duration_days: number;
+            /** Effective At */
+            effective_at: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Is Trial
+             * @default false
+             */
+            is_trial: boolean;
+            /** Name */
+            name: string;
+            /** Plan Id */
+            plan_id: string;
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * OrganizationCreate
+         * @description Create a paid organization, initial administrator and ownership together.
+         */
+        OrganizationCreate: {
+            /**
+             * Duration Days
+             * @default 365
+             */
+            duration_days: number;
+            initial_admin: components["schemas"]["InvitationCreate"];
+            /** Name */
+            name: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Region Ids */
+            region_ids?: string[];
+        };
+        /**
+         * OrganizationExtensionInput
+         * @description Request ordinary organization access renewal, including after expiry.
+         */
+        OrganizationExtensionInput: {
+            /**
+             * Duration Days
+             * @default 365
+             */
+            duration_days: number;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+        };
+        /**
+         * OrganizationWrite
+         * @description Edit organization validity, plan and exact owned region selection.
+         */
+        OrganizationWrite: {
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Name */
+            name: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Region Ids */
+            region_ids: string[];
+            /** Version */
+            version: number;
+        };
         /** Page[Region] */
         Page_Region_: {
             /** Items */
@@ -1674,6 +3308,60 @@ export interface components {
             items: components["schemas"]["WildfireSimulationRun"][];
             /** Next Cursor */
             next_cursor: string | null;
+        };
+        /**
+         * PersonWrite
+         * @description Update a human name against an exact account revision.
+         */
+        PersonWrite: {
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * PlanCreate
+         * @description Create an explicit custom plan from the live product catalog.
+         */
+        PlanCreate: {
+            /**
+             * Cpu Hours
+             * @default 20
+             */
+            cpu_hours: number;
+            /** Features */
+            features: string[];
+            /** Name */
+            name: string;
+            /**
+             * Storage Bytes
+             * @default 500000000
+             */
+            storage_bytes: number;
+        };
+        /**
+         * PlanWrite
+         * @description Edit an exact plan revision; fixed plan feature rules stay immutable.
+         */
+        PlanWrite: {
+            /**
+             * Cpu Hours
+             * @default 20
+             */
+            cpu_hours: number;
+            /** Features */
+            features: string[];
+            /** Name */
+            name: string;
+            /**
+             * Storage Bytes
+             * @default 500000000
+             */
+            storage_bytes: number;
+            /** Version */
+            version: number;
         };
         /**
          * PointCloudDatasetCollection
@@ -2305,6 +3993,21 @@ export interface components {
             type: string;
         };
         /**
+         * ProvisionInput
+         * @description Confirm an approved application's inherited Trial plan invitation.
+         */
+        ProvisionInput: {
+            /**
+             * Confirmed
+             * @constant
+             */
+            confirmed: true;
+            /** Duration Days */
+            duration_days: number;
+            /** Version */
+            version: number;
+        };
+        /**
          * Region
          * @description Describe one geographic region managed by the catalog.
          *
@@ -2699,6 +4402,32 @@ export interface components {
             world_state_ref: string;
         };
         /**
+         * StaffCreate
+         * @description Invite one staff account into a fixed management role.
+         */
+        StaffCreate: {
+            /** Email */
+            email: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            role: components["schemas"]["AccountRole"];
+        };
+        /**
+         * StaffWrite
+         * @description Edit a staff name and singular management role against a revision.
+         */
+        StaffWrite: {
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            role: components["schemas"]["AccountRole"];
+            /** Version */
+            version: number;
+        };
+        /**
          * SyntheticWindScenario
          * @description Describe one immutable, bounded wind override for a future simulation.
          *
@@ -2732,6 +4461,44 @@ export interface components {
             status: components["schemas"]["ScenarioStatus"];
             wind_direction: components["schemas"]["ScenarioWindDirection"];
             wind_speed: components["schemas"]["ScenarioWindSpeed"];
+        };
+        /**
+         * TenantUserCreate
+         * @description Invite an ordinary user into the acting administrator's organization.
+         */
+        TenantUserCreate: {
+            /** Department Id */
+            department_id: string;
+            /** Email */
+            email: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+        };
+        /**
+         * TenantUserWrite
+         * @description Edit ordinary user identity labels without promotion or email mutation.
+         */
+        TenantUserWrite: {
+            /** Department Id */
+            department_id: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * TransferInput
+         * @description Select the active web reviewer receiving an undecided application.
+         */
+        TransferInput: {
+            /** Owner Id */
+            owner_id: string;
+            /** Version */
+            version: number;
         };
         /**
          * TreeAssetCreate
@@ -2770,6 +4537,165 @@ export interface components {
             /** Point Count */
             point_count: number;
         };
+        /**
+         * TrialApplication
+         * @description Persist the WEB application review state and explicit provisioning link.
+         */
+        TrialApplication: {
+            /** Claimed At */
+            claimed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Cycle
+             * @default 0
+             */
+            cycle: number;
+            /**
+             * Decision Message
+             * @default
+             */
+            decision_message: string;
+            /** Email */
+            email: string;
+            /** First Name */
+            first_name: string;
+            /** Id */
+            id: string;
+            /** Last Name */
+            last_name: string;
+            /** Organization Name */
+            organization_name: string;
+            /** Owner Id */
+            owner_id?: string | null;
+            /** Provisioned Account Id */
+            provisioned_account_id?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @default PENDING
+             * @enum {string}
+             */
+            status: "PENDING" | "UNDER_EVALUATION" | "APPROVED" | "REJECTED";
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * TrialApplicationInput
+         * @description Capture an anonymous WEB application without creating an identity.
+         */
+        TrialApplicationInput: {
+            /** Email */
+            email: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Organization Name */
+            organization_name: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Website
+             * @default
+             */
+            website: string;
+        };
+        /**
+         * TrialApplicationPage
+         * @description Expose a bounded web review collection with explicit pagination state.
+         */
+        TrialApplicationPage: {
+            /** Items */
+            items: components["schemas"]["TrialApplication"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * TrialExtensionInput
+         * @description Request a future web trial expiry with a mandatory explanation.
+         */
+        TrialExtensionInput: {
+            /** Reason */
+            reason: string;
+            /**
+             * Requested Expires At
+             * Format: date-time
+             */
+            requested_expires_at: string;
+        };
+        /**
+         * TrialReceipt
+         * @description Return the same anonymous receipt for new, repeated, or throttled intake.
+         */
+        TrialReceipt: {
+            /** Accepted */
+            accepted: boolean;
+        };
+        /**
+         * TrialStateInput
+         * @description Change suspension independently of invitation and expiration state.
+         */
+        TrialStateInput: {
+            /** Suspended */
+            suspended: boolean;
+            /** Version */
+            version: number;
+        };
+        /**
+         * TrialUserPage
+         * @description Expose only web-trial accounts to eligible web reviewers.
+         */
+        TrialUserPage: {
+            /** Items */
+            items: components["schemas"]["TrialUserRead"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * TrialUserRead
+         * @description Combine trial identity and independently tracked organization validity.
+         */
+        TrialUserRead: {
+            /**
+             * Activation State
+             * @default invited
+             * @enum {string}
+             */
+            activation_state: "invited" | "active";
+            /** Department Id */
+            department_id?: string | null;
+            /** Email */
+            email: string;
+            /** First Name */
+            first_name: string;
+            /** Id */
+            id: string;
+            invitation_delivery: components["schemas"]["InvitationDelivery"] | null;
+            /** Last Name */
+            last_name: string;
+            organization: components["schemas"]["Organization"];
+            /** Organization Id */
+            organization_id?: string | null;
+            role: components["schemas"]["AccountRole"];
+            /**
+             * Suspended
+             * @default false
+             */
+            suspended: boolean;
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -2782,6 +4708,22 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * VersionedWrite
+         * @description Expected revision, preventing silent overwrites of concurrent edits.
+         */
+        VersionedWrite: {
+            /** Version */
+            version: number;
+        };
+        /**
+         * VersionInput
+         * @description Require the latest record version on mutable review operations.
+         */
+        VersionInput: {
+            /** Version */
+            version: number;
         };
         /**
          * WeatherCoverage
@@ -3129,6 +5071,1554 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    applications_api_digital_twin_management_applications_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialApplicationPage"];
+                };
+            };
+        };
+    };
+    claim_api_digital_twin_management_applications__application_id__claim_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialApplication"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decision_api_digital_twin_management_applications__application_id__decision_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationDecisionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialApplication"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    provision_api_digital_twin_management_applications__application_id__provision_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialApplication"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_api_digital_twin_management_applications__application_id__release_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialApplication"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transfer_api_digital_twin_management_applications__application_id__transfer_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialApplication"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    features_api_digital_twin_management_features_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    update_feature_api_digital_twin_management_features__feature_id__post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                feature_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeatureWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    me_api_digital_twin_management_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    organization_extensions_api_digital_twin_management_organization_extensions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionPage"];
+                };
+            };
+        };
+    };
+    request_organization_extension_api_digital_twin_management_organization_extensions_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationExtensionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessExtension"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_organization_extension_api_digital_twin_management_organization_extensions__extension_id__decision_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                extension_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtensionDecisionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessExtension"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    organizations_api_digital_twin_management_organizations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    create_organization_api_digital_twin_management_organizations_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_organization_api_digital_twin_management_organizations__organization_id__post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_organization_administrator_api_digital_twin_management_organizations__organization_id__administrator_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_organization_administrator_api_digital_twin_management_organizations__organization_id__administrator_resend_invitation_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    organization_administrator_state_api_digital_twin_management_organizations__organization_id__administrator_state_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountStateWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plans_api_digital_twin_management_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    create_plan_api_digital_twin_management_plans_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_plan_api_digital_twin_management_plans__plan_id__post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_plan_api_digital_twin_management_plans__plan_id__delete_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_staff_api_digital_twin_management_staff_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    create_staff_api_digital_twin_management_staff_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_staff_api_digital_twin_management_staff__account_id__post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_staff_api_digital_twin_management_staff__account_id__resend_invitation_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    staff_state_api_digital_twin_management_staff__account_id__state_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountStateWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_department_api_digital_twin_management_tenant_departments_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Department"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_department_api_digital_twin_management_tenant_departments__department_id__post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Department"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_department_api_digital_twin_management_tenant_departments__department_id__delete_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_user_api_digital_twin_management_tenant_users_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantUserCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_api_digital_twin_management_tenant_users__account_id__post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantUserWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_user_api_digital_twin_management_tenant_users__account_id__resend_invitation_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    user_state_api_digital_twin_management_tenant_users__account_id__state_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountStateWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tenant_workspace_api_digital_twin_management_tenant_workspace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    trial_extensions_api_digital_twin_management_trial_extensions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionPage"];
+                };
+            };
+        };
+    };
+    request_trial_extension_api_digital_twin_management_trial_extensions_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrialExtensionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessExtension"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_trial_extension_api_digital_twin_management_trial_extensions__extension_id__decision_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                extension_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtensionDecisionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessExtension"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trial_plan_api_digital_twin_management_trial_plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessPlan"];
+                };
+            };
+        };
+    };
+    trial_users_api_digital_twin_management_trial_users_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialUserPage"];
+                };
+            };
+        };
+    };
+    resend_api_digital_twin_management_trial_users__account_id__resend_invitation_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    state_api_digital_twin_management_trial_users__account_id__state_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrialStateInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    direct_api_digital_twin_management_trial_users_direct_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectTrialInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialApplication"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_verification_api_digital_twin_management_verification_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_action_api_digital_twin_management_verification_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_account_api_digital_twin_public_activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_api_digital_twin_public_trial_applications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrialApplicationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialReceipt"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

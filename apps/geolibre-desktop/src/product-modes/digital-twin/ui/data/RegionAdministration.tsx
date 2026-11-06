@@ -2,7 +2,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label }
 import { useRef, useState } from "react";
 import { createDigitalTwinRegion, updateDigitalTwinRegion, deleteDigitalTwinRegion, publishDigitalTwinRegion, type DigitalTwinRegionRecord, type DigitalTwinRegionReadiness } from "../../../../lib/digital-twin-regions";
 
-export function RegionAdministration({ apiUrl, region, readiness, canManage, onBusyChange, onChanged, onError }: { apiUrl: string; region: DigitalTwinRegionRecord | null; readiness: DigitalTwinRegionReadiness | null; canManage: boolean; onBusyChange: (busy: boolean) => void; onChanged: (region?: DigitalTwinRegionRecord) => void; onError: (error: unknown) => void }) {
+export function RegionAdministration({ apiUrl, region, readiness, canManage, canPublish = false, onBusyChange, onChanged, onError }: { apiUrl: string; region: DigitalTwinRegionRecord | null; readiness: DigitalTwinRegionReadiness | null; canManage: boolean; canPublish?: boolean; onBusyChange: (busy: boolean) => void; onChanged: (region?: DigitalTwinRegionRecord) => void; onError: (error: unknown) => void }) {
   const [name, setName] = useState(region?.name ?? "");
   const [bounds, setBounds] = useState(region ? [region.bounds.west, region.bounds.south, region.bounds.east, region.bounds.north].join(", ") : "");
   const lock = useRef(false);
@@ -10,7 +10,7 @@ export function RegionAdministration({ apiUrl, region, readiness, canManage, onB
   const [confirmDelete, setConfirmDelete] = useState(false);
   const editable = canManage && (!region || region.status === "draft");
   async function act(action: "save" | "publish" | "delete") {
-    if (lock.current || !editable) return;
+    if (lock.current || !editable || (action === "publish" && !canPublish)) return;
     lock.current = true; setBusy(true); onBusyChange(true);
     try {
       if (action === "delete" && region) { await deleteDigitalTwinRegion(apiUrl, region.region_id); onChanged(); }
@@ -30,6 +30,6 @@ export function RegionAdministration({ apiUrl, region, readiness, canManage, onB
     {readiness ? <div className="space-y-1 text-sm text-muted-foreground"><p>Grid: {readiness.configured ? "configured" : "unconfigured"}; {readiness.grid_hydrated ? "hydrated" : "not hydrated"}. Runtime: {readiness.runtime_ready ? "ready" : "unavailable"}.</p>{readiness.reason_codes.length ? <p>Blocking reasons: {readiness.reason_codes.join(", ")}</p> : null}<p>Publication does not provision grids or workers.</p></div> : region ? <p className="text-sm text-muted-foreground">Readiness has not been verified.</p> : null}
     <div className="space-y-2"><Label htmlFor="region-name">Name</Label><Input id="region-name" value={name} disabled={!editable || busy} onChange={(event) => setName(event.target.value)} /></div>
     <div className="space-y-2"><Label htmlFor="region-bounds">WGS84 bounds (west, south, east, north)</Label><Input id="region-bounds" value={bounds} disabled={!editable || busy} onChange={(event) => setBounds(event.target.value)} /></div>
-    {!editable ? <p className="text-sm text-muted-foreground">{region?.status === "published" ? "Published geometry and assets are read-only." : "Administration permission is required."}</p> : <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={() => void act("save")}>{busy ? "Working…" : region ? "Save draft" : "Create draft"}</Button>{region ? <><Button variant="outline" disabled={busy} onClick={() => void act("publish")}>Publish region</Button><Button variant="destructive" disabled={busy} onClick={() => confirmDelete ? void act("delete") : setConfirmDelete(true)}>{confirmDelete ? "Confirm delete draft" : "Delete draft"}</Button>{confirmDelete ? <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Keep draft</Button> : null}</> : null}</div>}
+    {!editable ? <p className="text-sm text-muted-foreground">{region?.status === "published" ? "Published geometry and assets are read-only." : "Administration permission is required."}</p> : <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={() => void act("save")}>{busy ? "Working…" : region ? "Save draft" : "Create draft"}</Button>{region ? <><Button variant="outline" disabled={busy || !canPublish} onClick={() => void act("publish")}>Publish region</Button><Button variant="destructive" disabled={busy} onClick={() => confirmDelete ? void act("delete") : setConfirmDelete(true)}>{confirmDelete ? "Confirm delete draft" : "Delete draft"}</Button>{confirmDelete ? <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Keep draft</Button> : null}</> : null}</div>}
   </CardContent></Card>;
 }

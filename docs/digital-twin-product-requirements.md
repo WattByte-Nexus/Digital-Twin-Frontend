@@ -163,10 +163,11 @@ progression, compares results, and identifies data or model limitations.
 
 ### Supporting user: Product administrator
 
-Manages organization access, role assignments, deployment configuration,
-region visibility, and operational diagnostics. Region and asset publication
-may remain a separate data-administration workflow until explicitly brought
-into the Frontend.
+Uses a separate administration account. Platform staff manage organizations,
+plans and staff; tenant administrators manage their organization's departments
+and ordinary users. Neither role receives product-data or GIS access. A person
+who also operates the product needs a separate `TENANT_USER` account. Engineer,
+analyst and operator describe user jobs, not additional authorization roles.
 
 ## 6. Core User Journeys
 
@@ -241,7 +242,7 @@ Priority definitions:
 | FR-002 | P0 | The deployment must use a focused UI profile that exposes the operator workflow first and hides unrelated GIS tools by default. |
 | FR-003 | P0 | The application must support authenticated sessions and organization-scoped access before production data is exposed. |
 | FR-004 | P0 | The application must enforce role-based access for viewing evidence, submitting or cancelling runs, exporting data, and administering product settings. |
-| FR-005 | P0 | Authorized engineer, risk-analyst, and administrator roles may enter an advanced GIS workspace without changing the default operator experience. Grid operations operators do not receive expert GIS access by default. |
+| FR-005 | P0 | Product workspaces require `TENANT_USER`, an eligible organization or trial, current plan features and exact resource/action grants. Staff and tenant administrators receive no GIS access. Operational personas do not grant permissions; supervisor-specific decisions remain unavailable pending an explicit action policy. |
 
 ### 7.2 Readiness and regional overview
 

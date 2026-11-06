@@ -1,6 +1,17 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Amplify Hosting, Cognito sessions and GitHub OIDC deployment for WattByte Nexus.
 Parameters:
+  ApiRoleName:
+    Type: String
+    MinLength: 1
+    Description: Existing independent API task role receiving account-management permissions.
+  TransactionalEmailSender:
+    Type: String
+    AllowedPattern: '^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$'
+  TransactionalEmailIdentityArn:
+    Type: String
+    AllowedPattern: '^arn:aws:ses:[a-z0-9-]+:[0-9]{12}:identity/.+$'
+    Description: Verified SES identity; its region must match the API email_region setting.
   ApiOrigin:
     Type: String
     Default: ''
@@ -14,6 +25,10 @@ Parameters:
     Type: String
     Default: ''
     AllowedPattern: '(^$|https://[a-z0-9.-]+)'
+  DevelopPublicOrigin:
+    Type: String
+    Default: https://develop.digital-twin.wattbyte-nexus.com
+    AllowedPattern: 'https://[a-z0-9.-]+'
 Conditions:
   CustomOrigin: !Not [!Equals [!Ref PublicOrigin, '']]
   ApiConfigured: !Not [!Equals [!Ref ApiOrigin, '']]
@@ -121,6 +136,15 @@ Resources:
       SubDomainSettings:
         - Prefix: ''
           BranchName: !GetAtt Main.BranchName
+  DevelopPublicDomain:
+    Type: AWS::Amplify::Domain
+    Properties:
+      AppId: !GetAtt DevelopApp.AppId
+      DomainName: !Select [2, !Split ['/', !Ref DevelopPublicOrigin]]
+      EnableAutoSubDomain: false
+      SubDomainSettings:
+        - Prefix: ''
+          BranchName: !GetAtt Develop.BranchName
   UserPool:
     Type: AWS::Cognito::UserPool
     DeletionPolicy: Retain
@@ -141,8 +165,16 @@ Resources:
           RequireNumbers: true
           RequireSymbols: true
           TemporaryPasswordValidityDays: 7
-      MfaConfiguration: OPTIONAL
+      MfaConfiguration: 'ON'
       EnabledMfas: [SOFTWARE_TOKEN_MFA]
+      Schema:
+        - Name: nexus_account_id
+          AttributeDataType: String
+          Mutable: false
+          Required: false
+          StringAttributeConstraints:
+            MinLength: '1'
+            MaxLength: '100'
       AccountRecoverySetting:
         RecoveryMechanisms:
           - Name: verified_email
@@ -181,12 +213,6 @@ Resources:
         AccessToken: hours
         IdToken: hours
         RefreshToken: days
-  Administrators:
-    Type: AWS::Cognito::UserPoolGroup
-    Properties:
-      UserPoolId: !Ref UserPool
-      GroupName: nexus-administrators
-      Description: Administrators of the single WattByte Nexus deployment
   SessionSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
@@ -194,6 +220,29 @@ Resources:
       GenerateSecretString:
         PasswordLength: 64
         ExcludePunctuation: true
+  AccountManagementPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: nexus-account-management
+      Roles: [!Ref ApiRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - cognito-idp:DescribeUserPoolClient
+              - cognito-idp:GetUserPoolMfaConfig
+              - cognito-idp:AdminGetUser
+              - cognito-idp:AdminCreateUser
+              - cognito-idp:AdminSetUserPassword
+              - cognito-idp:AdminUpdateUserAttributes
+            Resource: !GetAtt UserPool.Arn
+          - Effect: Allow
+            Action: ses:SendEmail
+            Resource: !Ref TransactionalEmailIdentityArn
+            Condition:
+              StringEquals:
+                ses:FromAddress: !Ref TransactionalEmailSender
   DeployRole:
     Type: AWS::IAM::Role
     Properties:

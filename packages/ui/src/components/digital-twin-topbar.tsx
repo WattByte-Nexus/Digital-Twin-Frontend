@@ -51,6 +51,7 @@ export interface DigitalTwinTopbarProps {
   sidebarTrigger?: ReactNode;
   themeMode?: "light" | "dark";
   onOpenAdministration?: () => void;
+  onOpenAccount?: () => void;
   onOpenAlerts?: () => void;
   onOpenDiagnostics?: () => void;
   onOpenExpertWorkspace?: () => void;
@@ -117,6 +118,7 @@ export function DigitalTwinTopbar({
   sidebarTrigger,
   themeMode = "dark",
   onOpenAdministration,
+  onOpenAccount,
   onOpenAlerts,
   onOpenDiagnostics,
   onOpenExpertWorkspace,
@@ -239,6 +241,7 @@ export function DigitalTwinTopbar({
                 </span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {onOpenAccount ? <MenuAction icon={Settings} onSelect={onOpenAccount}>Account and usage</MenuAction> : null}
               <MenuAction icon={Activity} onSelect={onOpenDiagnostics}>
                 Diagnostics
               </MenuAction>

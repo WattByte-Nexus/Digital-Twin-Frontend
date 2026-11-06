@@ -70,7 +70,8 @@ interface RunsViewProps {
   regions: DigitalTwinRegionRecord[];
   runs: DigitalTwinRunRecord[];
   theme: SurfaceTheme;
-  canCancel?: boolean;
+  canCancelRun?: (regionId: string) => boolean;
+  canCreateScenario?: boolean;
   authorizedRegionIds?: readonly string[];
   lastSuccessAt?: Date | null;
 }
@@ -132,7 +133,8 @@ export function RunsView({
   regions,
   runs,
   theme,
-  canCancel = false,
+  canCancelRun = () => false,
+  canCreateScenario = false,
   authorizedRegionIds,
   lastSuccessAt,
 }: RunsViewProps) {
@@ -224,7 +226,7 @@ export function RunsView({
     return (
       <RunDetailView
         apiUrl={apiUrl}
-        canCancel={canCancel}
+        canCancel={canCancelRun(selectedRun.regionId)}
         key={selectedRun.id}
         mapControllerRef={mapControllerRef}
         mapSlot={mapSlot}
@@ -288,7 +290,7 @@ export function RunsView({
             <RefreshCw aria-hidden="true" className={isLoading ? "animate-spin" : undefined} />
             Refresh
           </Button>
-          <Button onClick={onCreateScenario}>
+          <Button disabled={!canCreateScenario} onClick={onCreateScenario}>
             <Plus aria-hidden="true" /> New simulation
           </Button>
         </div>

@@ -36,9 +36,9 @@ Engine result as an automatic switching command.
 | Deferred views | Profile, schematic, and side-by-side coordinated viewports |
 | Delivery target | Browser application deployed in a utility-controlled non-production pilot environment behind a same-origin reverse proxy |
 | Browser target | Current and previous major versions of Microsoft Edge and Google Chrome on Windows 11 |
-| Identity default | Microsoft Entra ID through standards-based OIDC. A different enterprise OIDC provider may replace it without changing role semantics. No production data is exposed before Engine-enforced organization and region scope exists. |
+| Identity default | Cognito OIDC with required authenticator-app MFA. Aurora resolves current IPSS account roles, plan features and organization-owned region scope on protected requests. Sensitive management writes also require fresh email verification. |
 | Reference workstation | Windows 11, 4 physical CPU cores, 16 GiB RAM, WebGL2-capable integrated GPU comparable to Intel Iris Xe, 1920x1080 display, mouse or trackpad, and keyboard |
-| Expert GIS access | Hidden from the default operator product; available only to engineer, risk analyst, and administrator roles through an explicit workspace transition |
+| Expert GIS access | Product workspaces require an eligible TENANT_USER account and current plan/resource/action permissions. Administrative accounts receive no product access. |
 | Pilot scale | One real utility region, including at least 50,000 trees. The qualification dataset also targets 5,000 poles, 5,000 spans, and 10,000 rendered conductor segments. These line counts are validation targets until measured pilot inventory replaces them. |
 | Initial delivery budgets | Asset delivery may exercise the Engine's current 64 MiB GeoJSON ceiling and result delivery its current 5 MiB GeoJSON ceiling. Failure to meet interaction targets at those limits triggers tiling, filtering, or level-of-detail work; it does not justify silently reducing the test inventory. |
 
@@ -78,49 +78,44 @@ Engine result as an automatic switching command.
 | Scenario builder and review | Create bounded what-if intent, validate it, review exact inputs, and submit once | clean, dirty, invalid, ready, submitting, accepted, conflict |
 | Decision handoff | Record disposition and produce a stable evidence summary plus external decision reference | draft, recorded, exported/shared, unavailable |
 | Diagnostics | Separate user-correctable readiness and connectivity problems without exposing secrets or internal paths | component-specific healthy, degraded, unavailable, incompatible |
-| Administration | Manage access, role assignments, region visibility, and deployment diagnostics | administrator-only; no operational decision authority implied |
+| Administration | Manage staff, organizations/plans or tenant people according to the account role | separate administrative account; no product or operational decision authority |
 
 The live operations overview and alert inbox may share one route if each outcome
 and state remains independently testable.
 
-## 5. Role and action matrix
+## 5. Account roles and product actions
 
-Legend: `Yes` is allowed, `No` is forbidden, and `Scoped` means allowed only for
-assigned organizations and regions.
+The IPSS account policy supersedes the earlier operational-persona permission
+matrix. Each account has exactly one role. Operator, supervisor, engineer and
+analyst describe jobs and do not grant access.
 
-| Action | Grid operations operator | Grid operations supervisor | Grid/vegetation engineer | Risk/model analyst | Product administrator |
-| --- | --- | --- | --- | --- | --- |
-| View monitored regions and evidence | Scoped | Scoped | Scoped | Scoped | Scoped diagnostics only |
-| Receive and acknowledge operational alerts | Scoped | Scoped | No | No | No |
-| Assign an alert for investigation | Scoped | Scoped | No | No | No |
-| Inspect plan, 3D, lineage, and replay | Scoped | Scoped | Scoped | Scoped | Scoped diagnostics only |
-| Create a manual scenario | Scoped | Scoped | Scoped | Scoped | No |
-| Submit or cancel an eligible manual run | Scoped | Scoped | Scoped | Scoped | No |
-| Record investigation disposition | Scoped | Scoped | Comment only | Comment only | No |
-| Record external keep-energized/de-energize decision reference | No | Scoped | No | No | No |
-| Generate or share evidence summary | Scoped | Scoped | Scoped | Scoped | No |
-| Enter expert GIS workspace | No | Optional by explicit grant | Yes | Yes | Yes |
-| Export raw or advanced GIS data | No | No | By explicit grant | By explicit grant | By explicit grant |
-| Manage users, roles, regions, or deployment configuration | No | No | No | No | Yes |
-| Send a switching command to grid equipment | No | No | No | No | No |
+| Account role | Management scope | Product data and actions |
+| --- | --- | --- |
+| PLATFORM_SUPER_ADMIN | Staff, organizations, initial tenant administrators, plans/features and organization extensions | None |
+| WEB_TRIAL_ADMIN | Owned web application review/provisioning, trial maintenance and extensions | None |
+| DESKTOP_TRIAL_ADMIN | Reserved for the separate desktop trial workflow | None |
+| TENANT_ADMIN | Own organization's departments/users and organization-extension requests | None |
+| TENANT_USER | Own account, usage and trial-extension request when applicable | Current enabled plan features on organization-owned regions; manual compute must fit the cumulative allowance |
+
+Web trials are TENANT_USER accounts with a Trial plan. Supervisor-only external
+decision recording, alert mutations and other future workflows need an explicit
+Engine action policy before exposure. They are not granted by a job title or plan
+purchase. No account can send switching commands to grid equipment.
 
 Every permission is enforced by the Engine or trusted application backend. A
 hidden or disabled Frontend control is not authorization.
 
 ### 5.1 Expert GIS tool allowlist
 
-The expert workspace is an explicit role transition, not a second set of menus
-inside the operator workflow.
+Product workspace navigation does not change the account role. Every tool must
+stay within the current plan and exact resource/action permissions.
 
-| Tool group | Grid/vegetation engineer | Risk/model analyst | Product administrator |
-| --- | --- | --- | --- |
-| Layer catalog, visibility, ordering, opacity, and approved styling | Yes | Yes | By separate expert grant |
-| Attribute table, filtering, search, box/lasso selection | Yes | Yes | By separate expert grant |
-| Distance, area, and clearance measurement | Yes | Yes | By separate expert grant |
-| Network traversal and nearby-vegetation inspection | Yes | Yes | By separate expert grant |
-| Raster, terrain, point-cloud, and temporal inspection | View | View and analyze | By separate expert grant |
-| Approved evidence and data export | By explicit export grant | By explicit export grant | By explicit export grant |
-| Product access and deployment diagnostics | No | No | Yes |
+| Tool group | Eligible TENANT_USER | Administrative accounts |
+| --- | --- | --- |
+| Approved layer/attribute/selection/measurement tools | Requires enabled feature and owned region | None |
+| Network, terrain, point-cloud and temporal inspection | Requires enabled feature and owned region | None |
+| Approved evidence and data export | Requires explicit implemented export action | None |
+| Staff, plan, trial or tenant people management | None | Limited by the selected account role |
 
 The pilot disables the Python console, Jupyter, arbitrary plugin installation,
 unrestricted SQL, unapproved file upload, direct storage browsing, and any tool
@@ -210,7 +205,7 @@ when known, and one of the approved geometry-fidelity labels.
 | Tree | Stable identity, WGS84 location, and canopy radius for published calculation inventory | Generic symbol proves exact crown shape or height |
 | Terrain | Versioned terrain source with displayed resolution | Visual mesh is a field survey |
 | Structures | Optional contextual geometry labeled by source and fidelity | Context geometry participates in risk calculation unless Engine lineage says so |
-| Point clouds | Expert-role, on-demand layer with level of detail and memory limits | Full point cloud must be loaded for the operator workflow |
+| Point clouds | Authorized TENANT_USER, on-demand layer with level of detail and memory limits | Full point cloud must be loaded for the operator workflow |
 
 Approved in-world animation is limited to Engine-provided conductor movement,
 weather direction or magnitude, and wildfire progression. Clearance

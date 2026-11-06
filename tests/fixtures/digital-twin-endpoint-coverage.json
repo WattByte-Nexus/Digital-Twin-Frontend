@@ -9,6 +9,382 @@
     },
     {
       "method": "GET",
+      "path": "/api/digital-twin/management/applications",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/applications/{application_id}/claim",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/applications/{application_id}/decision",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/applications/{application_id}/provision",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/applications/{application_id}/release",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/applications/{application_id}/transfer",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/management/features",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/features/{feature_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/management/me",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/AccountPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/management/organization-extensions",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/organization-extensions",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/organization-extensions/{extension_id}/decision",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/management/organizations",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/organizations",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/organizations/{organization_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/organizations/{organization_id}/administrator",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/organizations/{organization_id}/administrator/resend-invitation",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/organizations/{organization_id}/administrator/state",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/management/plans",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/plans",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/plans/{plan_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/plans/{plan_id}/delete",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PlatformPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/management/staff",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/staff",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/staff/{account_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/staff/{account_id}/resend-invitation",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/staff/{account_id}/state",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/tenant-departments",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/tenant-departments/{department_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/tenant-departments/{department_id}/delete",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/tenant-users",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/tenant-users/{account_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/tenant-users/{account_id}/resend-invitation",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/tenant-users/{account_id}/state",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/management/tenant-workspace",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PeoplePanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/management/trial-extensions",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/trial-extensions",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/trial-extensions/{extension_id}/decision",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/management/trial-plan",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/management/trial-users",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/trial-users/direct",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/trial-users/{account_id}/resend-invitation",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/trial-users/{account_id}/state",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/TrialsPanel.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/verification/start",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/shared.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/management/verification/verify",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/client.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/shared.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/public/activate",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PublicAccountEntry.tsx",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PublicAccountEntry.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/public/trial-applications",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PublicAccountEntry.tsx",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/management/PublicAccountEntry.tsx",
+      "test": "e2e/digital-twin-management.spec.ts"
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/data-sources",
       "disposition": "native",
       "client": "apps/geolibre-desktop/src/lib/digital-twin-sources.ts",
@@ -112,22 +488,6 @@
       "test": "tests/digital-twin-assets.test.ts"
     },
     {
-      "method": "POST",
-      "path": "/api/v1/regions/{region_id}/assets:batch",
-      "disposition": "native",
-      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
-      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/AssetIntake.tsx",
-      "test": "tests/digital-twin-assets.test.ts"
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/regions/{region_id}/assets:csv",
-      "disposition": "native",
-      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
-      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/assets/AssetsView.tsx",
-      "test": "tests/digital-twin-assets.test.ts"
-    },
-    {
       "method": "GET",
       "path": "/api/v1/regions/{region_id}/assets.geojson",
       "disposition": "native",
@@ -154,6 +514,22 @@
     {
       "method": "PATCH",
       "path": "/api/v1/regions/{region_id}/assets/{asset_id}",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/assets/AssetsView.tsx",
+      "test": "tests/digital-twin-assets.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/regions/{region_id}/assets:batch",
+      "disposition": "native",
+      "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
+      "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/data/AssetIntake.tsx",
+      "test": "tests/digital-twin-assets.test.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/regions/{region_id}/assets:csv",
       "disposition": "native",
       "client": "apps/geolibre-desktop/src/lib/digital-twin-assets.ts",
       "surface": "apps/geolibre-desktop/src/product-modes/digital-twin/ui/assets/AssetsView.tsx",

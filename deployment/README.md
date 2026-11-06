@@ -13,9 +13,9 @@ have been removed; this is the frontend's deployment path.
 
 - `hosting.yaml`: production and development Amplify applications, their main
   and develop branches, invitation-only
-  Cognito pool/client/group, Secrets Manager session signing key, and separate
+  Cognito pool/client with required TOTP, Secrets Manager session signing key, and separate
   branch-scoped GitHub deployment roles. The Engine infrastructure owns its
-  runtime authentication permissions.
+  runtime authentication permissions. This stack additionally grants the selected API task role pool-scoped account operations and sender-scoped SES delivery.
 - `api-edge.yaml`: HTTPS Application Load Balancer, ACM certificate, DNS and a second subnet.
   The listener starts with a fixed 503 response and is enabled only after protected
   Engine startup and network configuration have been verified.
@@ -52,6 +52,9 @@ aws cloudformation deploy --stack-name digital-twin-api-load-balancer \
 
 aws cloudformation deploy --stack-name digital-twin-frontend \
   --template-file deployment/hosting.yaml \
+  --parameter-overrides ApiRoleName=digital-twin-golden-engine-api-task \
+    TransactionalEmailSender=no-reply@wattbyte-nexus.com \
+    TransactionalEmailIdentityArn=arn:aws:ses:us-west-2:078183419290:identity/wattbyte-nexus.com \
   --capabilities CAPABILITY_NAMED_IAM --region us-east-1
 ```
 
@@ -72,6 +75,9 @@ aws cloudformation deploy --stack-name digital-twin-frontend \
   --parameter-overrides ApiOrigin=https://api.nexus.ipss.ai \
     DevelopApiOrigin=https://api.nexus.ipss.ai \
     PublicOrigin=https://digital-twin.wattbyte-nexus.com \
+    ApiRoleName=digital-twin-golden-engine-api-task \
+    TransactionalEmailSender=no-reply@wattbyte-nexus.com \
+    TransactionalEmailIdentityArn=arn:aws:ses:us-west-2:078183419290:identity/wattbyte-nexus.com \
   --capabilities CAPABILITY_NAMED_IAM --region us-east-1
 ```
 
@@ -151,16 +157,36 @@ check is not reported as a successful release.
 
 ## Login and operations
 
-There is no self-registration. Create Cognito users explicitly and assign the
-`nexus-administrators` group for this single-organization deployment. The Engine
-returns the current region catalog as the user's authorized scope. Private
-point-cloud datasets additionally need an Engine permission for the Cognito
-subject; the group never bypasses dataset authorization.
+Aurora owns the IPSS role, organization, plan and region assignments. Cognito owns
+login with required authenticator-app MFA. Platform staff and tenant administrators
+have no product access; product users require separate accounts. The retired
+`nexus-administrators` group is not an application grant.
 
-The server stores sessions in Redis for at most one hour. Logout revokes the
-session before redirecting through Cognito. Removing group membership prevents
-new sessions; revoke existing Redis sessions when immediate removal is needed.
-Application deployments preserve the runtime configuration and session store.
+Before releasing the matching Engine, install the account schema and bind the
+verified initial administrator's exact Cognito issuer and subject using its
+`digital-twin-accounts` operator CLI. Follow the Engine's `docs/operations/accounts.md`.
+Keep the existing pool and identities. The immutable `nexus_account_id` attribute
+links newly invited provider identities to their application account.
+
+Configure `cognito.email_sender`, `email_region`, and `email_frontend_origin` in
+both API authentication configuration inputs and the worker's application config.
+The email frontend origin must belong to `frontend_origins`. Production invitations
+use the production frontend even when initiated in another approved environment.
+SES region may differ from Cognito region: this deployment uses the existing
+verified `wattbyte-nexus.com` identity in `us-west-2`, where production email delivery
+is enabled. Cognito and the API remain in `us-east-1`. API IAM restricts sending to
+the selected identity and sender. No credentials are stored in these settings.
+
+Deploy schema and required pool/IAM settings first, then the matching worker/API,
+then the frontend. During the initial update, retain the old group until the new
+API is healthy; remove it with the final template afterward. Never replace the
+pool or remove unrelated hosting resources. The live development custom domain
+is preserved by `DevelopPublicDomain` even though it predates its source record.
+
+Sessions live in DynamoDB. Account suspension, expiry, password/security cutoffs,
+plan changes and ownership changes are checked against current authority. Sensitive
+management writes additionally require a short-lived email code. Existing sessions
+from the previous model require a fresh login and first-time TOTP enrollment.
 
 To roll back frontend code, revert the faulty commit on main and let the same
 checks rebuild and deploy it. A manual retry of a workflow redeploys its exact

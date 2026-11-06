@@ -1,31 +1,57 @@
 export const DIGITAL_TWIN_ROLES = [
-  "operator",
-  "supervisor",
-  "engineer",
-  "analyst",
-  "administrator",
+  "PLATFORM_SUPER_ADMIN",
+  "WEB_TRIAL_ADMIN",
+  "DESKTOP_TRIAL_ADMIN",
+  "TENANT_ADMIN",
+  "TENANT_USER",
 ] as const;
+
+export function accountRoleLabel(role: DigitalTwinRole): string {
+  return {
+    PLATFORM_SUPER_ADMIN: "Platform administrator",
+    WEB_TRIAL_ADMIN: "Web trial administrator",
+    DESKTOP_TRIAL_ADMIN: "Desktop trial administrator",
+    TENANT_ADMIN: "Tenant administrator",
+    TENANT_USER: "Tenant user",
+  }[role];
+}
 
 export const DIGITAL_TWIN_CAPABILITIES = [
   "digital-twin",
   "expert-gis",
   "administration",
+  "tenant-administration",
+  "expired-tenant-access",
 ] as const;
 
 export type DigitalTwinRole = (typeof DIGITAL_TWIN_ROLES)[number];
 export type DigitalTwinCapability = (typeof DIGITAL_TWIN_CAPABILITIES)[number];
-export type DigitalTwinProductMode = "digital-twin" | "expert-gis" | "administration";
+export type DigitalTwinProductMode =
+  | "digital-twin"
+  | "expert-gis"
+  | "administration";
 export type DigitalTwinView = "live" | "assets" | "scenarios" | "runs";
 
 export interface AuthorizedRegion {
   id: string;
   name: string;
+  actions: string[];
 }
 
 export interface DigitalTwinAccessContext {
   subjectId: string;
   displayName: string;
-  organization: { id: string; name: string };
+  accountId: string;
+  accessState: "active" | "organization-expired";
+  organization: { id: string; name: string } | null;
+  permissions: string[];
+  plan: {
+    id: string;
+    name: string;
+    kind: "TRIAL" | "STANDARD" | "CUSTOM";
+    cpu_hours: number;
+    storage_bytes: number;
+  } | null;
   roles: DigitalTwinRole[];
   capabilities: DigitalTwinCapability[];
   regions: AuthorizedRegion[];
@@ -38,8 +64,8 @@ interface DevelopmentAccessOptions {
 }
 
 export function createDevelopmentAccess(
-  engineRegions: readonly AuthorizedRegion[],
-  options: DevelopmentAccessOptions = {},
+  engineRegions: readonly { id: string; name: string }[],
+  options: DevelopmentAccessOptions = {}
 ): DigitalTwinAccessContext {
   const regionId = options.regionId?.trim();
   const regions = regionId
@@ -49,7 +75,7 @@ export function createDevelopmentAccess(
     throw new Error(
       regionId
         ? `The Digital Twin Engine does not expose region ${regionId}.`
-        : "The Digital Twin Engine does not expose any regions.",
+        : "The Digital Twin Engine does not expose any regions."
     );
   }
 
@@ -57,9 +83,40 @@ export function createDevelopmentAccess(
     subjectId: "local-pilot-developer",
     displayName: "Local pilot developer",
     organization: { id: "local-development", name: "Local development" },
-    roles: ["engineer"],
-    capabilities: ["digital-twin", "expert-gis", "administration"],
-    regions,
+    accountId: "local-product-user",
+    accessState: "active",
+    roles: ["TENANT_USER"],
+    capabilities: ["digital-twin", "expert-gis"],
+    permissions: [
+      "region:create",
+      "region:publish",
+      "data:export",
+      "ai:use",
+      "region:read",
+      "region:write",
+      "assets:write",
+      "scenarios:create",
+      "runs:submit",
+      "runs:cancel",
+      "surveys:submit",
+      "expert-gis",
+    ],
+    plan: null,
+    regions: regions.map((region) => ({
+      ...region,
+      actions: [
+        "region:publish",
+        "data:export",
+        "ai:use",
+        "region:read",
+        "region:write",
+        "assets:write",
+        "scenarios:create",
+        "runs:submit",
+        "runs:cancel",
+        "surveys:submit",
+      ],
+    })),
     mostRecentlyUsedRegionId: regions[0]?.id ?? null,
     savedStartLocation: "digital-twin",
   };
@@ -75,7 +132,7 @@ export class AccessResolutionError extends Error {
   constructor(
     readonly kind: AccessFailureKind,
     message: string,
-    options?: ErrorOptions,
+    options?: ErrorOptions
   ) {
     super(message, options);
     this.name = "AccessResolutionError";
@@ -91,7 +148,10 @@ export type AuthorizedLocationResolution =
       regionId: string | null;
     }
   | { kind: "redirect"; location: string }
-  | { kind: "denied"; reason: "administration" | "expert-gis" | "region" | "route" };
+  | {
+      kind: "denied";
+      reason: "administration" | "expert-gis" | "region" | "route";
+    };
 
 interface LoadDigitalTwinAccessOptions {
   endpoint: string;
@@ -107,7 +167,7 @@ function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new AccessResolutionError(
       "invalid-response",
-      `The access response is missing ${field}.`,
+      `The access response is missing ${field}.`
     );
   }
   return value.trim();
@@ -117,12 +177,17 @@ function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function knownValues<T extends string>(value: unknown, allowed: readonly T[]): T[] {
+function knownValues<T extends string>(
+  value: unknown,
+  allowed: readonly T[]
+): T[] {
   if (!Array.isArray(value)) return [];
   const allowedSet = new Set<string>(allowed);
   return [
     ...new Set(
-      value.filter((item): item is T => typeof item === "string" && allowedSet.has(item)),
+      value.filter(
+        (item): item is T => typeof item === "string" && allowedSet.has(item)
+      )
     ),
   ];
 }
@@ -132,7 +197,7 @@ export function resolveApplicationUrl(
   configured: string | null | undefined,
   fallbackPath: string,
   basePath: string,
-  documentUrl: string,
+  documentUrl: string
 ): string {
   const applicationBase = new URL(basePath, documentUrl);
   return new URL(configured?.trim() || fallbackPath, applicationBase).href;
@@ -140,54 +205,137 @@ export function resolveApplicationUrl(
 
 /**
  * Validate the deliberately small access projection returned by the trusted
- * application backend. Unknown roles and capabilities are ignored so a newer
- * backend cannot accidentally grant an older client access it does not know.
+ * application backend. Exactly one canonical account role is required;
+ * unknown workspace capabilities cannot grant access in this client.
  */
 export function parseAccessContext(value: unknown): DigitalTwinAccessContext {
-  if (!isRecord(value) || !isRecord(value.organization) || !Array.isArray(value.regions)) {
-    throw new AccessResolutionError("invalid-response", "The access response is incomplete.");
+  if (
+    !isRecord(value) ||
+    (value.organization !== null && !isRecord(value.organization)) ||
+    !Array.isArray(value.regions)
+  ) {
+    throw new AccessResolutionError(
+      "invalid-response",
+      "The access response is incomplete."
+    );
   }
 
   const regions: AuthorizedRegion[] = [];
   const seenRegionIds = new Set<string>();
   for (const candidate of value.regions) {
     if (!isRecord(candidate)) {
-      throw new AccessResolutionError("invalid-response", "An authorized region is invalid.");
+      throw new AccessResolutionError(
+        "invalid-response",
+        "An authorized region is invalid."
+      );
     }
     const id = requiredString(candidate.id, "region id");
     const name = requiredString(candidate.name, "region name");
     if (seenRegionIds.has(id)) continue;
     seenRegionIds.add(id);
-    regions.push({ id, name });
+    regions.push({
+      id,
+      name,
+      actions: Array.isArray(candidate.actions)
+        ? candidate.actions.filter(
+            (action): action is string => typeof action === "string"
+          )
+        : [],
+    });
   }
 
+  const roles = knownValues(value.roles, DIGITAL_TWIN_ROLES);
+  if (
+    roles.length !== 1 ||
+    !Array.isArray(value.roles) ||
+    value.roles.length !== 1
+  ) {
+    throw new AccessResolutionError(
+      "invalid-response",
+      "Exactly one recognized account role is required."
+    );
+  }
+  if (roles[0].startsWith("TENANT_") && value.organization === null) {
+    throw new AccessResolutionError(
+      "invalid-response",
+      "Tenant account organization is required."
+    );
+  }
+  if (
+    value.access_state !== "active" &&
+    value.access_state !== "organization-expired"
+  ) {
+    throw new AccessResolutionError(
+      "invalid-response",
+      "Account access state is invalid."
+    );
+  }
+  const plan = isRecord(value.plan) ? value.plan : null;
   const savedStart = optionalString(value.saved_start_location);
   return {
     subjectId: requiredString(value.subject_id, "subject id"),
     displayName: requiredString(value.display_name, "display name"),
-    organization: {
-      id: requiredString(value.organization.id, "organization id"),
-      name: requiredString(value.organization.name, "organization name"),
-    },
-    roles: knownValues(value.roles, DIGITAL_TWIN_ROLES),
+    accountId: requiredString(value.account_id, "account id"),
+    accessState: value.access_state,
+    permissions: Array.isArray(value.permissions)
+      ? value.permissions.filter(
+          (permission): permission is string => typeof permission === "string"
+        )
+      : [],
+    plan: plan
+      ? {
+          id: requiredString(plan.id, "plan id"),
+          name: requiredString(plan.name, "plan name"),
+          kind: plan.kind as "TRIAL" | "STANDARD" | "CUSTOM",
+          cpu_hours: Number(plan.cpu_hours),
+          storage_bytes: Number(plan.storage_bytes),
+        }
+      : null,
+    organization: isRecord(value.organization)
+      ? {
+          id: requiredString(value.organization.id, "organization id"),
+          name: requiredString(value.organization.name, "organization name"),
+        }
+      : null,
+    roles,
     capabilities: knownValues(value.capabilities, DIGITAL_TWIN_CAPABILITIES),
     regions,
-    mostRecentlyUsedRegionId: optionalString(value.most_recently_used_region_id),
+    mostRecentlyUsedRegionId: optionalString(
+      value.most_recently_used_region_id
+    ),
     savedStartLocation:
-      savedStart === "digital-twin" || savedStart === "expert-gis" ? savedStart : null,
+      savedStart === "digital-twin" || savedStart === "expert-gis"
+        ? savedStart
+        : null,
   };
 }
 
 /** Resolve the authenticated user's safe default route from backend-owned scope. */
-export function resolveLandingLocation(access: DigitalTwinAccessContext): string | null {
+export function resolveLandingLocation(
+  access: DigitalTwinAccessContext
+): string | null {
   const capabilities = new Set(access.capabilities);
+  if (
+    access.roles[0] === "TENANT_USER" &&
+    access.regions.length === 0 &&
+    access.permissions.includes("region:create")
+  )
+    return "/data";
+  if (access.roles[0] === "TENANT_ADMIN") return "/tenant-admin";
+  if (access.roles[0] !== "TENANT_USER")
+    return capabilities.has("administration") ? "/admin" : null;
   const recentRegion = access.regions.find(
-    (region) => region.id === access.mostRecentlyUsedRegionId,
+    (region) => region.id === access.mostRecentlyUsedRegionId
   );
   const region = recentRegion ?? access.regions[0];
-  const liveLocation = region ? `/regions/${encodeURIComponent(region.id)}/live` : null;
+  const liveLocation = region
+    ? `/regions/${encodeURIComponent(region.id)}/live`
+    : null;
 
-  if (access.savedStartLocation === "expert-gis" && capabilities.has("expert-gis")) {
+  if (
+    access.savedStartLocation === "expert-gis" &&
+    capabilities.has("expert-gis")
+  ) {
     return liveLocation
       ? `/workspace?returnTo=${encodeURIComponent(liveLocation)}`
       : "/workspace";
@@ -195,11 +343,27 @@ export function resolveLandingLocation(access: DigitalTwinAccessContext): string
   if (capabilities.has("digital-twin") && liveLocation) return liveLocation;
   if (capabilities.has("administration")) return "/admin";
   if (capabilities.has("expert-gis")) return "/workspace";
-  return null;
+  return "/account";
+}
+
+export function hasRegionAction(
+  access: DigitalTwinAccessContext,
+  regionId: string,
+  action: string
+): boolean {
+  return (
+    access.roles[0] === "TENANT_USER" &&
+    access.accessState === "active" &&
+    (action === "region:create"
+      ? access.permissions.includes(action)
+      : access.regions.some(
+          (region) => region.id === regionId && region.actions.includes(action)
+        ))
+  );
 }
 
 function parseRegionRoute(
-  pathname: string,
+  pathname: string
 ): { regionId: string; view: DigitalTwinView } | null {
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0]?.toLowerCase() !== "regions" || parts.length < 3) return null;
@@ -212,17 +376,27 @@ function parseRegionRoute(
   if (!regionId) return null;
 
   const section = parts[2]?.toLowerCase();
-  if (section === "live" && parts.length === 3) return { regionId, view: "live" };
+  if (section === "live" && parts.length === 3)
+    return { regionId, view: "live" };
   if (section === "alerts" && parts.length === 4 && parts[3]) {
     return { regionId, view: "live" };
   }
-  if (section === "assets" && (parts.length === 3 || (parts.length === 4 && parts[3]))) {
+  if (
+    section === "assets" &&
+    (parts.length === 3 || (parts.length === 4 && parts[3]))
+  ) {
     return { regionId, view: "assets" };
   }
-  if (section === "scenarios" && (parts.length === 3 || (parts.length === 4 && parts[3]))) {
+  if (
+    section === "scenarios" &&
+    (parts.length === 3 || (parts.length === 4 && parts[3]))
+  ) {
     return { regionId, view: "scenarios" };
   }
-  if (section === "runs" && (parts.length === 3 || (parts.length === 4 && parts[3]))) {
+  if (
+    section === "runs" &&
+    (parts.length === 3 || (parts.length === 4 && parts[3]))
+  ) {
     return { regionId, view: "runs" };
   }
   return null;
@@ -235,7 +409,7 @@ function parseRegionRoute(
  */
 export function resolveAuthorizedLocation(
   access: DigitalTwinAccessContext,
-  requestedLocation: string,
+  requestedLocation: string
 ): AuthorizedLocationResolution {
   const url = new URL(requestedLocation || "/", "https://digital-twin.invalid");
   const pathname = url.pathname.replace(/\/+$/, "") || "/";
@@ -249,8 +423,43 @@ export function resolveAuthorizedLocation(
       : { kind: "denied", reason: "route" };
   }
 
+  if (pathname.toLowerCase() === "/data") {
+    return access.roles[0] === "TENANT_USER" &&
+      access.accessState === "active" &&
+      (access.permissions.includes("region:create") ||
+        access.regions.some((region) => region.actions.includes("region:read")))
+      ? {
+          kind: "allowed",
+          location,
+          mode: "administration",
+          view: "live",
+          regionId: null,
+        }
+      : { kind: "denied", reason: "region" };
+  }
+
+  if (
+    pathname.toLowerCase() === "/account" ||
+    pathname.toLowerCase() === "/tenant-admin"
+  ) {
+    const permitted =
+      pathname.toLowerCase() === "/account"
+        ? access.roles[0] === "TENANT_USER"
+        : access.roles[0] === "TENANT_ADMIN";
+    return permitted
+      ? {
+          kind: "allowed",
+          location,
+          mode: "administration",
+          view: "live",
+          regionId: null,
+        }
+      : { kind: "denied", reason: "administration" };
+  }
+
   if (pathname.toLowerCase() === "/admin") {
-    return capabilities.has("administration")
+    return capabilities.has("administration") &&
+      !access.roles[0].startsWith("TENANT_")
       ? {
           kind: "allowed",
           location,
@@ -262,7 +471,9 @@ export function resolveAuthorizedLocation(
   }
 
   if (pathname.toLowerCase() === "/workspace") {
-    return capabilities.has("expert-gis")
+    return access.roles[0] === "TENANT_USER" &&
+      access.accessState === "active" &&
+      capabilities.has("expert-gis")
       ? {
           kind: "allowed",
           location,
@@ -278,7 +489,9 @@ export function resolveAuthorizedLocation(
     return {
       kind: "allowed",
       location,
-      mode: capabilities.has("digital-twin") ? "digital-twin" : "administration",
+      mode: capabilities.has("digital-twin")
+        ? "digital-twin"
+        : "administration",
       view: "live",
       regionId: null,
     };
@@ -286,8 +499,13 @@ export function resolveAuthorizedLocation(
 
   const regionRoute = parseRegionRoute(pathname);
   if (regionRoute) {
-    if (!capabilities.has("digital-twin")) return { kind: "denied", reason: "region" };
-    if (!access.regions.some((region) => region.id === regionRoute.regionId)) {
+    if (
+      access.roles[0] !== "TENANT_USER" ||
+      access.accessState !== "active" ||
+      !capabilities.has("digital-twin")
+    )
+      return { kind: "denied", reason: "region" };
+    if (!hasRegionAction(access, regionRoute.regionId, "region:read")) {
       return { kind: "denied", reason: "region" };
     }
     return {
@@ -312,7 +530,7 @@ export async function loadDigitalTwinAccess({
   try {
     response = await fetchImpl(endpoint, {
       method: "GET",
-      credentials: "same-origin",
+      credentials: "include",
       cache: "no-store",
       headers: { Accept: "application/json" },
       signal,
@@ -322,20 +540,26 @@ export async function loadDigitalTwinAccess({
     throw new AccessResolutionError(
       "provider-unavailable",
       "The identity provider could not be reached.",
-      { cause: error },
+      { cause: error }
     );
   }
 
   if (response.status === 401) {
-    throw new AccessResolutionError("unauthenticated", "Authentication is required.");
+    throw new AccessResolutionError(
+      "unauthenticated",
+      "Authentication is required."
+    );
   }
   if (response.status === 403) {
-    throw new AccessResolutionError("unauthorized", "No product access is assigned.");
+    throw new AccessResolutionError(
+      "unauthorized",
+      "No product access is assigned."
+    );
   }
   if (!response.ok) {
     throw new AccessResolutionError(
       "provider-unavailable",
-      `Access resolution failed with HTTP ${response.status}.`,
+      `Access resolution failed with HTTP ${response.status}.`
     );
   }
 
@@ -343,8 +567,12 @@ export async function loadDigitalTwinAccess({
     return parseAccessContext(await response.json());
   } catch (error) {
     if (error instanceof AccessResolutionError) throw error;
-    throw new AccessResolutionError("invalid-response", "The access response is invalid.", {
-      cause: error,
-    });
+    throw new AccessResolutionError(
+      "invalid-response",
+      "The access response is invalid.",
+      {
+        cause: error,
+      }
+    );
   }
 }
