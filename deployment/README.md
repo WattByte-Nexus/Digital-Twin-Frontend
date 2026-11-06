@@ -67,6 +67,11 @@ the parent domain is in Route 53 in the same AWS account. The stack registers
 the production and development callbacks and logout origins in Cognito. Configure
 both frontend origins in the shared API's hosted authentication allowlist.
 
+The development frontend is `https://develop.digital-twin.wattbyte-nexus.com`.
+`DevelopPublicOrigin` configures this hostname independently of production's
+`PublicOrigin`; `DevelopPublicDomain` associates it with the development app's
+`develop` branch and provisions a separate managed TLS certificate.
+
 The production frontend is `https://digital-twin.wattbyte-nexus.com`:
 
 ```sh
@@ -74,6 +79,7 @@ aws cloudformation deploy --stack-name digital-twin-frontend \
   --template-file deployment/hosting.yaml \
   --parameter-overrides ApiOrigin=https://api.nexus.ipss.ai \
     DevelopApiOrigin=https://api.nexus.ipss.ai \
+    DevelopPublicOrigin=https://develop.digital-twin.wattbyte-nexus.com \
     PublicOrigin=https://digital-twin.wattbyte-nexus.com \
     ApiRoleName=digital-twin-golden-engine-api-task \
     TransactionalEmailSender=no-reply@wattbyte-nexus.com \
@@ -81,10 +87,14 @@ aws cloudformation deploy --stack-name digital-twin-frontend \
   --capabilities CAPABILITY_NAMED_IAM --region us-east-1
 ```
 
-When changing its hostname, also update the Cognito `frontend_origins` allowlist
-in the Engine's `DTE_API_ACCESS_CONFIG`, redeploy the API, and set that GitHub
-environment's `FRONTEND_URL` Actions variable to the same origin. The deployment smoke check
-verifies that Cognito redirects back to that origin.
+When changing a hostname, provision and verify its DNS and TLS before switching
+login. Update `cognito.frontend_origins` in both the Engine's
+`DTE_API_ACCESS_CONFIG` and `DTE_APPLICATION_CONFIG_JSON.api_access`, validate
+the complete application configuration, and release the API. Set that GitHub
+environment's `FRONTEND_URL` Actions variable to the same origin, then deploy
+the branch so GitHub records its new live URL. The hosted smoke check verifies
+that Cognito redirects back to that origin. The hosting stack owns the matching
+Cognito callback and logout registrations.
 
 ### Development API target
 
@@ -101,14 +111,12 @@ Cognito client callback and logout registrations. Keep production's `ApiOrigin`
 unchanged. No browser API URL or frontend rebuild is needed because requests
 remain same-origin under `/api/*`.
 
-Before the first development release, configure the shared production API's
-`cognito.frontend_origins` allowlist with `DevelopFrontendUrl` and `FrontendUrl`.
-Deploy the matching Engine authentication change and this frontend's explicit
-`frontendOrigin` login parameter. Release the production frontend first (the
-current API ignores the new parameter), then the API with the new config, then
-development. This keeps production login working during the rollout. Existing
-sessions require a fresh login. Cognito registration alone does not update the
-API policy. The hosted smoke check fails if sign-in redirects to another site.
+The shared production API's `cognito.frontend_origins` allowlist contains
+`DevelopFrontendUrl` and `FrontendUrl`. Login supplies its explicit
+`frontendOrigin`; each signed session binds writes, callback and logout to that
+origin. Cognito registration alone does not update the API policy. The hosted
+smoke check fails if sign-in redirects to another site. A session on a retired
+hostname requires a fresh login at the new hostname.
 
 ## GitHub configuration
 

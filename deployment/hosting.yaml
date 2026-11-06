@@ -21,14 +21,14 @@ Parameters:
     Default: https://api.nexus.ipss.ai
     AllowedPattern: 'https://[a-z0-9.-]+'
     Description: API origin for develop; currently shares production, independently switchable later.
-  PublicOrigin:
-    Type: String
-    Default: ''
-    AllowedPattern: '(^$|https://[a-z0-9.-]+)'
   DevelopPublicOrigin:
     Type: String
     Default: https://develop.digital-twin.wattbyte-nexus.com
     AllowedPattern: 'https://[a-z0-9.-]+'
+  PublicOrigin:
+    Type: String
+    Default: ''
+    AllowedPattern: '(^$|https://[a-z0-9.-]+)'
 Conditions:
   CustomOrigin: !Not [!Equals [!Ref PublicOrigin, '']]
   ApiConfigured: !Not [!Equals [!Ref ApiOrigin, '']]
