@@ -353,7 +353,8 @@ export interface DigitalTwinMapWorkspaceProps {
   showWeather?: boolean;
   themeMode?: WorkspaceTheme;
   onNavigate?: (destination: DigitalTwinDestination, resourceId?: string) => void;
-  canManageData?: boolean;
+  canPerform?: (regionId: string, action: string) => boolean;
+  onOpenAccount?: () => void;
   onOpenDiagnostics?: () => void;
   onOpenExpertWorkspace?: () => void;
   onSelectRegion?: (regionId: string) => void;
@@ -376,7 +377,8 @@ export function DigitalTwinMapWorkspace({
   showWeather = true,
   themeMode = "light",
   onNavigate,
-  canManageData = false,
+  canPerform = () => false,
+  onOpenAccount,
   onOpenDiagnostics,
   onOpenExpertWorkspace,
   onSelectRegion,
@@ -1143,6 +1145,7 @@ export function DigitalTwinMapWorkspace({
   };
 
   const launchSimulation = async (request: ScenarioRunRequest, idempotencyKey: string) => {
+    if (!canPerform(request.regionId, "runs:submit")) throw new Error("Run submission is not available for this region.");
     const submission = await submitDigitalTwinRunRequest(digitalTwinApiUrl, request, {
       idempotencyKey,
     });
@@ -1423,8 +1426,9 @@ export function DigitalTwinMapWorkspace({
               organizationName={organizationName}
               sidebarTrigger={<SidebarTrigger />}
               themeMode={activeThemeMode}
+              onOpenAccount={onOpenAccount ? () => requestWorkspaceChange(onOpenAccount) : undefined}
               onOpenAdministration={
-                canManageData ? () => requestWorkspaceChange(() => setDataOpen(true)) : undefined
+                canPerform(activeRegionId, "region:write") || canPerform(activeRegionId, "assets:write") || canPerform(activeRegionId, "surveys:submit") ? () => requestWorkspaceChange(() => setDataOpen(true)) : undefined
               }
               onOpenDiagnostics={
                 onOpenDiagnostics ? () => requestWorkspaceChange(onOpenDiagnostics) : undefined
@@ -1684,7 +1688,7 @@ export function DigitalTwinMapWorkspace({
                 activeRasterIds={raster ? [raster.id] : []}
                 apiUrl={digitalTwinApiUrl}
                 regions={regions}
-                canManage={canManageData}
+                canPerform={canPerform}
                 theme={activeThemeMode}
                 onClose={() => setDataOpen(false)}
                 onRasterRemoved={(id) =>
@@ -1729,7 +1733,7 @@ export function DigitalTwinMapWorkspace({
               resetKeys={[activeRegionId, location]}
             >
               <AssetsView
-                canManage={canManageData}
+                canManage={canPerform(activeRegionId, "assets:write")}
                 apiUrl={digitalTwinApiUrl}
                 location={location}
                 onOpenAsset={(assetId) => navigateTo("assets", assetId || undefined)}
@@ -1752,6 +1756,7 @@ export function DigitalTwinMapWorkspace({
                 mapSlot={mapHost}
                 onBuilderOpenChange={handleBuilderOpenChange}
                 onRun={launchSimulation}
+                canPerform={canPerform}
                 regions={regions}
                 theme={activeThemeMode}
               />
@@ -1763,7 +1768,7 @@ export function DigitalTwinMapWorkspace({
               resetKeys={[activeRegionId, location]}
             >
               <RunsView
-                canCancel={canManageData}
+                canCancelRun={(regionId) => canPerform(regionId, "runs:cancel")}
                 authorizedRegionIds={authorizedRegionIds}
                 apiUrl={digitalTwinApiUrl}
                 error={runCatalogError}
@@ -1772,6 +1777,7 @@ export function DigitalTwinMapWorkspace({
                 location={location}
                 mapControllerRef={interactionMapControllerRef}
                 mapSlot={mapHost}
+                canCreateScenario={canPerform(activeRegionId, "scenarios:create")}
                 onCreateScenario={() => {
                   setScenarioCreationRequest((request) => request + 1);
                   navigateTo("scenarios");

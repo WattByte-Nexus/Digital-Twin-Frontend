@@ -16,9 +16,12 @@ import { useThemeScheme } from "./hooks/useThemeScheme";
 import { useUiProfileBootstrap } from "./hooks/useUiProfileBootstrap";
 import { useUndoRedoShortcuts } from "./hooks/useUndoRedoShortcuts";
 import { languageDirection } from "./i18n/languages";
+import { ProductDataWorkspace } from "./product-modes/digital-twin/ProductDataWorkspace";
+import { PublicAccountEntry } from "./product-modes/digital-twin/management/PublicAccountEntry";
 import { AdministrationLanding } from "./product-modes/digital-twin/AdministrationLanding";
 import { DigitalTwinAccessBoundary } from "./product-modes/digital-twin/DigitalTwinAccessBoundary";
 import { DigitalTwinMapWorkspace } from "./product-modes/digital-twin/ui/DigitalTwinMapWorkspace";
+import { accountRoleLabel, hasRegionAction } from "./product-modes/digital-twin/access";
 import type {
   AuthorizedLocationResolution,
   DigitalTwinAccessContext,
@@ -38,11 +41,6 @@ function displayNameInitials(displayName: string): string {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
   return initials || "DT";
-}
-
-function roleLabel(role: string | undefined): string {
-  if (!role) return "Digital Twin operator";
-  return role.replaceAll("-", " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
 function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationProps) {
@@ -71,9 +69,9 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
         operator={{
           initials: displayNameInitials(access.displayName),
           name: access.displayName,
-          role: roleLabel(access.roles[0]),
+          role: accountRoleLabel(access.roles[0]),
         }}
-        organizationName={access.organization.name}
+        organizationName={access.organization?.name ?? "Digital Twin"}
         showLidar
         showWeather
         themeMode={themeMode}
@@ -84,7 +82,8 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
             }`,
           )
         }
-        canManageData={access.capabilities.includes("administration")}
+        canPerform={(regionId, action) => hasRegionAction(access, regionId, action)}
+        onOpenAccount={() => navigate("/account")}
         onOpenDiagnostics={() => navigate("/diagnostics")}
         onOpenExpertWorkspace={
           access.capabilities.includes("expert-gis")
@@ -127,15 +126,17 @@ function AuthorizedWorkspace({ access, navigate, route }: AuthorizedApplicationP
 function AuthorizedApplication({ access, navigate, route }: AuthorizedApplicationProps) {
   const diagnostics =
     new URL(route.location, "https://digital-twin.invalid").pathname === "/diagnostics";
+  if (new URL(route.location, "https://digital-twin.invalid").pathname === "/data") return <ProductDataWorkspace access={access} onClose={() => navigate(access.regions[0] ? `/regions/${encodeURIComponent(access.regions[0].id)}/live` : "/account")} />;
   if (route.mode === "administration" || diagnostics) {
     const canOpenExpertWorkspace = access.capabilities.includes("expert-gis");
-    const canOpenAdministration = access.capabilities.includes("administration");
+    const canOpenAdministration = access.capabilities.includes("administration") || access.capabilities.includes("tenant-administration") || access.capabilities.includes("expired-tenant-access");
     return (
       <AdministrationLanding
         access={access}
-        screen={diagnostics ? "diagnostics" : "administration"}
+        screen={diagnostics ? "diagnostics" : new URL(route.location, "https://digital-twin.invalid").pathname === "/account" ? "account" : "administration"}
+        onOpenProduct={access.roles[0] === "TENANT_USER" && access.regions[0] ? () => navigate(`/regions/${encodeURIComponent(access.regions[0].id)}/live`) : undefined}
         onOpenAdministration={
-          diagnostics && canOpenAdministration ? () => navigate("/admin") : undefined
+          diagnostics && canOpenAdministration ? () => navigate(access.roles[0] === "TENANT_ADMIN" ? "/tenant-admin" : "/admin") : undefined
         }
         onOpenDiagnostics={() => navigate("/diagnostics")}
         onOpenExpertWorkspace={
@@ -157,9 +158,9 @@ export default function App() {
 
   return (
     <DirectionProvider dir={languageDirection(i18n.language)}>
-      <DigitalTwinAccessBoundary>
+      {window.location.pathname === "/activate" || window.location.pathname === "/request-trial" ? <PublicAccountEntry activate={window.location.pathname === "/activate"} /> : <DigitalTwinAccessBoundary>
         {(context) => <AuthorizedApplication {...context} />}
-      </DigitalTwinAccessBoundary>
+      </DigitalTwinAccessBoundary>}
     </DirectionProvider>
   );
 }

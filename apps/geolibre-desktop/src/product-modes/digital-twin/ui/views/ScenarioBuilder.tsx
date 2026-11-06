@@ -21,6 +21,7 @@ import { ScenarioIgnitionCoordinates } from "./ScenarioIgnitionCoordinates";
 import { type IgnitionPoint, type ScenarioRunRequest } from "../simulation-flow";
 
 interface ScenarioBuilderProps {
+  canPerform?: (regionId: string, action: string) => boolean;
   apiUrl: string;
   activeRegionId: string;
   initialRequest?: ScenarioRunRequest;
@@ -162,7 +163,7 @@ function useIgnitionMap({
   ]);
 }
 
-export function ScenarioBuilder({ apiUrl, activeRegionId, initialRequest, mapControllerRef, mapSlot, onClose, onDirtyChange, onRun, onSave, regions, theme }: ScenarioBuilderProps) {
+export function ScenarioBuilder({ canPerform = () => false, apiUrl, activeRegionId, initialRequest, mapControllerRef, mapSlot, onClose, onDirtyChange, onRun, onSave, regions, theme }: ScenarioBuilderProps) {
   const initialSynthetic = initialRequest?.mode === "synthetic" ? initialRequest : undefined;
   const [scenarioName, setScenarioName] = useState(initialSynthetic?.scenario ?? "");
   const [scenarioId, setScenarioId] = useState(initialSynthetic?.scenarioId);
@@ -351,14 +352,14 @@ export function ScenarioBuilder({ apiUrl, activeRegionId, initialRequest, mapCon
               <h3 className="font-semibold">Review accepted intent</h3><p className="text-xs text-muted-foreground">Retries preserve this exact request and identity. Changing accepted inputs starts a new intent.</p>
               <div className="space-y-2 rounded-md border p-3 text-sm"><p>{location} · {mode.replaceAll("_", " / ")}</p><p>{points.length} ignition point{points.length === 1 ? "" : "s"}</p>{mode === "synthetic" ? <><p>{scenarioName} · {durationHours} h</p><p>{baseWeatherVersion || "Base weather required"}</p><p>{windSpeed} mph towards {windDirection}°</p><p className="tabular-nums">Extent: {bounds ? `${bounds.west}, ${bounds.south} → ${bounds.east}, ${bounds.north}` : "required"}</p></> : mode === "bounded" ? <><p>{startAt || "Start required"}</p><p>{endAt || "End required"}</p><p>{deltaTHours} h timestep</p></> : <p>{durationHours} h · {deltaTHours} h timestep</p>}</div>
               {validationError ? <p className="text-sm text-destructive">{validationError}</p> : null}
-              {mode === "synthetic" ? <Button className="w-full" disabled={Boolean(saveError) || isSubmitting || Boolean(scenarioId)} variant="outline" onClick={() => { void handleSave(); }}><Save aria-hidden="true" />Save scenario without running</Button> : null}
+              {mode === "synthetic" ? <Button className="w-full" disabled={!canPerform(regionId, "scenarios:create") || Boolean(saveError) || isSubmitting || Boolean(scenarioId)} variant="outline" onClick={() => { void handleSave(); }}><Save aria-hidden="true" />Save scenario without running</Button> : null}
             </> : null}
             </fieldset>
             {sourceError ? <p role="alert" className="text-sm text-destructive">{sourceError}</p> : null}
             {submissionError ? <p role="alert" className="text-sm text-destructive">{submissionError}</p> : null}
           </CardContent></ScrollArea>
           <section aria-label="Configuration summary" className="grid grid-cols-4 divide-x border-t bg-background text-center text-xs"><div className="p-2"><p className="text-muted-foreground">Region</p><p className="truncate font-medium">{location}</p></div><div className="p-2"><p className="text-muted-foreground">Ignitions</p><p className="tabular-nums">{points.length}</p></div><div className="p-2"><p className="text-muted-foreground">Weather</p><p>{mode === "synthetic" ? `${windSpeed} mph` : "Engine resolved"}</p></div><div className="p-2"><p className="text-muted-foreground">Time</p><p>{mode === "bounded" ? "UTC interval" : `${durationHours} h`}</p></div></section>
-          <CardFooter className="mt-auto flex-row justify-between border-t p-3"><Button variant="outline" disabled={currentStepIndex === 0 || isSubmitting} onClick={() => setActiveStep(SETUP_STEPS[currentStepIndex - 1])}><ArrowLeft aria-hidden="true" />Back</Button>{activeStep === "review" ? <Button disabled={Boolean(validationError) || isSubmitting} onClick={() => { void handleRun(); }}><Flame aria-hidden="true" />{isSubmitting ? "Submitting…" : "Run simulation"}</Button> : <Button onClick={() => setActiveStep(SETUP_STEPS[currentStepIndex + 1])}>Next<ArrowRight aria-hidden="true" /></Button>}</CardFooter>
+          <CardFooter className="mt-auto flex-row justify-between border-t p-3"><Button variant="outline" disabled={currentStepIndex === 0 || isSubmitting} onClick={() => setActiveStep(SETUP_STEPS[currentStepIndex - 1])}><ArrowLeft aria-hidden="true" />Back</Button>{activeStep === "review" ? <Button disabled={!canPerform(regionId, "runs:submit") || Boolean(validationError) || isSubmitting} onClick={() => { void handleRun(); }}><Flame aria-hidden="true" />{isSubmitting ? "Submitting…" : "Run simulation"}</Button> : <Button onClick={() => setActiveStep(SETUP_STEPS[currentStepIndex + 1])}>Next<ArrowRight aria-hidden="true" /></Button>}</CardFooter>
         </Card>
       </FloatingMapPanel>
       <Dialog open={discardOpen} onOpenChange={setDiscardOpen}><DialogContent className={`${surfaceThemeClassName(theme)} surface-glass-overlay`}><DialogHeader><DialogTitle>Discard local changes?</DialogTitle><DialogDescription>This draft has not been saved to the Engine. Closing discards unsaved setup and ignition points.</DialogDescription></DialogHeader><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDiscardOpen(false)}>Keep editing</Button><Button variant="destructive" onClick={onClose}>Discard changes</Button></div></DialogContent></Dialog>

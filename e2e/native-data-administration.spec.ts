@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "./test";
+import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
 const bounds = { west: -105.35, south: 39.95, east: -105.15, north: 40.1 };
@@ -21,7 +21,7 @@ async function installDataMocks(page: Page, admin = true, adminOnly = false) {
   if (adminOnly) state.regions = [];
   const sourceRegionId = adminOnly ? "created-draft" : "boulder-co";
   const dataset = () => ({ dataset_id: "survey", region_id: "boulder-co", name: "Measured survey", status: "ready", format: "3d-tiles-point-cloud", position_crs: "EPSG:4978", scene_scale: { linear_unit: "meter", meters_per_unit: 1 }, tileset_url: `/api/v1/point-clouds/boulder-co/survey/${state.selectedVersion}/tileset.json`, bounds: [-105.35, 39.95, -105.15, 40.1], bounds_crs: "EPSG:4326", point_count: 20, source_point_count: 30, minimum_spacing_m: 0.5, attributes: ["position"], version: state.selectedVersion, attribution: "Measured survey", updated_at: "2026-10-09T12:00:00Z", failure_code: null, latest_build: { version: state.latestVersion, status: state.latestStatus, updated_at: "2026-10-09T13:00:00Z", failure_code: state.latestStatus === "failed" ? "invalid_geometry" : null } });
-  await page.route("**/api/digital-twin/access", (route) => route.fulfill({ json: { subject_id: "operator", display_name: "Survey operator", organization: { id: "test", name: "Test operations" }, roles: admin ? ["operator", "administrator"] : ["operator"], capabilities: adminOnly ? ["administration"] : admin ? ["digital-twin", "administration"] : ["digital-twin"], regions: state.regions.map((region) => ({ id: region.region_id, name: region.name })), most_recently_used_region_id: adminOnly ? null : "boulder-co", saved_start_location: adminOnly ? "administration" : "digital-twin" } }));
+  await page.route("**/api/digital-twin/access", (route) => route.fulfill({ json: { subject_id: "operator", display_name: "Survey operator", organization: adminOnly ? null : { id: "test", name: "Test operations" }, account_id: "account-survey", access_state: "active", plan: null, permissions: admin ? ["region:create"] : [], roles: adminOnly ? ["PLATFORM_SUPER_ADMIN"] : ["TENANT_USER"], capabilities: adminOnly ? ["administration"] : ["digital-twin"], regions: state.regions.map((region) => ({ id: region.region_id, name: region.name, actions: admin ? ["region:read", "region:write", "region:create", "region:publish", "assets:write", "surveys:submit"] : ["region:read"] })), most_recently_used_region_id: adminOnly ? null : "boulder-co", saved_start_location: adminOnly ? "administration" : "digital-twin" } }));
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request(); const path = new URL(request.url()).pathname; const method = request.method(); state.requests.push(`${method} ${path}`); let json: unknown;
     if (path.includes("/health/") && !state.healthOnline) { await route.fulfill({ status: 503, json: { detail: "Offline test Engine" } }); return; }
@@ -52,8 +52,9 @@ async function installDataMocks(page: Page, admin = true, adminOnly = false) {
     await route.fulfill({ json, status: path.endsWith("/surveys") ? 202 : 200 });
   });
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/api/digital-twin/management/staff", route => route.fulfill({json: {items: [], next_cursor: null}}));
   await page.goto(adminOnly ? "/admin" : process.env.DIGITAL_TWIN_E2E_URL ?? "/");
-  await expect(page.getByRole("button", { name: adminOnly ? "Manage regional data" : "Data", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: adminOnly ? "Send invitation" : "Data", exact: true })).toBeVisible();
   return state;
 }
 
@@ -89,17 +90,18 @@ test.describe("Native data administration", () => {
     state.latestStatus = "ready"; state.selectedVersion = acceptedVersion; await expect(page.getByText("Accepted replacement is ready. View selected dataset to display the new tiles.", { exact: true })).toBeVisible(); await expect(page.getByText(`Viewable version: ${acceptedVersion}`, { exact: true })).toBeVisible();
   });
   test("settings use actual health, local appearance and the saved scenario library", async ({ page }) => {
-    const state = await installDataMocks(page); await page.getByRole("button", { name: "Settings", exact: true }).click(); await page.getByRole("button", { name: "Status & health", exact: true }).click(); await expect(page.getByRole("heading", { name: "Status & health", exact: true })).toBeVisible(); await expect(page.getByText("Live and ready", { exact: true })).toBeVisible();
+    const state = await installDataMocks(page); await page.getByRole("button", { name: "Settings", exact: true }).click(); await page.getByRole("button", {name: "Status & health", exact: true}).click(); await expect(page.getByRole("heading", { name: "Status & health", exact: true })).toBeVisible(); await expect(page.getByText("Live and ready", { exact: true })).toBeVisible();
     state.healthOnline = false; await page.getByRole("button", { name: "Check now", exact: true }).click(); await expect(page.getByText("Offline", { exact: true })).toBeVisible(); await expect(page.getByText(/Redis|Queue depth|Last checked just now/)).toHaveCount(0);
-    await page.getByRole("button", { name: "Appearance", exact: true }).click(); await page.getByRole("radio", { name: "Dark", exact: true }).click(); await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeChecked();
-    await page.reload(); await page.getByRole("button", { name: "Settings", exact: true }).click(); await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeChecked();
+    await page.getByRole("button", { name: "Appearance", exact: true }).click(); await page.getByRole("radio", {name: "Dark", exact: true}).click(); await expect(page.getByRole("radio", {name: "Dark", exact: true})).toBeChecked();
+    await page.reload(); await page.getByRole("button", { name: "Settings", exact: true }).click(); await expect(page.getByRole("radio", {name: "Dark", exact: true})).toBeChecked();
     await page.getByRole("button", { name: "Saved scenarios", exact: true }).click(); await page.getByRole("button", { name: "Open saved scenarios", exact: true }).click(); await expect(page.getByRole("heading", { name: "Scenarios", exact: true })).toBeVisible();
   });
 
-  test("administrators without operational scope can create the first draft without loading map resources", async ({ page }) => {
-    const state = await installDataMocks(page, true, true); await page.getByRole("button", { name: "Manage regional data", exact: true }).click(); await expect(page.getByRole("button", { name: "Create draft", exact: true })).toBeVisible(); await page.getByRole("textbox", { name: "Name", exact: true }).fill("First deployment region"); await page.getByLabel("WGS84 bounds").fill("-105.3, 40, -105.2, 40.1"); await page.getByRole("button", { name: "Create draft", exact: true }).click(); await expect.poll(() => state.regions.length).toBe(1); await expect(page.getByRole("button", { name: "Save draft", exact: true })).toBeVisible();
-    expect(state.requests.some((request) => /simulation-runs|assets|weather-datasets|point-cloud/.test(request))).toBe(false); await expect(page.locator(".maplibregl-canvas")).toHaveCount(0);
-    await page.getByRole("tab", { name: "Sources & layers" }).click(); await expect(page.getByRole("button", { name: "Show on map", exact: true })).toBeDisabled(); await expect(page.getByText("Open an authorized Digital Twin workspace to preview layers on the map.", { exact: true })).toBeVisible();
+  test("staff administrators cannot open customer data or mount a product map", async ({ page }) => {
+    const state = await installDataMocks(page, true, true);
+    await expect(page.getByRole("heading", {name: "Administration", exact: true})).toBeVisible();
+    await expect(page.getByRole("button", {name: "Manage regional data", exact: true})).toHaveCount(0);
+    expect(state.requests).toEqual([]);
+    await expect(page.locator(".maplibregl-canvas")).toHaveCount(0);
   });
-
 });

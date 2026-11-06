@@ -213,12 +213,6 @@ Resources:
         AccessToken: hours
         IdToken: hours
         RefreshToken: days
-  Administrators:
-    Type: AWS::Cognito::UserPoolGroup
-    Properties:
-      UserPoolId: !Ref UserPool
-      GroupName: nexus-administrators
-      Description: Administrators of the single WattByte Nexus deployment
   SessionSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
