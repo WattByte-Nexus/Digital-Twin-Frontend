@@ -2,6 +2,12 @@
 
 Investigated November 5, 2026. Frontend base: `4c3d2618`; Engine base: `8e9c30a`. Both working trees contain pre-existing changes, including the new full-scan/crown view. Findings refer to the files present during inspection, not a claim that every change is deployed. No application code or deployed resources were changed.
 
+Follow-up: the user subsequently authorized implementation and deployment. The
+[implementation plan](../point-cloud-implementation-plan.md) and
+[November 6 release record](point-cloud-release-2026-11-06.md) distinguish the
+completed frontend/API/Batch rollout from pending survey rebuild verification.
+The measurements below remain the original investigation baseline.
+
 **Recommendation: keep the existing MapLibre/deck.gl scene, correct the LOD implementation, and let clouds that fit in one tile remain one tile. Preserve tree membership and analytical attributes through the pipeline to support risk colors. A renderer replacement is not required to address the strongest findings.**
 
 The user's suspicion about LOD is supported by concrete reproductions: the installed traversal requests siblings serially, the builder forces small clouds into unnecessary hierarchies, and normal layer reconstruction drops the elevation used for detail selection. These are stronger evidence than a general claim that point-cloud rendering is inherently expensive.
@@ -188,11 +194,13 @@ Suggested initial targets, to calibrate on the reference laptop: cached 100k-poi
 
 ## Reproduction bundle
 
-The [evidence directory](point-cloud-evidence-2026-11-05/) contains the four isolated probes. From the frontend repository, run:
+The [evidence directory](point-cloud-evidence-2026-11-05/) contains the four isolated probes and original results. These record the pre-implementation investigation. The lifecycle probe targets the old factory API and is retained as historical evidence; use `tests/digital-twin-lidar-layer.test.ts` for the current lifecycle regression. Traversal and octree probes now exercise the corrected implementation when run against the current checkout. See the [implementation plan](../point-cloud-implementation-plan.md) and [after measurements](point-cloud-evidence-2026-11-05/octree-after-result.json).
+
+From the frontend repository, run:
 
 ```sh
 rtk proxy node docs/research/point-cloud-evidence-2026-11-05/point-cloud-traversal-check.mjs
-rtk proxy node --import tsx docs/research/point-cloud-evidence-2026-11-05/point-cloud-lifecycle-check.ts
+rtk proxy node --import tsx --test tests/digital-twin-lidar-layer.test.ts tests/loaders-gl-traversal.test.ts
 rtk proxy node docs/research/point-cloud-evidence-2026-11-05/point-cloud-parser-benchmark.mjs
 ```
 

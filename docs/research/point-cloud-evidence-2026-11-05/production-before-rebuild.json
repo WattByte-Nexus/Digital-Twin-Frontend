@@ -1,0 +1,15 @@
+{
+  "observed_at": "2026-11-06T19:00:38.291137+00:00",
+  "version": "b1467b8b8af414b3b27aa877bb27e2092b369a88c8c6e1a0def2c55159bdca8a",
+  "full_tileset_present": false,
+  "manifest": {
+    "builder_version": "10",
+    "source_point_count": 50878574,
+    "published_point_count": 6054638,
+    "preview_point_count": 3000000,
+    "tile_count": 243,
+    "leaf_tile_count": 183,
+    "octree_depth": 7,
+    "output_bytes": 136848294
+  }
+}

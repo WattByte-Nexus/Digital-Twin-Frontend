@@ -1,0 +1,111 @@
+{
+  "observed_at": "2026-11-06T19:38:16.939057+00:00",
+  "lineage_id": "fd01e27127a27a02a67e1c25daf0a6ceba704258ffddede691486ed9c117d7c8",
+  "build": {
+    "status": "ready",
+    "failure_code": null,
+    "created_at": "2026-11-06T18:52:03.716882+00:00",
+    "updated_at": "2026-11-06T19:35:31.402166+00:00",
+    "parent_version": "b1467b8b8af414b3b27aa877bb27e2092b369a88c8c6e1a0def2c55159bdca8a"
+  },
+  "manifest": {
+    "version": "fd01e27127a27a02a67e1c25daf0a6ceba704258ffddede691486ed9c117d7c8",
+    "builder": "digital-twin-engine-native-octree",
+    "builder_version": "12",
+    "policy": "native-octree-v1",
+    "source_fingerprint": "dae65df2036e8ea64287daa0b2f706c2714ea1bf6369062710bd5b80d732361a",
+    "source_point_count": 50878574,
+    "published_point_count": 6054638,
+    "preview_point_count": 3000000,
+    "bounds_wgs84": [
+      -105.21985699761703,
+      39.741656148993094,
+      -105.19993634269154,
+      39.755926060397705
+    ],
+    "source_spacing_m": 0.5,
+    "octree_depth": 7,
+    "tile_count": 243,
+    "leaf_tile_count": 183,
+    "min_leaf_points": 6,
+    "max_leaf_points": 98796,
+    "output_bytes": 1249981639,
+    "artifact_checksum": "a92083bf4ddffbe30476b187d29126987ce4e3d038f998442334bcf3cfdc76d3",
+    "build_duration_seconds": 2240.867844551,
+    "refinement": "REPLACE",
+    "attributes": [
+      "position",
+      "rgb"
+    ]
+  },
+  "pointers": [
+    {
+      "dataset_id": "golden-lidar",
+      "active_version": "38e837d6ee685c4c5be8e3073b985b11fc454229d630b102e6f427bd8cc35f6d",
+      "latest_version": "38e837d6ee685c4c5be8e3073b985b11fc454229d630b102e6f427bd8cc35f6d",
+      "active_dataset_id": "golden-whole-georef-10cm"
+    },
+    {
+      "dataset_id": "golden-whole-georef-10cm",
+      "active_version": "fd01e27127a27a02a67e1c25daf0a6ceba704258ffddede691486ed9c117d7c8",
+      "latest_version": "fd01e27127a27a02a67e1c25daf0a6ceba704258ffddede691486ed9c117d7c8",
+      "active_dataset_id": "golden-whole-georef-10cm"
+    }
+  ],
+  "selection_preserved": true,
+  "active_pointer_correct": true,
+  "executions": [
+    {
+      "execution_id": "ea2c106ad74048da9c90c08440b5e260",
+      "lineage_id": "fd01e27127a27a02a67e1c25daf0a6ceba704258ffddede691486ed9c117d7c8",
+      "generation": 1,
+      "status": "succeeded",
+      "workflow_arn": "arn:aws:states:us-east-1:078183419290:execution:digital-twin-golden-engine-point-cloud:ea2c106ad74048da9c90c08440b5e260",
+      "job_id": "a9dedce7-8a64-41c6-9349-cca31f7d082c",
+      "attempt": 1
+    }
+  ],
+  "workflow": {
+    "executionArn": "arn:aws:states:us-east-1:078183419290:execution:digital-twin-golden-engine-point-cloud:ea2c106ad74048da9c90c08440b5e260",
+    "status": "SUCCEEDED",
+    "startDate": "2026-11-06 11:52:44.533000-07:00",
+    "stopDate": "2026-11-06 12:37:50.560000-07:00"
+  },
+  "batch": {
+    "jobId": "a9dedce7-8a64-41c6-9349-cca31f7d082c",
+    "jobName": "ea2c106ad74048da9c90c08440b5e260",
+    "status": "SUCCEEDED",
+    "statusReason": "Essential container in task exited",
+    "jobDefinition": "arn:aws:batch:us-east-1:078183419290:job-definition/digital-twin-golden-engine-point-cloud:5",
+    "createdAt": 1793991164740,
+    "startedAt": 1793991221406,
+    "stoppedAt": 1793993862414,
+    "container": {
+      "image": "078183419290.dkr.ecr.us-east-1.amazonaws.com/digital-twin-golden-engine-point-cloud@sha256:d2d3e8de7ed6d770afa9920bfce703b3db2ea73d55c13317bec09a9ec48af2af",
+      "exitCode": 0,
+      "reason": null,
+      "logStreamName": "build/default/3d01e7538e4048338dfa0e28956ffcd8"
+    },
+    "attempt_count": 1
+  },
+  "worker_revision_correct": true,
+  "worker_image_correct": true,
+  "new_log_events": [
+    {
+      "cloudwatch_timestamp": 1793993835589,
+      "event": "region_publication_committed",
+      "tree_count": 1705
+    },
+    {
+      "cloudwatch_timestamp": 1793993835591,
+      "event": "point_cloud_assets_published",
+      "asset_count": 1721,
+      "tree_point_count": 6054638
+    },
+    {
+      "cloudwatch_timestamp": 1793993835595,
+      "event": "point_cloud_batch_attempt_completed"
+    }
+  ],
+  "log_messages_read": 3
+}

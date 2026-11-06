@@ -1,0 +1,89 @@
+{
+  "scope": "Synthetic uniform 20 m cube; actual Engine octree recipe 12; includes bounded root precision preflight; excludes input parsing, semantics, validation, network and rendering. Single-run development timings, not production latency.",
+  "results": [
+    {
+      "points": 1000,
+      "build_seconds": 0.0033,
+      "tile_count": 1,
+      "leaf_tiles": 1,
+      "preview_points": 0,
+      "encoded_points": 1000,
+      "bytes": 15176,
+      "min_leaf_points": 1000,
+      "max_leaf_points": 1000,
+      "root_error": 0.0,
+      "depth": 0
+    },
+    {
+      "points": 10000,
+      "build_seconds": 0.0093,
+      "tile_count": 1,
+      "leaf_tiles": 1,
+      "preview_points": 0,
+      "encoded_points": 10000,
+      "bytes": 150184,
+      "min_leaf_points": 10000,
+      "max_leaf_points": 10000,
+      "root_error": 0.0,
+      "depth": 0
+    },
+    {
+      "points": 50000,
+      "build_seconds": 0.0442,
+      "tile_count": 1,
+      "leaf_tiles": 1,
+      "preview_points": 0,
+      "encoded_points": 50000,
+      "bytes": 750184,
+      "min_leaf_points": 50000,
+      "max_leaf_points": 50000,
+      "root_error": 0.0,
+      "depth": 0
+    },
+    {
+      "points": 100000,
+      "build_seconds": 0.0888,
+      "tile_count": 1,
+      "leaf_tiles": 1,
+      "preview_points": 0,
+      "encoded_points": 100000,
+      "bytes": 1500184,
+      "min_leaf_points": 100000,
+      "max_leaf_points": 100000,
+      "root_error": 0.0,
+      "depth": 0
+    },
+    {
+      "points": 250000,
+      "build_seconds": 0.527,
+      "tile_count": 9,
+      "leaf_tiles": 8,
+      "preview_points": 50000,
+      "encoded_points": 300000,
+      "bytes": 4501680,
+      "min_leaf_points": 31054,
+      "max_leaf_points": 31397,
+      "root_error": 1.0131643216943396,
+      "depth": 1
+    },
+    {
+      "points": 1000000,
+      "build_seconds": 3.2035,
+      "tile_count": 73,
+      "leaf_tiles": 64,
+      "preview_points": 450000,
+      "encoded_points": 1450000,
+      "bytes": 21763656,
+      "min_leaf_points": 15317,
+      "max_leaf_points": 15884,
+      "root_error": 1.4510237773134889,
+      "depth": 2
+    }
+  ],
+  "policy": {
+    "max_leaf_points": 100000,
+    "max_preview_points": 50000,
+    "max_leaf_payload_bytes": 4100000,
+    "source_spacing_m": 0.5
+  }
+}

@@ -42,10 +42,10 @@ Rules:
   DevIsolation:
     RuleCondition: !Equals [!Ref Environment, dev]
     Assertions:
-      - Assert: !Not [!Equals [!Ref ExpectedAccountId, '078183419290']]
-        AssertDescription: Dev must use a dedicated account, not the stable account.
-      - Assert: !Not [!Equals [!Ref EngineRoleName, digital-twin-golden-engine-host]]
-        AssertDescription: Dev must use its own runtime role.
+      - Assert: !Equals [!Ref 'AWS::StackName', digital-twin-dev-frontend]
+        AssertDescription: Use the separate dev hosting stack, never the Golden frontend stack.
+      - Assert: !Equals [!Ref EngineRoleName, digital-twin-dev-engine-api-task]
+        AssertDescription: Dev authentication requires the exact dev API task role.
       - Assert: !Not [!Equals [!Ref ApiOrigin, 'https://api.nexus.ipss.ai']]
         AssertDescription: Dev must use its own HTTPS API origin.
       - Assert: !Not [!Equals [!Ref PublicOrigin, 'https://digital-twin.wattbyte-nexus.com']]

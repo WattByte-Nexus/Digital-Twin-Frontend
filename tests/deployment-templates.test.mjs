@@ -9,7 +9,7 @@ const yaml = require('js-yaml');
 const tags = ['Ref', 'Sub', 'GetAtt', 'If', 'Not', 'Equals', 'And', 'Or', 'Select', 'Split', 'GetAZs'];
 const schema = yaml.JSON_SCHEMA.extend(tags.flatMap((tag) => ['scalar', 'sequence'].map((kind) =>
   new yaml.Type(`!${tag}`, { kind, construct: (value) => ({ [tag]: value }) }))));
-const templates = Object.fromEntries(['hosting', 'api-edge'].map((name) => [name,
+const templates = Object.fromEntries(['hosting', 'api-edge', 'dev-api-edge'].map((name) => [name,
   yaml.load(readFileSync(new URL(`../deployment/${name}.yaml`, import.meta.url), 'utf8'), { schema })]));
 
 /** Evaluate the template intrinsics used by these templates without contacting AWS.
@@ -45,13 +45,19 @@ function evaluate(value, parameters, conditions = {}) {
  * @returns {object} Parameters including defaults. Throws if a requirement or assertion fails.
  */
 function validate(template, overrides) {
-  const parameters = { ...overrides };
+  const parameters = {
+    'AWS::StackName': template === templates['dev-api-edge'] ? 'digital-twin-dev-api-edge'
+      : overrides.Environment === 'dev' ? 'digital-twin-dev-frontend' : 'digital-twin-frontend',
+    ...overrides,
+  };
   for (const [name, spec] of Object.entries(template.Parameters)) {
     if (!(name in parameters) && 'Default' in spec) parameters[name] = spec.Default;
     assert.ok(name in parameters, `Required parameter: ${name}`);
     if (spec.AllowedValues) assert.ok(spec.AllowedValues.includes(parameters[name]), name);
     if (spec.AllowedPattern) assert.match(parameters[name], new RegExp(spec.AllowedPattern), name);
     if (spec.MinLength) assert.ok(parameters[name].length >= spec.MinLength, name);
+    if (spec.MinValue) assert.ok(parameters[name] >= spec.MinValue, name);
+    if (spec.MaxValue) assert.ok(parameters[name] <= spec.MaxValue, name);
   }
   for (const rule of Object.values(template.Rules)) {
     if (rule.RuleCondition && !evaluate(rule.RuleCondition, parameters)) continue;
@@ -68,19 +74,28 @@ function validate(template, overrides) {
  */
 function fixture(environment) {
   const dev = environment === 'dev';
-  const account = dev ? '111111111111' : '078183419290';
+  const account = '078183419290';
   return {
     Environment: environment, ExpectedAccountId: account, 'AWS::AccountId': account, BranchName: 'main',
     'AWS::Region': 'us-east-1', 'AWS::Partition': 'aws',
-    ApiOrigin: dev ? 'https://api.dev.example.test' : 'https://api.nexus.ipss.ai',
-    PublicOrigin: dev ? 'https://dev.example.test' : 'https://digital-twin.wattbyte-nexus.com',
-    ApiDomain: dev ? 'api.dev.example.test' : 'api.nexus.ipss.ai',
-    EngineRoleName: dev ? 'digital-twin-dev-api' : 'digital-twin-golden-engine-host',
+    ApiOrigin: dev ? 'https://api-dev.nexus.ipss.ai' : 'https://api.nexus.ipss.ai',
+    PublicOrigin: dev ? 'https://dev.digital-twin.wattbyte-nexus.com' : 'https://digital-twin.wattbyte-nexus.com',
+    ApiDomain: dev ? 'api-dev.nexus.ipss.ai' : 'api.nexus.ipss.ai',
+    EngineRoleName: dev ? 'digital-twin-dev-engine-api-task' : 'digital-twin-golden-engine-api-task',
     TransactionalEmailSender: 'digital-twin@example.test',
     TransactionalEmailIdentityArn: `arn:aws:ses:us-east-1:${account}:identity/example.test`,
     GitHubOidcSubject: `repo:WattByte-Nexus/Digital-Twin-Frontend:${dev ? 'environment:dev' : 'ref:refs/heads/main'}`,
     SecondSubnetCidr: '10.82.2.0/24', VpcId: 'vpc-test', EngineSubnetId: 'subnet-test',
     PublicRouteTableId: 'rtb-test', HostedZoneId: 'zone-test',
+    ListenerArn: `arn:aws:elasticloadbalancing:us-east-1:${account}:listener/app/shared/abc/def`,
+    LoadBalancerArn: `arn:aws:elasticloadbalancing:us-east-1:${account}:loadbalancer/app/shared/abc`,
+    LoadBalancerDnsName: 'shared.us-east-1.elb.amazonaws.com',
+    LoadBalancerCanonicalHostedZoneId: 'ZALBTEST', LoadBalancerSecurityGroupId: 'sg-shared',
+    RulePriority: 100,
+    FargateTargetGroupArn: `arn:aws:elasticloadbalancing:us-east-1:${account}:targetgroup/${dev ? 'dev' : 'golden'}/123`,
+    FargateSecurityGroupId: dev ? 'sg-12345678' : 'sg-87654321',
+    GoldenTargetGroupArn: `arn:aws:elasticloadbalancing:us-east-1:${account}:targetgroup/golden/123`,
+    GoldenApiSecurityGroupId: 'sg-87654321',
   };
 }
 
@@ -107,7 +122,7 @@ test('Golden renders the deployed named identities, branch, origins and trust su
 
 test('dev has separate identity resources, exact callbacks, proxy origin and scoped auth permissions', () => {
   const parameters = fixture('dev');
-  for (const template of Object.values(templates)) validate(template, parameters);
+  for (const template of [templates.hosting, templates['dev-api-edge']]) validate(template, parameters);
   const resources = evaluate(templates.hosting.Resources, parameters, templates.hosting.Conditions);
   for (const name of ['App', 'UserPool', 'Client', 'Domain', 'SessionSecret', 'DeployRole']) {
     assert.match(JSON.stringify(resources[name].Properties), /dev/);
@@ -124,10 +139,7 @@ test('dev has separate identity resources, exact callbacks, proxy origin and sco
   assert.equal(resources.Administrators, undefined);
   assert.deepEqual(resources.EngineAuthenticationPolicy.Properties.PolicyDocument.Statement[2].Condition.StringEquals,
     { 'ses:FromAddress': parameters.TransactionalEmailSender });
-  const edge = evaluate(templates['api-edge'].Resources, parameters, templates['api-edge'].Conditions);
-  assert.equal(edge.LoadBalancer.Properties.Name, 'digital-twin-dev-frontend-api');
-  assert.equal(edge.SecurityGroup.Properties.GroupName, 'digital-twin-dev-frontend-api-alb');
-  for (const template of Object.values(templates)) {
+  for (const template of [templates.hosting, templates['dev-api-edge']]) {
     const outputs = evaluate(template.Outputs, parameters, template.Conditions);
     assert.equal(outputs.DeploymentAccountId.Value, parameters['AWS::AccountId']);
     assert.equal(outputs.DeploymentRegion.Value, 'us-east-1');
@@ -136,13 +148,13 @@ test('dev has separate identity resources, exact callbacks, proxy origin and sco
 });
 
 test('missing and mixed-environment inputs fail before deployment', () => {
-  for (const template of Object.values(templates)) {
+  for (const [stack, template] of Object.entries(templates)) {
+    const environment = stack === 'api-edge' ? 'golden' : 'dev';
     for (const name of ['Environment', 'ExpectedAccountId']) {
-      const parameters = fixture('dev'); delete parameters[name];
+      const parameters = fixture(environment); delete parameters[name];
       assert.throws(() => validate(template, parameters), /Required parameter/);
     }
-    assert.throws(() => validate(template, { ...fixture('dev'), 'AWS::AccountId': '222222222222' }), /selected AWS account/);
-    assert.throws(() => validate(template, { ...fixture('dev'), ExpectedAccountId: '078183419290', 'AWS::AccountId': '078183419290' }), /dedicated account/);
+    assert.throws(() => validate(template, { ...fixture(environment), 'AWS::AccountId': '222222222222' }), /selected (?:AWS|shared) account/);
   }
   for (const name of ['ApiOrigin', 'PublicOrigin', 'EngineRoleName']) {
     const parameters = fixture('dev'); delete parameters[name];
@@ -151,15 +163,15 @@ test('missing and mixed-environment inputs fail before deployment', () => {
   }
   assert.throws(() => validate(templates.hosting, { ...fixture('dev'), PublicOrigin: 'https://dev.example.test/path' }));
   assert.throws(() => validate(templates.hosting, { ...fixture('dev'), GitHubOidcSubject: fixture('golden').GitHubOidcSubject }));
-  assert.throws(() => validate(templates['api-edge'], { ...fixture('dev'), ApiDomain: fixture('golden').ApiDomain }));
+  assert.throws(() => validate(templates['dev-api-edge'], { ...fixture('dev'), ApiDomain: fixture('golden').ApiDomain }));
 });
 
 test('Fargate-only edge bootstraps without a target, then associates it before task activation', () => {
   const template = templates['api-edge'];
-  const parameters = { ...fixture('dev'), EnableApi: 'true', FargateTargetGroupArn: 'arn:aws:elasticloadbalancing:us-east-1:111111111111:targetgroup/dev/123', FargateSecurityGroupId: 'sg-12345678' };
+  const parameters = { ...fixture('golden'), EnableApi: 'true', FargateTargetGroupArn: 'arn:aws:elasticloadbalancing:us-east-1:078183419290:targetgroup/golden/123', FargateSecurityGroupId: 'sg-12345678' };
   assert.throws(() => validate(template, { ...parameters, FargateSecurityGroupId: '' }), /both Fargate/);
-  assert.throws(() => validate(template, { ...fixture('dev'), EnableApi: 'true' }), /before enabling/);
-  const bootstrap = validate(template, fixture('dev'));
+  assert.throws(() => validate(template, { ...fixture('golden'), EnableApi: 'true', FargateTargetGroupArn: '', FargateSecurityGroupId: '' }), /before enabling/);
+  const bootstrap = validate(template, { ...fixture('golden'), FargateTargetGroupArn: '', FargateSecurityGroupId: '' });
   const edge = evaluate(template.Resources, bootstrap, template.Conditions);
   assert.equal(edge.Listener.Properties.DefaultActions[0].Type, 'fixed-response');
   assert.equal(edge.Listener.Properties.DefaultActions[0].FixedResponseConfig.StatusCode, '503');
@@ -193,4 +205,56 @@ test('Golden edge resource identities and every rendered property match the audi
     if (template.Resources[name].Condition) assert.equal(evaluate(template.Conditions[template.Resources[name].Condition], parameters), true, name);
   }
   for (const name of Object.keys(live.Outputs)) assert.deepEqual(evaluate(template.Outputs[name].Value, parameters, template.Conditions), evaluate(live.Outputs[name].Value, parameters, live.Conditions), name);
+});
+
+test('shared dev attaches only an exact host rule, its own certificate, DNS and task egress', () => {
+  const template = templates['dev-api-edge'];
+  const inputs = validate(template, fixture('dev'));
+  const resources = evaluate(template.Resources, inputs);
+  assert.deepEqual(Object.values(resources).map((resource) => resource.Type).sort(), [
+    'AWS::CertificateManager::Certificate', 'AWS::EC2::SecurityGroupEgress',
+    'AWS::ElasticLoadBalancingV2::ListenerCertificate', 'AWS::ElasticLoadBalancingV2::ListenerRule',
+    'AWS::Route53::RecordSet',
+  ].sort());
+  const rule = resources.DevHostRule.Properties;
+  assert.equal(rule.ListenerArn, inputs.ListenerArn);
+  assert.deepEqual(rule.Conditions, [{ Field: 'host-header', HostHeaderConfig: { Values: ['api-dev.nexus.ipss.ai'] } }]);
+  assert.equal(rule.Actions[0].TargetGroupArn, inputs.FargateTargetGroupArn);
+  assert.equal(rule.Conditions[0].HostHeaderConfig.Values.includes('api.nexus.ipss.ai'), false);
+  assert.deepEqual(resources.DevListenerCertificate.Properties.Certificates, [{ CertificateArn: 'resource:Certificate' }]);
+  assert.equal(resources.DevListenerCertificate.Properties.ListenerArn, inputs.ListenerArn);
+  assert.equal(resources.Certificate.Properties.DomainName, 'api-dev.nexus.ipss.ai');
+  assert.equal(resources.Dns.Properties.Name, 'api-dev.nexus.ipss.ai');
+  assert.equal(resources.Dns.Properties.AliasTarget.DNSName, inputs.LoadBalancerDnsName);
+  assert.equal(resources.DevTaskEgress.Properties.GroupId, inputs.LoadBalancerSecurityGroupId);
+  assert.equal(resources.DevTaskEgress.Properties.DestinationSecurityGroupId, inputs.FargateSecurityGroupId);
+  assert.equal(JSON.stringify(template).includes('DefaultActions'), false);
+  assert.throws(() => validate(templates['api-edge'], fixture('dev')), /Environment/);
+  assert.throws(() => validate(template, { ...inputs, 'AWS::StackName': 'digital-twin-api-load-balancer' }), /never the existing Golden/);
+  assert.throws(() => validate(templates.hosting, { ...fixture('dev'), 'AWS::StackName': 'digital-twin-frontend' }), /never the Golden/);
+  assert.throws(() => validate(template, { ...inputs, FargateTargetGroupArn: inputs.GoldenTargetGroupArn }), /Golden target/);
+  assert.throws(() => validate(template, { ...inputs, FargateSecurityGroupId: inputs.GoldenApiSecurityGroupId }), /separate security group/);
+  assert.throws(() => validate(template, { ...inputs, RulePriority: 0 }), /RulePriority/);
+});
+
+test('shared-account change leaves every Golden hosting resource property unchanged', () => {
+  const baseline = yaml.load(readFileSync(new URL('./fixtures/hosting.before-shared.yaml', import.meta.url), 'utf8'), { schema });
+  const inputs = validate(templates.hosting, fixture('golden'));
+  assert.deepEqual(evaluate(templates.hosting.Resources, inputs, templates.hosting.Conditions), evaluate(baseline.Resources, inputs, baseline.Conditions));
+  assert.deepEqual(evaluate(templates.hosting.Outputs, inputs, templates.hosting.Conditions), evaluate(baseline.Outputs, inputs, baseline.Conditions));
+});
+
+test('dev hosting grants auth only to the exact verified dev API task role', () => {
+  const template = templates.hosting;
+  const inputs = fixture('dev');
+  validate(template, inputs);
+  for (const role of [
+    'digital-twin-golden-engine-api-task',
+    'digital-twin-golden-engine-host',
+    'digital-twin-independent-api-task',
+    'unrelated-role',
+  ]) {
+    assert.throws(() => validate(template, { ...inputs, EngineRoleName: role }), /dev API task role/);
+  }
+  validate(template, fixture('golden'));
 });

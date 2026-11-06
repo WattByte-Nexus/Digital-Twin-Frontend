@@ -1,0 +1,47 @@
+{
+  "verified_at": "2026-11-06T19:39:51.983415+00:00",
+  "version": "fd01e27127a27a02a67e1c25daf0a6ceba704258ffddede691486ed9c117d7c8",
+  "builder_version": "12",
+  "source_point_count": 50878574,
+  "source_fingerprint_preserved": true,
+  "availability_checksum_matches_manifest": true,
+  "views": {
+    "crowns": {
+      "content_tiles": 243,
+      "leaf_tiles": 183,
+      "native_points": 6054638,
+      "preview_points": 3000000,
+      "max_leaf_points": 98796,
+      "max_leaf_payload_bytes": 1482128,
+      "content_bytes": 135864744
+    },
+    "full": {
+      "content_tiles": 2233,
+      "leaf_tiles": 1768,
+      "native_points": 50878574,
+      "preview_points": 23250000,
+      "max_leaf_points": 98915,
+      "max_leaf_payload_bytes": 1483912,
+      "content_bytes": 1112342768
+    }
+  },
+  "semantic_asset_count": 1702,
+  "semantic_asset_kind_counts": {
+    "tree": 1657,
+    "power_pole": 44,
+    "power_line": 1
+  },
+  "prior_failed_recipe11_asset_count": 1702,
+  "crown_fidelity": {
+    "old_version": "b1467b8b8af414b3b27aa877bb27e2092b369a88c8c6e1a0def2c55159bdca8a",
+    "old_content_tiles": 243,
+    "new_content_tiles": 243,
+    "uri_sets_match": true,
+    "only_old_uris": [],
+    "only_new_uris": [],
+    "sha256_match_count": 243,
+    "sha256_mismatches": [],
+    "total_bytes_hashed": 271729488
+  },
+  "validation_scope": "All referenced PNTS headers and object byte lengths; independent native-point inventory; all shared crown PNTS SHA256 compared with recipe10. Full-scan payload checksum not recomputed."
+}

@@ -1,157 +1,169 @@
 # AWS frontend deployment
 
-The frontend's CloudFormation templates support independently selected `dev`
-and stable `golden` accounts. GitHub Actions currently builds/tests/releases the
-main artifact through the stable repository/main OIDC role; dev release workflow
-and exact-artifact promotion changes remain a separate phase. PR builds need no
-AWS credentials. Ordinary release jobs cannot provision infrastructure.
+Dev and Golden use account `078183419290` in `us-east-1` and share the existing
+ALB/listener and network. Dev has its own API hostname, target group, task role
+and security group, Cognito pool/client, session-signing secret and DynamoDB
+session/runtime storage. Shared infrastructure reduces cost; account identity
+alone cannot prove separation. Exact resource policies and live negative tests
+must prove dev cannot use Golden state or credentials.
 
-## Resource ownership
+## Ownership
 
-- `hosting.yaml` owns Amplify and its selected artifact branch, invitation-only
-  Cognito pool/client/group, a generated session-signing secret, scoped API
-  authentication permissions and the GitHub deployment role.
-- `api-edge.yaml` owns the HTTPS ALB/listener, ALB security group and every ALB
-  egress rule, ACM certificate, DNS and second public subnet/route association.
-- Infrastructure owns the Engine network, independent API IP target group,
-  Fargate service/task roles/security group and task ingress from the ALB.
-  It owns the EC2 simulation worker; EC2 is not an API routing target.
-- Engine owns authentication/authorization and its DynamoDB session store.
-  Configure `verified_host` with the selected Cognito identifiers, exact browser
-  origin and secret ARN. Runtime credentials retrieve secrets inside the API;
-  OAuth tokens and secret values never enter frontend build variables.
+- `api-edge.yaml` is the Golden-only owner of the existing ALB, listener/default
+  action/default certificate, Golden task egress, certificate, DNS and public
+  subnet. Never deploy this template for dev or update that stack to add dev.
+- `dev-api-edge.yaml` is a separate dev attachment stack. It owns only the
+  `api-dev.nexus.ipss.ai` certificate, its SNI certificate attachment, exact
+  host-header listener rule, DNS alias and ALB egress to the dev task SG.
+  It creates no ALB, listener, VPC, subnet, target group or default action.
+  Its Rules require stack name `digital-twin-dev-api-edge`, rejecting accidental
+  use of the existing Golden edge stack.
+- `hosting.yaml` owns one environment's Amplify app/branch, Cognito pool/client,
+  generated session secret, scoped authentication grant and OIDC deployment role.
+  Keep the existing Golden stack; dev Rules require the separate
+  `digital-twin-dev-frontend` stack name.
+- Infrastructure owns the shared network/cluster, each environment's Fargate
+  service/target group/task role/task SG and task ingress from the shared ALB.
+  Engine owns authentication, authorization and session validation. Redis is
+  internal compute infrastructure, not the hosted session authority.
 
-Amplify proxies same-origin `/api/*` to the explicit HTTPS API origin. API cookies
-and query strings are forwarded, and protected responses use `private, no-store`.
-The service worker excludes API navigation so OAuth callbacks reach the server;
-other SPA deep links serve index.html. Only the ALB security group reaches the
-private Fargate API port 8000. Do not add a public task IP, EC2 API target or a
-Terraform-owned listener/ALB egress rule.
+All ALB egress remains owned by Frontend CloudFormation. The two stacks own
+distinct rules; Terraform must not manage them or the shared listener.
+`ListenerCertificate` adds only the dev SNI certificate. Golden's default
+certificate and default Fargate action are outside the dev stack's ownership.
+Only the exact `api-dev.nexus.ipss.ai` host selects dev; ordinary Golden requests
+continue to use the existing default route.
 
-## Inputs and isolation
+## Shared-account dev bootstrap
 
-Both templates require `Environment` (`dev` or `golden`) and `ExpectedAccountId`.
-The templates compare that ID to the actual caller account and reject the known
-stable account for dev. Deploy each environment under its own stack in its own
-account; never change an existing stack's environment.
+1. Keep the running Golden edge unchanged. Read its actual listener ARN, ALB ARN,
+   DNS name, canonical hosted-zone ID and ALB security-group ID. Confirm an unused
+   listener-rule priority. Preserve its default action/certificate and target ARN
+   as a before/after acceptance baseline.
+2. Provision Infrastructure's inactive dev resources in the existing network.
+   Export `dev_runtime.target_group_arn`, `security_group_id`, `api_task_role_name`
+   and `cloud_config`. Do not activate dev tasks until auth/runtime configuration
+   and the target association are installed. No new ALB/public subnet is needed.
+3. Deploy `hosting.yaml` as `digital-twin-dev-frontend`, using the dev task role,
+   `Environment=dev`, `ExpectedAccountId=078183419290`,
+   `ApiOrigin=https://api-dev.nexus.ipss.ai`,
+   `PublicOrigin=https://dev.digital-twin.wattbyte-nexus.com`, and
+   `GitHubOidcSubject=repo:WattByte-Nexus/Digital-Twin-Frontend:environment:dev`.
+   Supply the selected verified SES sender/identity. This creates distinct dev
+   auth resources even when the frontend artifact deployment is deferred.
+4. Deploy `dev-api-edge.yaml` as `digital-twin-dev-api-edge`. Supply the existing
+   shared ALB/listener inputs, dev target/SG and a free priority. Supply the actual
+   `GoldenTargetGroupArn` and `GoldenApiSecurityGroupId` for reuse rejection.
+   `ApiDomain` permits only `api-dev.nexus.ipss.ai`; the template never changes
+   the Golden DNS name. It attaches the dev target before ECS service creation.
+   Until healthy dev tasks exist, requests to that hostname return ALB 503.
+5. Configure the dev API using dev hosting outputs and `dev_runtime.cloud_config`,
+   publish its digest-pinned image and activate its tasks. Use the dev DynamoDB
+   session table, operational table, storage prefixes/buckets and queue. Never
+   copy Golden session secrets, pool IDs, client secrets, sessions or users.
+6. Verify dev HTTPS/readiness/login and independent sessions, then deploy the
+   tested frontend artifact when ready. Confirm Golden default action, default
+   certificate, target health and authenticated behavior remain unchanged.
 
-Hosting also requires `ApiOrigin`, `PublicOrigin`, `EngineRoleName`,
-`TransactionalEmailSender` and `TransactionalEmailIdentityArn`. The email
-identity must be verified in the selected API region/account; its policy permits
-SES sends only from that mailbox. Set the same mailbox as `cognito.email_sender`
-in the Engine hosting configuration. The role
-is Infrastructure's API **task role**, not the execution role or EC2 worker role.
-Origins are exact HTTPS origins without paths, trailing slashes or wildcards;
-Cognito registers only the selected browser callback/logout URLs. There is no
-default API origin or runtime role. Amplify uses `BranchName` (default `main`) as
-the artifact destination independently of the candidate source commit.
+The same account guard still verifies actual caller identity. Dev no longer
+requires another account or an Organizations/bootstrap migration. API hosting
+uses the exact browser origin for Cognito callbacks and CSRF; Amplify proxies
+same-origin `/api/*` to the dev API. A local frontend can be used only through
+the Engine's explicitly configured local/dev access flow; the templates do not
+broaden hosted callbacks or disable verified-host authentication for localhost.
 
-Dev requires `GitHubOidcSubject` equal to
-`repo:WattByte-Nexus/Digital-Twin-Frontend:environment:dev`. Configure that GitHub
-environment and its release job before attempting OIDC deployment. Golden's
-default remains its deployed exact repository/main subject. No wildcard trust
-is introduced.
+Example dev attachment command, after filling verified nonsecret inputs:
 
-Edge additionally requires network/DNS identifiers and `SecondSubnetCidr`.
-`EngineSubnetId` retains its deployed parameter name and means the first public
-subnet; it does not select an EC2 API. The second subnet uses the region's second
-AZ, so the first subnet must use another AZ. Its CIDR must not overlap the VPC's
-other subnets. `FargateTargetGroupArn` and `FargateSecurityGroupId` are optional
-only during the initial fixed-503 bootstrap, and must be supplied together.
-`EnableApi=true` requires them. There is one route target: Fargate.
-
-## Fresh dev bootstrap order
-
-Account creation, operator access, OIDC provider setup, spending approval and DNS
-delegation are prerequisites. The proposed browser/API names
-`dev.digital-twin.wattbyte-nexus.com` and `api-dev.nexus.ipss.ai` remain unconfirmed.
-No dev account or hosted-zone IDs are invented here. Verify the approved zone's
-access/delegation and ACM/Amplify certificate validation records in that account.
-
-1. Initialize the selected account's assets/weather and Engine network using the
-   owning repositories. Keep `enable_independent_api`, `activate_independent_api`
-   and other activation switches false. Export Engine `frontend_network`.
-2. Create only the edge stack with that network, approved DNS, explicit account,
-   environment and free second-subnet CIDR. Use `EnableApi=false` and leave both
-   Fargate inputs empty. The listener returns 503. A bootstrap-only sink egress
-   rule suppresses AWS's default allow-all outbound rule. Export `SecurityGroupId`,
-   `SecondSubnetId`, `LoadBalancerArn` and `ApiOrigin`.
-3. Feed the edge SG/subnet into Engine's `api_alb_security_group_id` and
-   `api_second_public_subnet_id`; enable API resources with
-   `enable_independent_api=true`, keeping `activate_independent_api=false`.
-   This creates its target group, task security group and task role without ECS
-   tasks. Export the updated `frontend_network` and `independent_api`.
-4. Deploy hosting/auth using `frontend_network.api_task_role_name`, the selected
-   API/browser origins and approved OIDC subject. Export the Cognito identifiers,
-   session-secret ARN and exact `FrontendUrl`. Create dev users/grants explicitly.
-5. Update the edge with `independent_api.target_group_arn` and
-   `independent_api.security_group_id`, setting `EnableApi=true`. The listener
-   associates the IP target group before ECS service creation. It returns 503
-   until healthy tasks exist; the API remains authenticated. CloudFormation alone
-   adds the task egress rule and removes its bootstrap sink.
-6. Publish the account-local digest-pinned API image. Supply hosted-auth runtime
-   settings, scoped secret/Cognito permissions, dev DynamoDB session/runtime
-   resources and immutable dev static inputs to Engine; then set
-   `activate_independent_api=true`. Complete readiness, TLS, login/logout,
-   browser/API, streaming and cross-environment denial acceptance before release.
-   Activate relay/point-cloud processing only after their independent readiness.
-
-This order avoids a dependency cycle: edge/network first, inactive API role and
-target next, hosting/auth next, target association next, tasks last. Passing an
-offline template check does not provision or validate that deployment.
-
-## Preserve the active Golden deployment
-
-Golden's recorded account/region are `078183419290` / `us-east-1`; its browser and
-API origins are `https://digital-twin.wattbyte-nexus.com` and
-`https://api.nexus.ipss.ai`. The live edge audit on 2026-11-05 confirmed the
-Fargate-only topology and Terraform-owned target group:
-
-```text
-arn:aws:elasticloadbalancing:us-east-1:078183419290:targetgroup/digital-twin-independent-api/b4f0a80243ee27cb
+```sh
+aws cloudformation deploy --region us-east-1 \
+  --stack-name digital-twin-dev-api-edge \
+  --template-file deployment/dev-api-edge.yaml \
+  --parameter-overrides Environment=dev ExpectedAccountId=078183419290 \
+    ApiDomain=api-dev.nexus.ipss.ai HostedZoneId="$API_HOSTED_ZONE_ID" \
+    ListenerArn="$SHARED_LISTENER_ARN" LoadBalancerArn="$SHARED_ALB_ARN" \
+    LoadBalancerDnsName="$SHARED_ALB_DNS_NAME" \
+    LoadBalancerCanonicalHostedZoneId="$SHARED_ALB_ZONE_ID" \
+    LoadBalancerSecurityGroupId="$SHARED_ALB_SECURITY_GROUP_ID" \
+    RulePriority="$UNUSED_RULE_PRIORITY" \
+    FargateTargetGroupArn="$DEV_TARGET_GROUP_ARN" \
+    FargateSecurityGroupId="$DEV_API_SECURITY_GROUP_ID" \
+    GoldenTargetGroupArn="$GOLDEN_TARGET_GROUP_ARN" \
+    GoldenApiSecurityGroupId="$GOLDEN_API_SECURITY_GROUP_ID"
 ```
 
-Keep `EnableApi=true`, that verified target ARN and its actual task security
-group on any Golden update. Do not replay the fresh-dev fixed-503 bootstrap
-against the active stack. Supply `Environment=golden`,
-`ExpectedAccountId=078183419290` and `SecondSubnetCidr=10.82.2.0/24` alongside its
-existing network/DNS/Fargate values. Hosting must retain its actual API task-role
-input and current origins. Review the change set before updating infrastructure.
+Review the change set before deploying. The ALB DNS name/zone ID come from its
+actual description, not the application hosted-zone ID. Confirm the listener,
+ALB and SG belong together in the same account/region/VPC. A conflicting rule
+priority fails creation; select a free priority instead of replacing any rule.
 
-The templates retain every deployed edge logical ID and Golden resource property,
-plus Golden hosting resource names, default branch and role trust. Golden's
-existing empty inline ALB egress list and separately owned Fargate egress remain
-unchanged. The checked-in live template fixture verifies these identities;
-no legacy EC2 target or diagnostic header route remains.
+## DNS, auth and artifacts
 
-## Outputs and cross-repository wiring
+The existing account's parent hosted zones may directly host the new dev records;
+no cross-account delegation is needed. Use the actual zone containing
+`api-dev.nexus.ipss.ai` for dev certificate validation/DNS. Amplify manages the
+separate browser domain association and certificate. Retain the existing Golden
+DNS records and leave `EnableAutoSubDomain=false`. Wait for ACM issuance and
+Amplify's `AVAILABLE` domain status before browser acceptance.
 
-Both stacks export actual `DeploymentAccountId`, `DeploymentRegion` and selected
-`DeploymentEnvironment` for the Engine identity preflight. Export
-`aws cloudformation describe-stacks --stack-name <selected-stack> --query
-'Stacks[0].Outputs'` as JSON. Identity agreement does not prove IAM isolation or
-validate every supplied external resource's ownership.
+Hosting requires `ApiOrigin`, `PublicOrigin`, `EngineRoleName`,
+`TransactionalEmailSender` and `TransactionalEmailIdentityArn` explicitly.
+`EngineRoleName` must be the dev API task role, not its execution role or the
+Golden API/worker role. The exact dev resource ARNs scope Cognito and session
+secret access; SES sends are restricted to the configured sender. The email
+identity must be verified in this account/region. Sandbox SES requires verified
+test recipients. Preserve the existing mandatory TOTP/account-management setup.
+Never put OAuth tokens, session secrets or Engine credentials into Vite variables.
 
-| Stack/output | Consumer |
-| --- | --- |
-| Hosting `AppId`, `DeployRoleArn`, `BranchName`, `FrontendUrl` | Selected GitHub deployment destination and smoke checks |
-| Hosting `UserPoolId`, `ClientId`, `CognitoDomain`, `SessionSecretArn`, `FrontendUrl`, `ApiOrigin` | Selected Engine verified-host configuration and scoped authentication policy |
-| Edge `SecurityGroupId`, `SecondSubnetId`, `LoadBalancerArn` | Infrastructure API network/monitoring inputs |
-| Edge `ApiOrigin` | Hosting API proxy origin |
-| Edge `TargetGroupArn` (when prepared) | Reports Infrastructure's serving Fargate target; does not create one |
+`BranchName=main` identifies a branch inside the separate dev Amplify app; it does
+not deploy to the Golden app. The existing upload script targets that branch.
+For manual deployment, use explicit operator credentials and the dev `AppId`:
 
-Sessions use the selected API's own DynamoDB table. Do not copy stable sessions
-or users into dev. Feed the exact browser origin into Engine CSRF and the source
-bucket owner's upload CORS rules. Infrastructure owns upload bucket IAM/lifecycle;
-the existing upload workflow below retains its API contract.
+```sh
+AWS_PROFILE="$DEV_OPERATOR_PROFILE" AWS_REGION=us-east-1 \
+AMPLIFY_APP_ID="$DEV_AMPLIFY_APP_ID" \
+  bash scripts/deploy-amplify.sh /absolute/path/to/tested/dist
+```
 
-GitHub uses `FRONTEND_AWS_REGION`, `FRONTEND_AMPLIFY_APP_ID`,
-`FRONTEND_DEPLOY_ROLE_ARN` and `FRONTEND_URL` from the selected hosting outputs.
-Existing browser mapping credentials remain public browser credentials once
-bundled; restrict provider origins. Never put Engine secrets into Vite variables.
-Current workflow checks the Engine contract, lint/tests/type checks/build, records
-`deployment.json`, and checks revision, SPA, readiness and Cognito redirects.
-Workflow/environment selection and exact-artifact promotion remain separate work.
+The existing GitHub workflow still deploys only main with a Golden account
+allowlist and repository/main OIDC subject. It has no `environment: dev` job.
+Do not redirect its stable repository-level variables. A future dev release job
+must select the protected GitHub dev environment and its app/role variables to
+match the dev role's exact OIDC trust. Manual operator deployment does not assume
+that OIDC role. No GitHub repository connection or Amplify auto-build is required.
+
+Both hosting and dev edge export `DeploymentEnvironment`, actual
+`DeploymentAccountId` and `DeploymentRegion`; matching identities are necessary
+but not proof of separate resources inside a shared account. Hosting additionally
+exports `AppId`, `BranchName`, `FrontendUrl`, `DeployRoleArn`, `UserPoolId`,
+`ClientId`, `CognitoDomain`, `SessionSecretArn` and `ApiOrigin`. Dev edge exports
+`ApiOrigin`, dev `TargetGroupArn`, shared `LoadBalancerArn`, `ListenerArn`,
+`SecurityGroupId` (shared ALB SG) and its own `CertificateArn`.
+
+## Golden preservation and verification
+
+Golden stays at `https://digital-twin.wattbyte-nexus.com` and
+`https://api.nexus.ipss.ai`. Its edge template remains Golden-only and preserves
+all rendered resources from the audited Fargate-only live baseline. Keep its
+`EnableApi=true`, existing target/SG and certificate inputs when independently
+updating that stack. Dev provisioning never updates this stack or changes its
+environment, network, default action or default certificate.
+
+Offline checks require no AWS credentials:
+
+```sh
+uvx --from cfn-lint cfn-lint deployment/api-edge.yaml deployment/dev-api-edge.yaml deployment/hosting.yaml
+node --test tests/deployment-templates.test.mjs
+bash -n scripts/deploy-amplify.sh
+```
+
+Tests compare every Golden edge property against its audited live fixture and
+every Golden hosting resource/output against its pre-change snapshot. They prove
+same-account dev auth separation, exact-host routing, certificate attachment-only
+ownership, no new ALB/network resources, distinct targets/SGs and invalid-input
+rejection. No offline test proves live IAM/session isolation. Verify negative
+Golden-token/session/data access in dev and unchanged Golden behavior after
+provisioning. This adds no ALB/NAT/subnet fixed cost; dev tasks, auth, secret,
+storage and any frontend traffic remain billable.
 
 There is no self-registration. Explicitly bootstrap a managed platform account,
 then invite staff and customer administrators through the management workspace.
@@ -172,21 +184,6 @@ startup. Its runtime role needs the pool-scoped provisioning/MFA permissions and
 sender-scoped SES permission declared in `hosting.yaml`. For setup and acceptance,
 see the Engine's `docs/operations/accounts.md` and this repository's
 [role implementation plan](../docs/digital-twin-roles-and-permissions-plan.md).
-
-## Offline verification
-
-```sh
-uvx --from cfn-lint cfn-lint deployment/api-edge.yaml deployment/hosting.yaml
-node --test tests/deployment-templates.test.mjs
-bash -n scripts/deploy-amplify.sh
-```
-
-Tests compare all Golden edge resource properties against the nonsecret audited
-live template in `tests/fixtures/api-edge.golden-live.json`, check hosting resource
-identities, reject missing/mixed environment inputs, and prove fixed-503 bootstrap
-and Fargate association without EC2 targets or diagnostic switches. Live change
-sets, DNS/TLS, session/task replacement and cross-account denial remain required
-deployment evidence.
 
 ## Debug point-cloud uploads
 

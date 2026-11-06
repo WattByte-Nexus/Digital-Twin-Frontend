@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Dev hostname attachment to the existing shared HTTPS ALB; never owns its listener or default action.
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev]
+  ExpectedAccountId:
+    Type: String
+    AllowedValues: ['078183419290']
+  ApiDomain:
+    Type: String
+    AllowedValues: [api-dev.nexus.ipss.ai]
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+  ListenerArn:
+    Type: String
+    AllowedPattern: '^arn:aws:elasticloadbalancing:[a-z0-9-]+:078183419290:listener/app/.+$'
+  LoadBalancerArn:
+    Type: String
+    AllowedPattern: '^arn:aws:elasticloadbalancing:[a-z0-9-]+:078183419290:loadbalancer/app/.+$'
+  LoadBalancerDnsName:
+    Type: String
+    MinLength: 1
+  LoadBalancerCanonicalHostedZoneId:
+    Type: String
+    MinLength: 1
+  LoadBalancerSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  RulePriority:
+    Type: Number
+    MinValue: 1
+    MaxValue: 50000
+    Description: An unused priority on the shared listener; verify before creating the stack.
+  FargateTargetGroupArn:
+    Type: String
+    AllowedPattern: '^arn:aws:elasticloadbalancing:[a-z0-9-]+:078183419290:targetgroup/.+$'
+  FargateSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  GoldenTargetGroupArn:
+    Type: String
+    AllowedPattern: '^arn:aws:elasticloadbalancing:[a-z0-9-]+:078183419290:targetgroup/.+$'
+    Description: Existing Golden target from the main edge output; used to reject accidental reuse.
+  GoldenApiSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Existing Golden API task security group; dev must have its own task boundary.
+Rules:
+  DevStackName:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::StackName', digital-twin-dev-api-edge]
+        AssertDescription: Use the dev attachment stack, never the existing Golden edge stack.
+  AccountMatches:
+    Assertions:
+      - Assert: !Equals [!Ref ExpectedAccountId, !Ref 'AWS::AccountId']
+        AssertDescription: Deploy only in the explicitly selected shared account.
+  DevTargetsAreSeparate:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref FargateTargetGroupArn, !Ref GoldenTargetGroupArn]]
+        AssertDescription: The dev route must not forward to the Golden target group.
+      - Assert: !Not [!Equals [!Ref FargateSecurityGroupId, !Ref GoldenApiSecurityGroupId]]
+        AssertDescription: Dev API tasks must use a separate security group.
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref ApiDomain
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref ApiDomain
+          HostedZoneId: !Ref HostedZoneId
+  # Attach only this new SNI certificate. Never replace the listener's default
+  # certificate or manage the certificate list through a Listener resource.
+  DevListenerCertificate:
+    Type: AWS::ElasticLoadBalancingV2::ListenerCertificate
+    Properties:
+      ListenerArn: !Ref ListenerArn
+      Certificates:
+        - CertificateArn: !Ref Certificate
+  DevHostRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    DependsOn: DevListenerCertificate
+    Properties:
+      ListenerArn: !Ref ListenerArn
+      Priority: !Ref RulePriority
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values: [!Ref ApiDomain]
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref FargateTargetGroupArn
+  DevTaskEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref LoadBalancerSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      DestinationSecurityGroupId: !Ref FargateSecurityGroupId
+  Dns:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ApiDomain
+      Type: A
+      AliasTarget:
+        DNSName: !Ref LoadBalancerDnsName
+        HostedZoneId: !Ref LoadBalancerCanonicalHostedZoneId
+Outputs:
+  ApiOrigin:
+    Value: !Sub https://${ApiDomain}
+  TargetGroupArn:
+    Value: !Ref FargateTargetGroupArn
+  SecurityGroupId:
+    Value: !Ref LoadBalancerSecurityGroupId
+  LoadBalancerArn:
+    Value: !Ref LoadBalancerArn
+  ListenerArn:
+    Value: !Ref ListenerArn
+  CertificateArn:
+    Value: !Ref Certificate
+  DeploymentEnvironment:
+    Value: !Ref Environment
+  DeploymentAccountId:
+    Value: !Ref 'AWS::AccountId'
+  DeploymentRegion:
+    Value: !Ref 'AWS::Region'

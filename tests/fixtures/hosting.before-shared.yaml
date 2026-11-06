@@ -1,0 +1,205 @@
+# Golden resource/output snapshot before shared-account dev changes.
+Conditions:
+  IsDev: !Equals [!Ref Environment, dev]
+Resources:
+  App:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: !If [IsDev, wattbyte-nexus-dev, wattbyte-nexus]
+      Platform: WEB
+      CustomRules:
+        - Source: /api/<*>
+          Target: !Sub ${ApiOrigin}/api/<*>
+          Status: '200'
+        - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|jpeg|js|json|png|svg|txt|webp|woff|woff2|wasm|tif|pnts|bin|map)$)([^.]+$)/>'
+          Target: /index.html
+          Status: '200'
+      CustomHeaders: |
+        customHeaders:
+          - pattern: '**'
+            headers:
+              - key: X-Content-Type-Options
+                value: nosniff
+              - key: Referrer-Policy
+                value: strict-origin-when-cross-origin
+              - key: X-Frame-Options
+                value: SAMEORIGIN
+          - pattern: '/api/**'
+            headers:
+              - key: Cache-Control
+                value: private, no-store
+          - pattern: '/index.html'
+            headers:
+              - key: Cache-Control
+                value: no-cache
+          - pattern: '/sw.js'
+            headers:
+              - key: Cache-Control
+                value: no-cache
+  Main:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt App.AppId
+      BranchName: !Ref BranchName
+      Stage: !If [IsDev, DEVELOPMENT, PRODUCTION]
+      EnableAutoBuild: false
+  PublicDomain:
+    Type: AWS::Amplify::Domain
+    Properties:
+      AppId: !GetAtt App.AppId
+      DomainName: !Select [2, !Split ['/', !Ref PublicOrigin]]
+      EnableAutoSubDomain: false
+      SubDomainSettings:
+        - Prefix: ''
+          BranchName: !GetAtt Main.BranchName
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: !If [IsDev, wattbyte-nexus-dev, wattbyte-nexus]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      UsernameConfiguration:
+        CaseSensitive: false
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 14
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          TemporaryPasswordValidityDays: 7
+      MfaConfiguration: 'ON'
+      EnabledMfas: [SOFTWARE_TOKEN_MFA]
+      Schema:
+        - Name: nexus_account_id
+          AttributeDataType: String
+          Mutable: false
+          Required: false
+          StringAttributeConstraints:
+            MinLength: '1'
+            MaxLength: '100'
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+  Domain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !If [IsDev, !Sub 'wattbyte-nexus-dev-${AWS::AccountId}', !Sub 'wattbyte-nexus-${AWS::AccountId}']
+      UserPoolId: !Ref UserPool
+  Client:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !If [IsDev, nexus-dev-hosted-session, nexus-hosted-session]
+      GenerateSecret: true
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs:
+        - !Sub ${PublicOrigin}/api/digital-twin/callback
+      LogoutURLs:
+        - !Sub '${PublicOrigin}/'
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 1
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+  SessionSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !If [IsDev, digital-twin/dev/frontend/session-signing-key, digital-twin/frontend/session-signing-key]
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+  EngineAuthenticationPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !If [IsDev, nexus-dev-hosted-authentication, nexus-hosted-authentication]
+      Roles: [!Ref EngineRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource: !Ref SessionSecret
+          - Effect: Allow
+            Action:
+              - cognito-idp:DescribeUserPoolClient
+              - cognito-idp:GetUserPoolMfaConfig
+              - cognito-idp:AdminGetUser
+              - cognito-idp:AdminCreateUser
+              - cognito-idp:AdminSetUserPassword
+              - cognito-idp:AdminUpdateUserAttributes
+            Resource: !GetAtt UserPool.Arn
+          - Effect: Allow
+            Action: ses:SendEmail
+            Resource: !Ref TransactionalEmailIdentityArn
+            Condition:
+              StringEquals:
+                ses:FromAddress: !Ref TransactionalEmailSender
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !If [IsDev, digital-twin-dev-frontend-github-deploy, digital-twin-frontend-github-deploy]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Ref GitHubOidcSubject
+      Policies:
+        - PolicyName: deploy-main-only
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [amplify:CreateDeployment, amplify:StartDeployment]
+                Resource:
+                  - !Sub ${App.Arn}/branches/${BranchName}
+                  - !Sub ${App.Arn}/branches/${BranchName}/deployments/*
+              - Effect: Allow
+                Action: [amplify:GetJob, amplify:StopJob]
+                Resource: !Sub ${App.Arn}/branches/${BranchName}/jobs/*
+Outputs:
+  AppId:
+    Value: !GetAtt App.AppId
+  FrontendUrl:
+    Value: !Ref PublicOrigin
+  AmplifyUrl:
+    Value: !Sub https://${BranchName}.${App.DefaultDomain}
+  DeployRoleArn:
+    Value: !GetAtt DeployRole.Arn
+  UserPoolId:
+    Value: !Ref UserPool
+  ClientId:
+    Value: !Ref Client
+  CognitoDomain:
+    Value: !Sub https://${Domain}.auth.${AWS::Region}.amazoncognito.com
+  SessionSecretArn:
+    Value: !Ref SessionSecret
+  DeploymentEnvironment:
+    Value: !Ref Environment
+  DeploymentAccountId:
+    Value: !Ref 'AWS::AccountId'
+  DeploymentRegion:
+    Value: !Ref 'AWS::Region'
+  BranchName:
+    Value: !Ref BranchName
+  ApiOrigin:
+    Value: !Ref ApiOrigin

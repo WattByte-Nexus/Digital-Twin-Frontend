@@ -1,0 +1,133 @@
+{
+  "scope": "Installed loaders.gl default REPLACE traversal; root already resident, 8 visible unloaded leaves, each prior request completes before next traversal. No network simulation.",
+  "waves": [
+    {
+      "frame": 1,
+      "requested": [
+        "child-7",
+        "child-6",
+        "child-5",
+        "child-4",
+        "child-3",
+        "child-2",
+        "child-1",
+        "child-0"
+      ],
+      "selected": [
+        "root"
+      ]
+    },
+    {
+      "frame": 2,
+      "requested": [],
+      "selected": [
+        "child-7",
+        "child-6",
+        "child-5",
+        "child-4",
+        "child-3",
+        "child-2",
+        "child-1",
+        "child-0"
+      ]
+    },
+    {
+      "frame": 3,
+      "requested": [],
+      "selected": [
+        "child-7",
+        "child-6",
+        "child-5",
+        "child-4",
+        "child-3",
+        "child-2",
+        "child-1",
+        "child-0"
+      ]
+    },
+    {
+      "frame": 4,
+      "requested": [],
+      "selected": [
+        "child-7",
+        "child-6",
+        "child-5",
+        "child-4",
+        "child-3",
+        "child-2",
+        "child-1",
+        "child-0"
+      ]
+    },
+    {
+      "frame": 5,
+      "requested": [],
+      "selected": [
+        "child-7",
+        "child-6",
+        "child-5",
+        "child-4",
+        "child-3",
+        "child-2",
+        "child-1",
+        "child-0"
+      ]
+    },
+    {
+      "frame": 6,
+      "requested": [],
+      "selected": [
+        "child-7",
+        "child-6",
+        "child-5",
+        "child-4",
+        "child-3",
+        "child-2",
+        "child-1",
+        "child-0"
+      ]
+    },
+    {
+      "frame": 7,
+      "requested": [],
+      "selected": [
+        "child-7",
+        "child-6",
+        "child-5",
+        "child-4",
+        "child-3",
+        "child-2",
+        "child-1",
+        "child-0"
+      ]
+    },
+    {
+      "frame": 8,
+      "requested": [],
+      "selected": [
+        "child-7",
+        "child-6",
+        "child-5",
+        "child-4",
+        "child-3",
+        "child-2",
+        "child-1",
+        "child-0"
+      ]
+    },
+    {
+      "frame": 9,
+      "requested": [],
+      "selected": [
+        "child-7",
+        "child-6",
+        "child-5",
+        "child-4",
+        "child-3",
+        "child-2",
+        "child-1",
+        "child-0"
+      ]
+    }
+  ]
+}

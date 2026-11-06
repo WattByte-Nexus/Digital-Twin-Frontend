@@ -3,7 +3,7 @@ Description: HTTPS API edge owned by the frontend for the independent Fargate AP
 Parameters:
   Environment:
     Type: String
-    AllowedValues: [dev, golden]
+    AllowedValues: [golden]
   ExpectedAccountId:
     Type: String
     AllowedPattern: '^[0-9]{12}$'
@@ -41,13 +41,6 @@ Rules:
     Assertions:
       - Assert: !Equals [!Ref ExpectedAccountId, !Ref 'AWS::AccountId']
         AssertDescription: Deploy using the explicitly selected AWS account.
-  DevIsolation:
-    RuleCondition: !Equals [!Ref Environment, dev]
-    Assertions:
-      - Assert: !Not [!Equals [!Ref ExpectedAccountId, '078183419290']]
-        AssertDescription: Dev must use a dedicated account, not the stable account.
-      - Assert: !Not [!Equals [!Ref ApiDomain, api.nexus.ipss.ai]]
-        AssertDescription: Dev must use its own API hostname.
   FargateInputsTogether:
     Assertions:
       - Assert: !Or
@@ -64,7 +57,6 @@ Rules:
       - Assert: !Not [!Equals [!Ref FargateTargetGroupArn, '']]
         AssertDescription: Supply the Fargate target group and task security group before enabling the API.
 Conditions:
-  IsDev: !Equals [!Ref Environment, dev]
   FargatePrepared: !Not [!Equals [!Ref FargateTargetGroupArn, '']]
   ApiEnabled: !Equals [!Ref EnableApi, 'true']
 Resources:
@@ -76,7 +68,7 @@ Resources:
       CidrBlock: !Ref SecondSubnetCidr
       Tags:
         - Key: Name
-          Value: !If [IsDev, digital-twin-dev-frontend-alb, digital-twin-frontend-alb]
+          Value: digital-twin-frontend-alb
   RouteAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -85,7 +77,7 @@ Resources:
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !If [IsDev, digital-twin-dev-frontend-api-alb, digital-twin-frontend-api-alb]
+      GroupName: digital-twin-frontend-api-alb
       GroupDescription: HTTPS from Amplify/CloudFront; private forwarding to the Engine
       VpcId: !Ref VpcId
       SecurityGroupIngress:
@@ -127,7 +119,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     DependsOn: RouteAssociation
     Properties:
-      Name: !If [IsDev, digital-twin-dev-frontend-api, digital-twin-frontend-api]
+      Name: digital-twin-frontend-api
       Type: application
       Scheme: internet-facing
       SecurityGroups: [!Ref SecurityGroup]

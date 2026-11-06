@@ -1,0 +1,19 @@
+{
+  "scope": "Single local partition chunk; not a production-job speedup claim",
+  "point_count": 250000,
+  "fine_cell_count": 14336,
+  "adaptive_leaf_count": 224,
+  "before_seconds": 25.02979949998553,
+  "after_seconds": 4.103357708023395,
+  "speedup": 6.0998336681796355,
+  "partition_byte_identical": true,
+  "full_hierarchy_byte_identical": true,
+  "full_hierarchy_points": 5000,
+  "full_hierarchy_stats": {
+    "depth": 3,
+    "tile_count": 51,
+    "preview_point_count": 210
+  },
+  "full_artifact_files": 52,
+  "recipe": "12"
+}
