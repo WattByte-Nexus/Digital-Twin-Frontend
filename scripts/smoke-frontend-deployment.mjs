@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 
 const origin = process.env.FRONTEND_URL;
 assert.ok(origin?.startsWith('https://'), 'FRONTEND_URL must be HTTPS');
+assert.ok(['main', 'develop'].includes(process.env.AMPLIFY_BRANCH), 'AMPLIFY_BRANCH must be main or develop');
 const get = (path, init = {}) => fetch(new URL(path, origin), { redirect: 'manual', ...init });
 const release = await get(`/deployment.json?run=${process.env.GITHUB_RUN_ID ?? Date.now()}`);
 assert.equal(release.status, 200);
-assert.equal((await release.json()).commit, process.env.GITHUB_SHA);
+const metadata = await release.json();
+assert.equal(metadata.commit, process.env.GITHUB_SHA);
+assert.equal(metadata.branch, process.env.AMPLIFY_BRANCH);
 for (const path of ['/regions/golden-co/live', '/regions/route.with.period/live', '/REGIONS/route.with.period/live', '/workspace', '/admin', '/diagnostics']) {
   const deepLink = await get(path);
   assert.equal(deepLink.status, 200, `${path} must load the application shell`);
@@ -30,7 +33,7 @@ for (const path of ['/api/digital-twin/access', '/api/v1/regions']) {
   assert.equal(denied.status, 401, `${path} must require authentication`);
   assert.match(denied.headers.get('cache-control') ?? '', /no-store/);
 }
-const signIn = await get('/api/digital-twin/sign-in');
+const signIn = await get(`/api/digital-twin/sign-in?frontendOrigin=${encodeURIComponent(new URL(origin).origin)}`);
 assert.ok([302, 303, 307].includes(signIn.status));
 const location = new URL(signIn.headers.get('location'));
 assert.ok(location.hostname.endsWith('.amazoncognito.com'));

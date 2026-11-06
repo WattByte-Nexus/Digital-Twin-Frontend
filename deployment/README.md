@@ -2,16 +2,20 @@
 
 GitHub Actions builds and tests the web application, retains the exact artifact,
 then deploys that artifact to Amplify Hosting. PRs build/test without AWS access.
-Pushes and manual runs on `main` deploy through an exact-repository/main GitHub
-OIDC role. There are no long-lived AWS credentials in GitHub.
+Pushes and manual runs on `main` and `develop` deploy to their matching branches
+in separate Amplify applications through separate GitHub OIDC roles. GitHub records deployments under
+the `production` and `development` environments, including the live URL and final
+deployment status. There are no long-lived AWS credentials in GitHub.
 The inherited GitHub Pages/demo and Cloudflare preview deployment workflows
 have been removed; this is the frontend's deployment path.
 
 ## Resource ownership
 
-- `hosting.yaml`: Amplify application and main branch, invitation-only Cognito
-  pool/client/group, Secrets Manager session signing key, exact-resource Engine
-  authentication permissions, and the narrow GitHub deployment role.
+- `hosting.yaml`: production and development Amplify applications, their main
+  and develop branches, invitation-only
+  Cognito pool/client/group, Secrets Manager session signing key, and separate
+  branch-scoped GitHub deployment roles. The Engine infrastructure owns its
+  runtime authentication permissions.
 - `api-edge.yaml`: HTTPS Application Load Balancer, ACM certificate, DNS and a second subnet.
   The listener starts with a fixed 503 response and is enabled only after protected
   Engine startup and network configuration have been verified.
@@ -56,8 +60,9 @@ aws cloudformation deploy --stack-name digital-twin-frontend \
 set `PublicOrigin` to its HTTPS origin. The stack associates that hostname with
 the Amplify `main` branch and provisions an Amplify-managed TLS certificate.
 Amplify creates routing and certificate validation records automatically when
-the parent domain is in Route 53 in the same AWS account. Register only that
-origin in Cognito and the Engine CSRF policy.
+the parent domain is in Route 53 in the same AWS account. The stack registers
+the production and development callbacks and logout origins in Cognito. Configure
+both frontend origins in the shared API's hosted authentication allowlist.
 
 The production frontend is `https://digital-twin.wattbyte-nexus.com`:
 
@@ -65,25 +70,71 @@ The production frontend is `https://digital-twin.wattbyte-nexus.com`:
 aws cloudformation deploy --stack-name digital-twin-frontend \
   --template-file deployment/hosting.yaml \
   --parameter-overrides ApiOrigin=https://api.nexus.ipss.ai \
+    DevelopApiOrigin=https://api.nexus.ipss.ai \
     PublicOrigin=https://digital-twin.wattbyte-nexus.com \
   --capabilities CAPABILITY_NAMED_IAM --region us-east-1
 ```
 
-When changing its hostname, also update the Cognito `frontend_origin` in the
-Engine's deployed `config/app.yaml`, restart the API, and set the repository's
-`FRONTEND_URL` Actions variable to the same origin. The deployment smoke check
+When changing its hostname, also update the Cognito `frontend_origins` allowlist
+in the Engine's `DTE_API_ACCESS_CONFIG`, redeploy the API, and set that GitHub
+environment's `FRONTEND_URL` Actions variable to the same origin. The deployment smoke check
 verifies that Cognito redirects back to that origin.
+
+### Development API target
+
+`develop` deliberately uses the production API for now. Development users see
+and modify production data with their normal production permissions. Its
+`DevelopApiOrigin` stack parameter is independent of production's `ApiOrigin`.
+Amplify rewrite rules belong to the application, so each environment has its
+own application rather than sharing an app-wide API proxy.
+
+When the development backend is ready, update only `DevelopApiOrigin` to its
+HTTPS origin while retaining the existing stack's other parameter values. The
+new backend must allow the `DevelopFrontendUrl` origin and use the appropriate
+Cognito client callback and logout registrations. Keep production's `ApiOrigin`
+unchanged. No browser API URL or frontend rebuild is needed because requests
+remain same-origin under `/api/*`.
+
+Before the first development release, configure the shared production API's
+`cognito.frontend_origins` allowlist with `DevelopFrontendUrl` and `FrontendUrl`.
+Deploy the matching Engine authentication change and this frontend's explicit
+`frontendOrigin` login parameter. Release the production frontend first (the
+current API ignores the new parameter), then the API with the new config, then
+development. This keeps production login working during the rollout. Existing
+sessions require a fresh login. Cognito registration alone does not update the
+API policy. The hosted smoke check fails if sign-in redirects to another site.
 
 ## GitHub configuration
 
-Set repository Actions variables from the hosting stack outputs:
+Set shared repository Actions variables from the hosting stack outputs:
 
 | Variable | Source |
 | --- | --- |
 | `FRONTEND_AWS_REGION` | `us-east-1` |
-| `FRONTEND_AMPLIFY_APP_ID` | `AppId` |
-| `FRONTEND_DEPLOY_ROLE_ARN` | `DeployRoleArn` |
-| `FRONTEND_URL` | `FrontendUrl` |
+
+Configure these GitHub environments with custom deployment branch policies:
+
+| Environment | Allowed branch | `FRONTEND_AMPLIFY_APP_ID` | `FRONTEND_DEPLOY_ROLE_ARN` | `FRONTEND_URL` |
+| --- | --- | --- | --- | --- |
+| `production` | `main` | `AppId` output | `DeployRoleArn` output | `FrontendUrl` output |
+| `development` | `develop` | `DevelopAppId` output | `DevelopDeployRoleArn` output | `DevelopFrontendUrl` output |
+
+These three variables belong to each environment, not the repository. The OIDC
+trust subjects name the exact environment, and GitHub's branch policies restrict
+which branch may use it. The production role can deploy only Amplify `main`;
+the development role can deploy only its application's Amplify `develop`. PR builds receive no
+deployment credentials and do not create a deployment.
+
+The `develop` branch is created from `main`. Push development work to `develop`
+to test its deployment before promoting it through a pull request into `main`.
+Both branches run the same contract, lint, test, build and hosted smoke checks.
+The deploy script requires `AMPLIFY_BRANCH=main` or `AMPLIFY_BRANCH=develop`;
+missing or unsupported branch names fail before contacting AWS. Release metadata
+includes the source commit, workflow run and branch, all verified after deployment.
+
+The GitHub repository's **Deployments** page lists both environments. Each
+workflow run also provides its environment URL as a **View deployment** link.
+Amplify builds remain disabled because GitHub deploys its exact tested artifact.
 
 Browser mapping integrations use the existing `VITE_MAPBOX_ACCESS_TOKEN`,
 `VITE_GOOGLE_MAPS_API_KEY`, `VITE_CESIUM_TOKEN`, `VITE_GEE_OAUTH_CLIENT_ID`,

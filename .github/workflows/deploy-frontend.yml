@@ -2,9 +2,9 @@ name: Frontend AWS deployment
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -47,7 +47,7 @@ jobs:
         run: |
           npm run build
           test -f apps/geolibre-desktop/dist/jupyterlite/lab/index.html
-          printf '{"commit":"%s","run":"%s"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > apps/geolibre-desktop/dist/deployment.json
+          printf '{"commit":"%s","run":"%s","branch":"%s"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_REF_NAME" > apps/geolibre-desktop/dist/deployment.json
         env:
           GEOLIBRE_APP_BASE: /
           VITE_MAPBOX_ACCESS_TOKEN: ${{ secrets.VITE_MAPBOX_ACCESS_TOKEN }}
@@ -64,17 +64,22 @@ jobs:
           retention-days: 14
 
   deploy:
-    name: Deploy tested artifact to Amplify
+    name: Deploy ${{ github.ref_name }} to Amplify
     needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name != 'pull_request'
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+      url: ${{ steps.deployment.outputs.url }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
+      deployments: write
       id-token: write
     env:
       AWS_REGION: ${{ vars.FRONTEND_AWS_REGION }}
       AMPLIFY_APP_ID: ${{ vars.FRONTEND_AMPLIFY_APP_ID }}
+      AMPLIFY_BRANCH: ${{ github.ref_name }}
       FRONTEND_URL: ${{ vars.FRONTEND_URL }}
     steps:
       - uses: actions/checkout@v6
@@ -86,6 +91,7 @@ jobs:
         run: |
           : "${AWS_REGION:?Missing FRONTEND_AWS_REGION}"
           : "${AMPLIFY_APP_ID:?Missing FRONTEND_AMPLIFY_APP_ID}"
+          : "${AMPLIFY_BRANCH:?Missing deployment branch}"
           : "${FRONTEND_URL:?Missing FRONTEND_URL}"
           : "${DEPLOY_ROLE:?Missing FRONTEND_DEPLOY_ROLE_ARN}"
       - uses: actions/download-artifact@v8
@@ -99,6 +105,7 @@ jobs:
           allowed-account-ids: '078183419290'
           role-session-name: frontend-${{ github.run_id }}
       - name: Deploy
+        id: deployment
         run: bash scripts/deploy-amplify.sh
       - name: Verify deployed revision, API and authentication
         run: node scripts/smoke-frontend-deployment.mjs
