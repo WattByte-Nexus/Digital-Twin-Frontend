@@ -2,18 +2,22 @@ import { expect, test as base } from "@playwright/test";
 
 /** Give GIS smoke tests an authenticated expert workspace; native tests override this route. */
 export const test = base.extend({
-  page: async ({ page }, use) => {
+  page: async ({ page }, runTest) => {
     await page.route("**/api/digital-twin/access", (route) => route.fulfill({ json: {
       subject_id: "e2e-expert",
       display_name: "Test engineer",
       organization: { id: "test", name: "Test operations" },
-      roles: ["engineer"],
+      account_id: "account-e2e-expert",
+      access_state: "active",
+      plan: null,
+      permissions: ["expert-gis"],
+      roles: ["TENANT_USER"],
       capabilities: ["expert-gis"],
       regions: [],
       most_recently_used_region_id: null,
       saved_start_location: "expert-gis",
     } }));
-    await use(page);
+    await runTest(page);
   },
 });
 
