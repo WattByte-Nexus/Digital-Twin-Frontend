@@ -199,10 +199,10 @@ Resources:
           - CustomOrigin
           - !Sub ${PublicOrigin}/api/digital-twin/callback
           - !Sub https://main.${App.DefaultDomain}/api/digital-twin/callback
-        - !Sub https://develop.${DevelopApp.DefaultDomain}/api/digital-twin/callback
+        - !Sub ${DevelopPublicOrigin}/api/digital-twin/callback
       LogoutURLs:
         - !If [CustomOrigin, !Sub '${PublicOrigin}/', !Sub 'https://main.${App.DefaultDomain}/']
-        - !Sub https://develop.${DevelopApp.DefaultDomain}/
+        - !Sub ${DevelopPublicOrigin}/
       PreventUserExistenceErrors: ENABLED
       EnableTokenRevocation: true
       ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
@@ -309,7 +309,7 @@ Outputs:
   DevelopAppId:
     Value: !GetAtt DevelopApp.AppId
   DevelopFrontendUrl:
-    Value: !Sub https://develop.${DevelopApp.DefaultDomain}
+    Value: !Ref DevelopPublicOrigin
   DeployRoleArn:
     Value: !GetAtt DeployRole.Arn
   DevelopDeployRoleArn:
