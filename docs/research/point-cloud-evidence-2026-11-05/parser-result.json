@@ -1,0 +1,41 @@
+{
+  "environment": {
+    "node": "v24.18.0",
+    "arch": "arm64",
+    "cpu": "Apple M5 Pro"
+  },
+  "scope": "Synthetic current-format PNTS parse only, 5 warmups + 20 measured iterations; excludes network, tile transform postprocessing and GPU upload/drawing",
+  "results": [
+    {
+      "points": 10000,
+      "bytes": 150152,
+      "median_ms": 0.035415999999997894,
+      "p95_ms": 0.1455829999999878
+    },
+    {
+      "points": 50000,
+      "bytes": 750152,
+      "median_ms": 0.016707999999994172,
+      "p95_ms": 0.02174999999999727
+    },
+    {
+      "points": 100000,
+      "bytes": 1500152,
+      "median_ms": 0.016000000000019554,
+      "p95_ms": 0.03587500000000432
+    },
+    {
+      "points": 250000,
+      "bytes": 3750152,
+      "median_ms": 0.018875000000008413,
+      "p95_ms": 0.020124999999978854
+    },
+    {
+      "points": 1000000,
+      "bytes": 15000152,
+      "median_ms": 0.018875000000008413,
+      "p95_ms": 0.025833000000005768
+    }
+  ],
+  "batchMetadataResult": "TypeError: Cannot read properties of undefined (reading 'map')"
+}

@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-05",
+  "scope": "First observed run of the actual Engine octree on synthetic uniform 20 m cubes; excludes input parsing, semantics, validation, network and rendering",
+  "seed": 42,
+  "policy": {"max_leaf_points": 100000, "max_preview_points": 50000, "source_spacing_m": 0.5},
+  "results": [
+    {"points": 1000, "build_seconds": 0.0097, "tile_count": 9, "leaf_tiles": 8, "preview_points": 1000, "encoded_points": 2000, "bytes": 31616, "min_leaf_points": 108, "max_leaf_points": 144, "root_error": 0.5, "depth": 1},
+    {"points": 10000, "build_seconds": 0.0246, "tile_count": 9, "leaf_tiles": 8, "preview_points": 10000, "encoded_points": 20000, "bytes": 301656, "min_leaf_points": 1193, "max_leaf_points": 1309, "root_error": 0.5, "depth": 1},
+    {"points": 50000, "build_seconds": 0.1277, "tile_count": 9, "leaf_tiles": 8, "preview_points": 50000, "encoded_points": 100000, "bytes": 1501648, "min_leaf_points": 6164, "max_leaf_points": 6338, "root_error": 0.5, "depth": 1},
+    {"points": 100000, "build_seconds": 0.2357, "tile_count": 9, "leaf_tiles": 8, "preview_points": 50000, "encoded_points": 150000, "bytes": 2251680, "min_leaf_points": 12337, "max_leaf_points": 12653, "root_error": 0.8358451429435586, "depth": 1},
+    {"points": 250000, "build_seconds": 0.4941, "tile_count": 9, "leaf_tiles": 8, "preview_points": 50000, "encoded_points": 300000, "bytes": 4501680, "min_leaf_points": 31054, "max_leaf_points": 31397, "root_error": 1.0131643216943396, "depth": 1},
+    {"points": 1000000, "build_seconds": 3.0496, "tile_count": 73, "leaf_tiles": 64, "preview_points": 450000, "encoded_points": 1450000, "bytes": 21763656, "min_leaf_points": 15317, "max_leaf_points": 15884, "root_error": 1.4510237773134889, "depth": 2}
+  ]
+}

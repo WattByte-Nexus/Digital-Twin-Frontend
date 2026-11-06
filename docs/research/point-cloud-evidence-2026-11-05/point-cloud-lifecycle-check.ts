@@ -1,0 +1,10 @@
+import {createDigitalTwinPointCloudLayer} from '../../../apps/geolibre-desktop/src/product-modes/digital-twin/digital-twin-lidar.ts';
+import {Tile3DLayer} from '../../../node_modules/@deck.gl/geo-layers/dist/index.js';
+const dataset: any = {datasetId:'audit', tilesetUrl:'https://example.invalid/version/tileset.json', name:'Audit'};
+const first = createDigitalTwinPointCloudLayer(dataset, {onError:()=>{}});
+first.props.onTilesetLoad({cartographicCenter:[-105,40,1700],stats:{get:()=>({count:1})}} as any);
+const replacement = createDigitalTwinPointCloudLayer({...dataset}, {onError:()=>{}});
+let reloads = 0;
+const model: any = {state:{layerMap:{}}, _loadTileset:()=>{reloads++}};
+Tile3DLayer.prototype.updateState.call(model, {props:replacement.props, oldProps:first.props, changeFlags:{propsChanged:true, viewportChanged:false}} as any);
+console.log(JSON.stringify({sameLayerId:first.id===replacement.id, sameData:first.props.data===replacement.props.data, firstElevation:first.props.getTraversalElevationMeters?.(), replacementElevation:replacement.props.getTraversalElevationMeters?.() ?? null, tilesetReloadsOnPropsUpdate:reloads}, null, 2));
