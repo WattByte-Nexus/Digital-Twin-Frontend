@@ -872,6 +872,10 @@ test("organization workspace separates searchable records from the creation form
   await expect(
     page.getByLabel("Organization name", { exact: true })
   ).toHaveCount(0);
+  await page.keyboard.press("ControlOrMeta+b");
+  await expect(page.getByRole("tab", { name: "Organizations", exact: true })).not.toBeInViewport();
+  await page.getByRole("button", { name: "Open sidebar", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Organizations", exact: true })).toBeInViewport({ ratio: 1 });
   const audit = await new AxeBuilder({ page }).analyze();
   expect(
     audit.violations.filter((violation) =>

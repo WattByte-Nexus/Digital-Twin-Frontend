@@ -190,7 +190,7 @@ export function ApplicationHome({
             <SidebarInset className="h-full min-h-0 min-w-0 overflow-y-auto bg-surface-subtle/40">
               <header className="surface-glass sticky top-0 z-10 flex min-h-16 items-center justify-between gap-3 border-b border-border px-5 py-2 shadow-none sm:px-8">
                 <div className="flex items-center gap-3">
-                  <SidebarTrigger className="size-11 md:hidden" />
+                  <SidebarTrigger className="size-11" />
                   <span className="text-sm font-medium">Digital Twin</span>
                 </div>
                 <div className="flex items-center gap-2">

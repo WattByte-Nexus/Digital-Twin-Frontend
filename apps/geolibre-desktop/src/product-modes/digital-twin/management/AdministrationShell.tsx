@@ -237,7 +237,7 @@ export function AdministrationShell({
           <SidebarInset className="h-full min-h-0 min-w-0 overflow-y-auto bg-surface-subtle/40">
             <header className="surface-glass shadow-none sticky top-0 z-20 flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-2.5 sm:px-8">
               <div className="flex min-w-0 items-center gap-3">
-                <SidebarTrigger className="size-11 md:hidden" />
+                <SidebarTrigger className="size-11" />
                 <Button
                   variant="link"
                   className="h-auto min-w-0 p-0 text-sm font-normal text-muted-foreground"
